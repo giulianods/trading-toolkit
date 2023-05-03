@@ -1,7 +1,7 @@
 /target/
 /.idea/
 /project/target/
-/project/target/target/
+/project/project/target/
 /.bsp/
 /core/
 *.iml
