@@ -1,6 +1,6 @@
 /target/
 /.idea/
-/project/
+/project/target/
 /.bsp/
 /core/
 *.iml
