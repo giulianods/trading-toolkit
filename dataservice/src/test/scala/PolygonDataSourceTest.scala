@@ -9,7 +9,7 @@ object PolygonDataSourceTest extends ZIOSpecDefault {
 
   val firstTest: Spec[Any, Throwable] = test("some test")(
     for {
-      keyOption <- zio.System.env("POLYGON_API_KEY")
+      keyOption <- zio.System.property("POLYGON_API_KEY")
       key <- ZIO.fromOption(keyOption).orElseFail(new RuntimeException("No key provided"))
       dataSource <- ZIO.succeed(new PolygonDataSource(key))
       symbols <- dataSource.getSymbols
@@ -18,7 +18,7 @@ object PolygonDataSourceTest extends ZIOSpecDefault {
 
   val quotesTest: Spec[Any, Throwable] = test("quotes test")(
     for{
-      keyOption <- zio.System.env("POLYGON_API_KEY")
+      keyOption <- zio.System.property("POLYGON_API_KEY")
       key <- ZIO.fromOption(keyOption).orElseFail(new RuntimeException("No key provided"))
       dataSource <- ZIO.succeed(new PolygonDataSource(key))
       quotes <- dataSource.getQuotes("AAPL")
