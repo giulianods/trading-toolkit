@@ -44,3 +44,5 @@ lazy val service = (project in file("service")).dependsOn(core, dataservice)
 libraryDependencies ++= zioLibraries
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
 
+Test / fork := true
+Test / envVars := sys.env

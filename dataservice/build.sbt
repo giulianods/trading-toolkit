@@ -14,13 +14,10 @@ libraryDependencies ++= Seq(
   "org.http4s" %% "http4s-ember-client" % http4sVersion
 )
 
-libraryDependencies ++= Seq(
-  "dev.zio" %% "zio-test" % "2.0.9" % Test,
-  "dev.zio" %% "zio-test-sbt" % "2.0.9" % Test,
-  "dev.zio" %% "zio-test-magnolia" % "2.0.9" % Test
-)
-
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.15" % "test"
 
 libraryDependencies += "org.apache.commons" % "commons-csv" % "1.10.0"
 libraryDependencies += "com.github.polygon-io" % "client-jvm" % "4.3.1.0"
+
+Test / fork := true
+Test / envVars := sys.env
