@@ -3,21 +3,23 @@ package org.greensheep.trading.dataservice
 import zio.{Console, Scope, ZIO}
 import zio.test._
 
+
 object PolygonDataSourceTest extends ZIOSpecDefault {
 
 
   val firstTest: Spec[Any, Throwable] = test("some test")(
 
     for {
-      dataSource <- ZIO.succeed(new PolygonDataSource(""))
+      key <- zio.System.envOrElse("POLYGON_API_KEY", "")
+      dataSource <- ZIO.succeed(new PolygonDataSource(key))
       symbols <- dataSource.getSymbols
-      _ <- Console.printLine(symbols.mkString("\n"))
-    } yield assertTrue(symbols.isEmpty)
+    } yield assertTrue(symbols.nonEmpty)
   )
 
   val quotesTest: Spec[Any, Throwable] = test("quotes test")(
     for{
-      dataSource <- ZIO.succeed(new PolygonDataSource(""))
+      key <- zio.System.envOrElse("POLYGON_API_KEY", "")
+      dataSource <- ZIO.succeed(new PolygonDataSource(key))
       quotes <- dataSource.getQuotes("AAPL")
       _ <- Console.printLine(quotes.mkString("\n"))
     } yield assertTrue(quotes.nonEmpty)
