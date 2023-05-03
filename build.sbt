@@ -9,6 +9,7 @@ lazy val root = (project in file("."))
   ).aggregate(dataservice, core, service)
 
 resolvers += "jitpack" at "https://jitpack.io"
+resolvers += Resolver.mavenLocal
 
 val zioLibraries = Seq(
   "dev.zio" %% "zio" % "2.0.10",
