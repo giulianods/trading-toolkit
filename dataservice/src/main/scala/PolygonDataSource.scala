@@ -1,10 +1,10 @@
-package org.greensheep.tradingtk.dataservice
+package org.greensheep.trading.dataservice
 
 import io.polygon.kotlin.sdk.DefaultJvmHttpClientProvider
 import io.polygon.kotlin.sdk.rest.{AggregatesParameters, PolygonRestApiCallback, PolygonRestClient}
 import io.polygon.kotlin.sdk.rest.reference.{SupportedTickersParameters, SupportedTickersParametersBuilder, TickersDTO}
-import org.greensheep.tradingtk.core.services.DataSource
-import org.greensheep.tradingtk.core.types.{Quote, Stock}
+import org.greensheep.trading.core.services.DataSource
+import org.greensheep.trading.core.types.{Quote, Stock}
 import zio.{IO, Schedule, Task, ULayer, ZIO, ZLayer}
 
 import java.time.{Instant, LocalDate}

@@ -1,4 +1,4 @@
-package org.greensheep.tradingtk.dataservice
+package org.greensheep.trading.dataservice
 
 import org.scalatest.funsuite.AnyFunSuite
 import zio._

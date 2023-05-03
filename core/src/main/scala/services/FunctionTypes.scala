@@ -1,7 +1,7 @@
-package org.greensheep.tradingtk.core
+package org.greensheep.trading.core
 package services
 
-import org.greensheep.tradingtk.core.types.Quote
+import org.greensheep.trading.core.types.Quote
 import zio.{IO, RIO, Task, ZIO}
 
 class FunctionTypes {

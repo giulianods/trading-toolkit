@@ -1,4 +1,4 @@
-package org.greensheep.tradingtk
+package org.greensheep.trading
 package core.types
 
 case class Market(

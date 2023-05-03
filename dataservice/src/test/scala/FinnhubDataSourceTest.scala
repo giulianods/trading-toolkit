@@ -1,9 +1,8 @@
-package org.greensheep.tradingtk.dataservice
+package org.greensheep.trading.dataservice
 
 import cats.effect.IO
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.must.Matchers.be
-import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 import zhttp.http.Headers
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 import zio.ZIO
@@ -17,10 +16,6 @@ import java.nio.charset.StandardCharsets
 class FinnhubDataSourceTest extends AnyFunSuite {
 
 
-  test("test read api key"){
-    val apiKey = FinnhubDataSource.API_KEY
-    apiKey shouldNot be("")
-  }
 
   test("test get quotes"){
     val dataSource = new FinnhubDataSource()

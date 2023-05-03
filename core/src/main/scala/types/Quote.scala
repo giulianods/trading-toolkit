@@ -1,5 +1,5 @@
-package org.greensheep.tradingtk
-package core.types
+package org.greensheep.trading.core.types
+
 
 import java.time.LocalDate
 

@@ -1,9 +1,9 @@
-package org.greensheep.tradingtk.dataservice
+package org.greensheep.trading.dataservice
 
 import jdk.javadoc.doclet.DocletEnvironment.ModuleMode
-import org.greensheep.tradingtk.core.services.DataSource
-import org.greensheep.tradingtk.core.types.{Quote, Stock}
-import org.greensheep.tradingtk.dataservice.FinnhubDataSource.{API_KEY, BASE_URL, DEFAULT_ENV, FinnhubSymbol, FinnhubSymbolList, MICS, logger}
+import org.greensheep.trading.core.services.DataSource
+import org.greensheep.trading.core.types.{Quote, Stock}
+import org.greensheep.trading.dataservice.FinnhubDataSource.{API_KEY, BASE_URL, DEFAULT_ENV, FinnhubSymbol, FinnhubSymbolList, MICS, logger}
 import zhttp.http.{Headers, Response}
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 import zio.{IO, Task, ZIO}
@@ -61,11 +61,11 @@ object FinnhubDataSource {
                           )
 
   object FinnhubSymbol {
-    implicit val symbDecoder = DeriveJsonDecoder.gen[FinnhubSymbol]
+    implicit val symbDecoder: JsonDecoder[FinnhubSymbol] = DeriveJsonDecoder.gen[FinnhubSymbol]
   }
 
   object FinnhubSymbolList {
-    implicit val symbListDecoder = DeriveJsonDecoder.gen[FinnhubSymbolList]
+    implicit val symbListDecoder: JsonDecoder[FinnhubSymbolList] = DeriveJsonDecoder.gen[FinnhubSymbolList]
   }
 }
 

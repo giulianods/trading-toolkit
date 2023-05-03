@@ -2,7 +2,7 @@ resolvers += "jitpack" at "https://jitpack.io"
 resolvers += Resolver.mavenLocal
 
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.14" % Test
-libraryDependencies += "dev.zio" %% "zio" % "2.0.2"
+
 libraryDependencies += "io.d11" %% "zhttp" % "2.0.0-RC11"
 libraryDependencies += "org.typelevel" %% "cats-effect" % "3.4.1"
 

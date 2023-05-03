@@ -1,8 +1,8 @@
-package org.greensheep.tradingtk.dataservice
+package org.greensheep.trading.dataservice
 
 import org.apache.commons.csv.{CSVFormat, CSVPrinter}
-import org.greensheep.tradingtk.core.services.{DataRepo, DataSource}
-import org.greensheep.tradingtk.core.types.{Quote, Stock}
+import org.greensheep.trading.core.services.{DataRepo, DataSource}
+import org.greensheep.trading.core.types.{Quote, Stock}
 import zio.{IO, Task, ULayer, ZIO, ZLayer}
 
 import java.io.FileWriter

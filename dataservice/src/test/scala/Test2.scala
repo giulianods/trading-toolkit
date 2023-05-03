@@ -1,6 +1,6 @@
-package org.greensheep.tradingtk.dataservice
+package org.greensheep.trading.dataservice
 
-import org.greensheep.tradingtk.dataservice.Test2.test
+import org.greensheep.trading.dataservice.Test2.test
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 import zio._
 import zio.test.{test, _}

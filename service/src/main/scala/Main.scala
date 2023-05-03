@@ -1,9 +1,9 @@
-package org.greensheep.tradingtk.service
+package org.greensheep.trading.service
 
 import cats.implicits.toTraverseOps
-import org.greensheep.tradingtk.core.services.{DataRepo, DataSource}
-import org.greensheep.tradingtk.core.types.Quote
-import org.greensheep.tradingtk.dataservice.{LocalFileDataRepo, PolygonDataSource}
+import org.greensheep.trading.core.services.{DataRepo, DataSource}
+import org.greensheep.trading.core.types.Quote
+import org.greensheep.trading.dataservice.{LocalFileDataRepo, PolygonDataSource}
 import zio._
 import zio.interop.catz._
 import zio.Console.printLine
