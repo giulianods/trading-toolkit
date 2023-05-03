@@ -14,7 +14,8 @@ resolvers += Resolver.mavenLocal
 val zioLibraries = Seq(
   "dev.zio" %% "zio" % "2.0.10",
   "dev.zio" %% "zio-test" % "2.0.10",
-  "dev.zio" %% "zio-test-sbt" % "2.0.10"
+  "dev.zio" %% "zio-test-sbt" % "2.0.10",
+  "dev.zio" %% "zio-test-magnolia" % "2.0.10" % Test
 )
 
 
@@ -37,5 +38,5 @@ lazy val service = (project in file("service")).dependsOn(core, dataservice)
   )
 
 libraryDependencies ++= zioLibraries
-
+testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
 
