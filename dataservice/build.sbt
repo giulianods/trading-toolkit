@@ -17,7 +17,7 @@ libraryDependencies ++= Seq(
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.15" % "test"
 
 libraryDependencies += "org.apache.commons" % "commons-csv" % "1.10.0"
-libraryDependencies += "com.github.polygon-io" % "client-jvm" % "4.3.1.0"
+libraryDependencies += "com.github.polygon-io" % "client-jvm" % "5.1.0"
 
 Test / fork := true
 Test / envVars := sys.env

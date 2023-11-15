@@ -2,7 +2,6 @@ package org.greensheep.trading.core.services
 
 
 import org.greensheep.trading.core.types.Quote
-
 import zio.{Task, ZIO}
 
 object DataRepo {

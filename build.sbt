@@ -1,6 +1,6 @@
 ThisBuild / version := "0.1.0-SNAPSHOT"
 
-ThisBuild / scalaVersion := "3.2.2"
+ThisBuild / scalaVersion := "3.3.1"
 
 lazy val root = (project in file("."))
   .settings(
@@ -11,11 +11,13 @@ lazy val root = (project in file("."))
 resolvers += "jitpack" at "https://jitpack.io"
 resolvers += Resolver.mavenLocal
 
+val zioVersion = "2.0.19"
+
 val zioLibraries = Seq(
-  "dev.zio" %% "zio" % "2.0.10",
-  "dev.zio" %% "zio-test" % "2.0.10",
-  "dev.zio" %% "zio-test-sbt" % "2.0.10",
-  "dev.zio" %% "zio-test-magnolia" % "2.0.10" % Test
+  "dev.zio" %% "zio" % zioVersion,
+  "dev.zio" %% "zio-test" % zioVersion,
+  "dev.zio" %% "zio-test-sbt" % zioVersion,
+  "dev.zio" %% "zio-test-magnolia" % zioVersion % Test
 )
 
 val zioTestFramework = new TestFramework("zio.test.sbt.ZTestFramework")

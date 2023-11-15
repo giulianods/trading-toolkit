@@ -35,8 +35,16 @@ class PolygonDataSource(apiKey: String) extends DataSource{
       .`type`("CS")
       .limit(1000).build()
     ZIO attempt {
-      val results = polygonClient.getReferenceClient.listSupportedTickers(params).asScala.to(Iterable).toSeq
-      results.map(_.getTicker)
+      val response = polygonClient.getReferenceClient.getSupportedTickersBlocking(new SupportedTickersParameters())
+      response.getStatus match {
+        case "OK" | "DELAYED" =>
+          response.getResults.asScala.toSeq.map(_.getTicker)
+        case "ERROR" =>
+          println("failed")
+          throw new RuntimeException("got api error " + response.getStatus)
+        case _ =>
+          throw new RuntimeException(response.getStatus)
+      }
     }
   }
 
@@ -54,7 +62,7 @@ class PolygonDataSource(apiKey: String) extends DataSource{
       val response = polygonClient.getAggregatesBlocking(params)
       response.getStatus match {
         case "OK" | "DELAYED" =>
-          polygonClient.getAggregatesBlocking(params).getResults.iterator().asScala.toSeq map {
+          response.getResults.iterator().asScala.toSeq map {
             adt =>
               val instance = java.time.Instant.ofEpochMilli(adt.getTimestampMillis)
               val localDate = java.time.LocalDate
@@ -63,7 +71,7 @@ class PolygonDataSource(apiKey: String) extends DataSource{
           }
         case "ERROR" =>
           println("failed")
-          throw new RuntimeException(response.getError)
+          throw new RuntimeException("got api error " + response.getStatus)
         case _ =>
           throw new RuntimeException(response.getStatus)
 
