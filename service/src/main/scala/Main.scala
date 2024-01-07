@@ -20,6 +20,7 @@ object Main extends ZIOAppDefault {
 
   val downloadApp: ZIO[DataRepo with DataSource, Throwable, Unit] = for {
     symbols <- DataSource.getSymbols
+    _ = println(s"Got ${symbols.length} symbols")
     schedule = Schedule.spaced(20.seconds)
     source <- ZIO.service[DataSource]
     repo <- ZIO.service[DataRepo]

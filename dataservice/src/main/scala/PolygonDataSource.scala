@@ -17,7 +17,8 @@ object PolygonDataSource{
   val layer: ULayer[DataSource] = ZLayer.succeed(build())
 
   def build() = {
-    new PolygonDataSource("")
+    val apiKey = System.getenv("POLYGON_API_KEY")
+    new PolygonDataSource(apiKey)
   }
 }
 
@@ -28,6 +29,8 @@ class PolygonDataSource(apiKey: String) extends DataSource{
 
 
   def getSymbols: Task[Seq[String]] = {
+   // val tickerRequest = TickersRe
+
     val params = new SupportedTickersParametersBuilder()
       .activeSymbolsOnly(true)
       .market("stocks")
@@ -35,16 +38,9 @@ class PolygonDataSource(apiKey: String) extends DataSource{
       .`type`("CS")
       .limit(1000).build()
     ZIO attempt {
-      val response = polygonClient.getReferenceClient.getSupportedTickersBlocking(new SupportedTickersParameters())
-      response.getStatus match {
-        case "OK" | "DELAYED" =>
-          response.getResults.asScala.toSeq.map(_.getTicker)
-        case "ERROR" =>
-          println("failed")
-          throw new RuntimeException("got api error " + response.getStatus)
-        case _ =>
-          throw new RuntimeException(response.getStatus)
-      }
+      val results = polygonClient.getReferenceClient.getSupportedTickersBlocking(params)
+
+
     }
   }
 

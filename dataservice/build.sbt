@@ -18,6 +18,7 @@ libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.15" % "test"
 
 libraryDependencies += "org.apache.commons" % "commons-csv" % "1.10.0"
 libraryDependencies += "com.github.polygon-io" % "client-jvm" % "5.1.0"
+libraryDependencies += "io.greensheep" %% "polygon-client-zio" % "0.1.0-SNAPSHOT"
 
 Test / fork := true
 Test / envVars := sys.env

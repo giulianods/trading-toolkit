@@ -13,7 +13,7 @@ object LocalFileDataRepo{
   val layer: ULayer[DataRepo] = ZLayer.succeed(build())
 
   def build(): LocalFileDataRepo = {
-    new LocalFileDataRepo(Paths.get("D:\\data"))
+    new LocalFileDataRepo(Paths.get("C:\\data"))
   }
 }
 
