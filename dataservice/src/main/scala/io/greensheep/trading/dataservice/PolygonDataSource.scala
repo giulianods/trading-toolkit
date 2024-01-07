@@ -1,8 +1,8 @@
 package io.greensheep.trading.dataservice
 
-import io.greensheep.providers.polygon.datatypes.Ticker
-import io.greensheep.providers.polygon.{PolygonSettings, ReferenceClient}
-import io.greensheep.providers.polygon.requests.TickersRequest
+import io.greensheep.providers.polygon.datatypes.{Aggregate, Ticker}
+import io.greensheep.providers.polygon.{MarketClient, PolygonSettings, ReferenceClient}
+import io.greensheep.providers.polygon.requests.{AggregatesRequest, TickersRequest}
 import io.polygon.kotlin.sdk.DefaultJvmHttpClientProvider
 import io.polygon.kotlin.sdk.rest.{AggregatesParameters, PolygonRestApiCallback, PolygonRestClient}
 import io.polygon.kotlin.sdk.rest.reference.{SupportedTickersParameters, SupportedTickersParametersBuilder, TickersDTO}
@@ -62,6 +62,13 @@ class PolygonDataSource(apiKey: String) extends DataSource{
   def getStock(symbol: String): IO[Throwable, Stock]= ???
 
   def getStocks(): Map[String, Stock]= ???
+
+
+  def getDailyAggregates(ticker: String): ZIO[Client, Throwable, Seq[Aggregate]] = {
+    val marketClient = new MarketClient(PolygonSettings())
+    val request = AggregatesRequest(stocksTicker = ticker, from = "2022-01-01", to = "2024-01-07")
+    marketClient.getAggregates(request)
+  }
 
   def getQuotes(ticker: String): Task[Seq[Quote]] = {
     val from = LocalDate.now().minusDays(1000).format(DateTimeFormatter.ISO_LOCAL_DATE)
