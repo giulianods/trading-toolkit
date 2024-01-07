@@ -1,8 +1,8 @@
-package org.greensheep.trading.dataservice
+package io.greensheep.trading.dataservice
 
 import io.polygon.kotlin.sdk.rest.{AggregatesParameters, PolygonRestClient}
 import io.polygon.kotlin.sdk.rest.reference.SupportedTickersParametersBuilder
-import org.greensheep.trading.core.types.Quote
+import io.greensheep.trading.core.types.Quote
 import zio.{RIO, Task, ZIO}
 
 import java.time.LocalDate

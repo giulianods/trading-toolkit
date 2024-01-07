@@ -1,16 +1,22 @@
-package org.greensheep.trading.dataservice
+package io.greensheep.trading.dataservice
 
+import io.greensheep.providers.polygon.datatypes.Ticker
+import io.greensheep.providers.polygon.{PolygonSettings, ReferenceClient}
+import io.greensheep.providers.polygon.requests.TickersRequest
 import io.polygon.kotlin.sdk.DefaultJvmHttpClientProvider
 import io.polygon.kotlin.sdk.rest.{AggregatesParameters, PolygonRestApiCallback, PolygonRestClient}
 import io.polygon.kotlin.sdk.rest.reference.{SupportedTickersParameters, SupportedTickersParametersBuilder, TickersDTO}
-import org.greensheep.trading.core.services.DataSource
-import org.greensheep.trading.core.types.{Quote, Stock}
+import io.greensheep.trading.core.services.DataSource
+import io.greensheep.trading.core.types.{Quote, Stock}
+import zio.http.Client
+import zio.stream.ZStream
 import zio.{IO, Schedule, Task, ULayer, ZIO, ZLayer}
 
 import java.time.{Instant, LocalDate}
 import java.time.format.DateTimeFormatter
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters.{IteratorHasAsScala, ListHasAsScala}
+import scala.language.implicitConversions
 
 object PolygonDataSource{
 
@@ -25,23 +31,32 @@ object PolygonDataSource{
 
 class PolygonDataSource(apiKey: String) extends DataSource{
 
+  def toCoreType(ticker: Ticker): Stock = {
+    Stock(
+      ticker.ticker,
+      ticker.name,
+      LocalDate.MIN,
+      ""
+    )
+  }
+
   val polygonClient = new PolygonRestClient(apiKey)
+
+  def getTickers: ZStream[Client, Throwable, Stock] = {
+    val request = TickersRequest(
+      _type = "CS",
+      market = Some("stocks"),
+      limit = 1000
+    )
+    val referenceClient = new ReferenceClient(
+      PolygonSettings()
+    )
+    referenceClient.getTickers(request).map(toCoreType)
+  }
 
 
   def getSymbols: Task[Seq[String]] = {
-   // val tickerRequest = TickersRe
-
-    val params = new SupportedTickersParametersBuilder()
-      .activeSymbolsOnly(true)
-      .market("stocks")
-      .ticker("")
-      .`type`("CS")
-      .limit(1000).build()
-    ZIO attempt {
-      val results = polygonClient.getReferenceClient.getSupportedTickersBlocking(params)
-
-
-    }
+    ZIO.succeed(Seq.empty)
   }
 
   def getStock(symbol: String): IO[Throwable, Stock]= ???

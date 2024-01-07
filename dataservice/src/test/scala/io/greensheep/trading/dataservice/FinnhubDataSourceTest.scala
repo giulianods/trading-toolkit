@@ -1,4 +1,5 @@
 package org.greensheep.trading.dataservice
+package io.greensheep.trading.dataservice
 
 import cats.effect.IO
 import org.scalatest.funsuite.AnyFunSuite

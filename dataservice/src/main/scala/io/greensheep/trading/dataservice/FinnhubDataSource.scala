@@ -1,9 +1,9 @@
-package org.greensheep.trading.dataservice
+package io.greensheep.trading.dataservice
 
 import jdk.javadoc.doclet.DocletEnvironment.ModuleMode
-import org.greensheep.trading.core.services.DataSource
-import org.greensheep.trading.core.types.{Quote, Stock}
-import org.greensheep.trading.dataservice.FinnhubDataSource.{API_KEY, BASE_URL, DEFAULT_ENV, FinnhubSymbol, FinnhubSymbolList, MICS, logger}
+import FinnhubDataSource.{API_KEY, BASE_URL, DEFAULT_ENV, FinnhubSymbol, FinnhubSymbolList, MICS, logger}
+import io.greensheep.trading.core.services.DataSource
+import io.greensheep.trading.core.types.{Quote, Stock}
 import zhttp.http.{Headers, Response}
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 import zio.{IO, Task, ZIO}
@@ -107,7 +107,7 @@ class FinnhubDataSource()  {
       resp <- request.body.asString
       _ <- ZIO.when(!request.status.isSuccess)(ZIO.fail(new RuntimeException(s"Call failed with ${request.status}\n$resp")))
       profile <- ZIO.fromEither(resp.fromJson[CompanyProfile]).mapError(s => new RuntimeException(s))
-      stock = Stock(profile.ticker, profile.name, profile.ipo)
+      stock = Stock(profile.ticker, profile.name, profile.ipo, "")
     } yield stock
   }
 

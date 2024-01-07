@@ -1,7 +1,7 @@
-package org.greensheep.trading.core
-package services
 
-import org.greensheep.trading.core.types.{Quote, Stock}
+package io.greensheep.trading.core.services
+
+import io.greensheep.trading.core.types.{Quote, Stock}
 import zio.{IO, Task, ZIO}
 
 object DataSource{

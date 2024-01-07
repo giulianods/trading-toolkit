@@ -1,4 +1,5 @@
 package org.greensheep.trading.dataservice
+package io.greensheep.trading.dataservice
 
 import org.scalatest.funsuite.AnyFunSuite
 import zio._

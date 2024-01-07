@@ -1,4 +1,5 @@
 package org.greensheep.trading.dataservice
+package io.greensheep.trading.dataservice
 
 import zio.{Console, Scope, ZIO}
 import zio.test._

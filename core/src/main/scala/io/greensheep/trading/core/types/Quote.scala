@@ -1,5 +1,4 @@
-package org.greensheep.trading.core.types
-
+package io.greensheep.trading.core.types
 
 import java.time.LocalDate
 

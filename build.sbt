@@ -29,21 +29,18 @@ val zioTestFramework = new TestFramework("zio.test.sbt.ZTestFramework")
 
 lazy val core = (project in file("core"))
   .settings(
-    idePackagePrefix := Some("org.greensheep.trading.core"),
     libraryDependencies := zioLibraries,
     testFrameworks := Seq(zioTestFramework)
   )
 
 lazy val dataservice = (project in file("dataservice")).dependsOn(core)
   .settings(
-    idePackagePrefix := Some("org.greensheep.trading.dataservice"),
     libraryDependencies := Seq("dev.zio" %% "zio-json" % "0.4.2") ++ zioLibraries ++ dataSourceLibraries,
     testFrameworks := Seq(zioTestFramework)
   )
 
 lazy val service = (project in file("service")).dependsOn(core, dataservice)
   .settings(
-    idePackagePrefix := Some("org.greensheep.trading.service"),
     libraryDependencies := zioLibraries,
     testFrameworks := Seq(zioTestFramework)
   )
