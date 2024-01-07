@@ -12,7 +12,7 @@ import zio.http.Client
 import zio.stream.ZStream
 import zio.{IO, Schedule, Task, ULayer, ZIO, ZLayer}
 
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, Month}
 import java.time.format.DateTimeFormatter
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters.{IteratorHasAsScala, ListHasAsScala}
@@ -20,7 +20,7 @@ import scala.language.implicitConversions
 
 object PolygonDataSource{
 
-  val layer: ULayer[DataSource] = ZLayer.succeed(build())
+  val layer: ULayer[PolygonDataSource] = ZLayer.succeed(build())
 
   def build() = {
     val apiKey = System.getenv("POLYGON_API_KEY")
@@ -35,7 +35,7 @@ class PolygonDataSource(apiKey: String) extends DataSource{
     Stock(
       ticker.ticker,
       ticker.name,
-      LocalDate.MIN,
+      LocalDate.of(1970, Month.JANUARY, 1),
       ""
     )
   }

@@ -1,12 +1,9 @@
-package org.greensheep.trading.service
+package io.greensheep.trading.service
 
-import cats.implicits.toTraverseOps
-import org.greensheep.trading.core.io.greensheep.trading.core.services.{DataRepo, DataSource}
-import org.greensheep.trading.core.io.greensheep.trading.core.types.Quote
-import org.greensheep.trading.dataservice.io.greensheep.trading.dataservice.{LocalFileDataRepo, PolygonDataSource}
-import zio._
-import zio.interop.catz._
-import zio.Console.printLine
+import io.greensheep.trading.core.services.{DataRepo, DataSource}
+import io.greensheep.trading.core.types.Quote
+import io.greensheep.trading.dataservice.{LocalFileDataRepo, PolygonDataSource}
+import zio.*
 
 object Main extends ZIOAppDefault {
 
