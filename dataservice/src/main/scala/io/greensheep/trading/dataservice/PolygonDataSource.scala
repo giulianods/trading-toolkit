@@ -31,7 +31,7 @@ object PolygonDataSource{
 
 class PolygonDataSource(apiKey: String) extends DataSource{
 
-  def toCoreType(ticker: Ticker): Stock = {
+  private def toCoreType(ticker: Ticker): Stock = {
     Stock(
       ticker.ticker,
       ticker.name,
@@ -66,7 +66,7 @@ class PolygonDataSource(apiKey: String) extends DataSource{
 
   def getDailyAggregates(ticker: String): ZIO[Client, Throwable, Seq[Aggregate]] = {
     val marketClient = new MarketClient(PolygonSettings())
-    val request = AggregatesRequest(stocksTicker = ticker, from = "2022-01-01", to = "2024-01-07")
+    val request = AggregatesRequest(stocksTicker = ticker, from = "2022-01-01", to = "2024-01-07", sort = "desc")
     marketClient.getAggregates(request)
   }
 

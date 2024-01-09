@@ -11,11 +11,12 @@ import io.greensheep.trading.core.types.{Quote, Stock}
 import org.bson.Document
 import zio.http.Client
 import zio.stream.ZStream
-import zio.{IO, Task, ULayer, ZLayer}
+import zio.{IO, Task, ULayer, ZIO, ZLayer}
 
 import java.time.LocalDate
 import scala.jdk.CollectionConverters.MapHasAsJava
 import scala.jdk.CollectionConverters.IteratorHasAsScala
+import scala.jdk.CollectionConverters.IterableHasAsScala
 import scala.jdk.CollectionConverters.SeqHasAsJava
 import scala.util.Try
 object MongoDbDataRepo{
@@ -29,11 +30,9 @@ object MongoDbDataRepo{
 
 class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
 
-  val mongoClient = MongoClients.create("mongodb://localhost:27017")
+  private val mongoClient = MongoClients.create(url)
 
-
-
-  def getCollection(name: String): Try[com.mongodb.client.MongoCollection[Document]] = Try {
+  private def getCollection(name: String): Try[com.mongodb.client.MongoCollection[Document]] = Try {
     val database = mongoClient.getDatabase(databaseName)
     var collection = database.getCollection(name)
     if(collection == null) {
@@ -43,7 +42,7 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     collection
   }
 
-  def createAggregatesCollection(symbol: String): Unit = {
+  private def createAggregatesCollection(symbol: String): Unit = {
     val database = mongoClient.getDatabase(databaseName + "-data")
     val options = new CreateCollectionOptions()
       .timeSeriesOptions(new TimeSeriesOptions("t")
@@ -51,7 +50,7 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     database.createCollection(symbol, options)
   }
 
-  def getAggregatesCollection(symbol: String) = {
+  private def getAggregatesCollection(symbol: String) = {
     val database = mongoClient.getDatabase(databaseName + "-data")
     var collection = database.getCollection(symbol)
     if(collection == null){
@@ -68,15 +67,38 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
         Map(
           "_id" -> agg.t,
           "o" -> agg.o,
-          "h" -> agg.o,
-          "l" -> agg.o,
-          "c" -> agg.o,
+          "h" -> agg.h,
+          "l" -> agg.l,
+          "c" -> agg.c,
           "t" -> agg.t,
-          "n" -> agg.n,
+          "v" -> agg.v,
+          "n" -> agg.numberOfShares,
+          "vw" -> agg.wwap
       ).asJava)
     }
     println(s"Saving aggregates for $symbol")
     collection.insertMany(aggregates.map(aggregateToDocument).asJava)
+  }
+
+  def getAggregates(symbol: String): ZStream[Any, Throwable, Aggregate] = {
+    val tryIterable = Try{
+      val collection = getAggregatesCollection(symbol)
+      val iterable = collection.find().asScala
+      def documentToAggregate(doc: Document) = {
+        new Aggregate(
+          o = doc.get("o").toString.toDouble,
+          h = doc.get("h").toString.toDouble,
+          l = doc.get("l").toString.toDouble,
+          c = doc.get("c").toString.toDouble,
+          v = Option(doc.get("v")).map(_.toString.toDouble).getOrElse(0.0),
+          t = doc.get("t").toString.toLong,
+          n = Some(doc.get("n").toString.toInt),
+          vw = Option(doc.get("vw")).map(_.toString.toDouble)
+        )
+      }
+      iterable.map(documentToAggregate)
+    }
+    ZStream.fromZIO(ZIO.fromTry(tryIterable)).flatMap(ZStream.fromIterable)
   }
 
   def saveTicker(stock: Stock): InsertOneResult = {
