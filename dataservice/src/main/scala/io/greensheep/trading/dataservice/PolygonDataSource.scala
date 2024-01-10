@@ -2,7 +2,7 @@ package io.greensheep.trading.dataservice
 
 import io.greensheep.providers.polygon.datatypes.{Aggregate, Ticker}
 import io.greensheep.providers.polygon.{MarketClient, PolygonSettings, ReferenceClient}
-import io.greensheep.providers.polygon.requests.{AggregatesRequest, TickersRequest}
+import io.greensheep.providers.polygon.requests.{AggregatesRequest, GroupedDailyRequest, TickersRequest}
 import io.polygon.kotlin.sdk.DefaultJvmHttpClientProvider
 import io.polygon.kotlin.sdk.rest.{AggregatesParameters, PolygonRestApiCallback, PolygonRestClient}
 import io.polygon.kotlin.sdk.rest.reference.{SupportedTickersParameters, SupportedTickersParametersBuilder, TickersDTO}
@@ -52,6 +52,12 @@ class PolygonDataSource(apiKey: String) extends DataSource{
       PolygonSettings()
     )
     referenceClient.getTickers(request).map(toCoreType)
+  }
+
+  def getSnapshot(date: String): ZIO[Any, Throwable, Map[String, Aggregate]] = {
+    val request = GroupedDailyRequest(date)
+    val marketClient = new MarketClient(PolygonSettings())
+    marketClient.getGroupedDaily(request)
   }
 
 

@@ -13,7 +13,8 @@ import zio.http.Client
 import zio.stream.ZStream
 import zio.{IO, Task, ULayer, ZIO, ZLayer}
 
-import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.{Instant, LocalDate, ZoneId}
 import scala.jdk.CollectionConverters.MapHasAsJava
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 import scala.jdk.CollectionConverters.IterableHasAsScala
@@ -72,6 +73,8 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
           "c" -> agg.c,
           "t" -> agg.t,
           "v" -> agg.v,
+          "day" -> Instant.ofEpochMilli(agg.t).atZone(ZoneId.of("America/New_York"))
+            .format(DateTimeFormatter.ISO_DATE),
           "n" -> agg.numberOfShares,
           "vw" -> agg.wwap
       ).asJava)

@@ -38,7 +38,7 @@ object GetAggregates extends ZIOAppDefault {
   }
 
   override def run: ZIO[Environment with ZIOAppArgs with Scope, Any, Any] = {
-    getAggregatesFromMongo.provide(MongoDbDataRepo.layer ++ PolygonDataSource.layer ++ Client.default)
+    getAggregatesApp.provide(MongoDbDataRepo.layer ++ PolygonDataSource.layer ++ Client.default)
 
   }
 }
