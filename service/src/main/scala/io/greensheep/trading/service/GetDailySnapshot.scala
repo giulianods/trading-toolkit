@@ -6,14 +6,13 @@ import zio.ZIOAppDefault
 import zio.*
 import zio.interop.catz.*
 import zio.http.Client
-import zio.stream.ZStream
-
+import zio.stream.{ZStream, Stream}
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 object GetDailySnapshot extends ZIOAppDefault {
 
-  private def getDatesBetween(startDate: LocalDate, endDate: LocalDate): ZStream[Any, Throwable, LocalDate] = {
+  private def getDatesBetween(startDate: LocalDate, endDate: LocalDate): Stream[Throwable, LocalDate] = {
       ZStream.fromJavaStream(startDate.datesUntil(endDate))
   }
 
@@ -21,7 +20,6 @@ object GetDailySnapshot extends ZIOAppDefault {
 
   def flattenChunk(chunk: Chunk[ZIO[Any, Throwable, Map[String, Aggregate]]]) = {
     //TODO
-
   }
 
   val getAggregatesRangeApp: ZIO[MongoDbDataRepo with PolygonDataSource with Client, Throwable, Unit] = {
@@ -29,10 +27,10 @@ object GetDailySnapshot extends ZIOAppDefault {
     for {
       source <- ZIO.service[PolygonDataSource]
       repo <- ZIO.service[MongoDbDataRepo]
-      responseChunks = datesToRetrieve.grouped(10) map {
-        dates => dates.map(_.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")))
-          .map(source.getSnapshot)
-      }
+      responseAggregates = datesToRetrieve
+        .map(_.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")))
+        .map(source.getSnapshot)
+
 
 
       allData <- source.getSnapshot("2024-01-09")
@@ -50,8 +48,9 @@ object GetDailySnapshot extends ZIOAppDefault {
       repo <- ZIO.service[MongoDbDataRepo]
 
       allData <- source.getSnapshot("2024-01-09")
-      _ = allData foreach {
-        case(ticker, agg) => repo.saveAggregates(ticker, Seq(agg))
+      _ <- ZIO.foreachParDiscard(allData) {
+        case (ticker, agg) =>
+          ZIO.succeed(repo.saveAggregates(ticker, Seq(agg)))
       }
       _ = println(s"Finished in ${(java.lang.System.currentTimeMillis() - time) / 1000} seconds")
     } yield ()
