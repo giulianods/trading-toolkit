@@ -2,7 +2,7 @@ package io.greensheep.trading.dataservice
 
 import com.mongodb.client.MongoClients
 import com.mongodb.client.model.{CreateCollectionOptions, TimeSeriesGranularity, TimeSeriesOptions}
-import com.mongodb.client.result.InsertOneResult
+import com.mongodb.client.result.{InsertManyResult, InsertOneResult}
 import io.greensheep.providers.polygon.datatypes.Aggregate
 import io.greensheep.providers.polygon.{PolygonSettings, ReferenceClient}
 import io.greensheep.providers.polygon.requests.TickersRequest
@@ -61,7 +61,7 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     collection
   }
 
-  def saveAggregates(symbol: String, aggregates: Seq[Aggregate]) = {
+  def saveAggregates(symbol: String, aggregates: Seq[Aggregate]): InsertManyResult = {
     val collection = getAggregatesCollection(symbol)
     def aggregateToDocument(agg: Aggregate) = {
       new Document(
@@ -79,7 +79,6 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
           "vw" -> agg.wwap
       ).asJava)
     }
-    println(s"Saving aggregates for $symbol")
     collection.insertMany(aggregates.map(aggregateToDocument).asJava)
   }
 

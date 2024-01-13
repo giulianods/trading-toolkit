@@ -12,7 +12,7 @@ import zio.http.Client
 import zio.stream.ZStream
 import zio.{IO, Schedule, Task, ULayer, ZIO, ZLayer}
 
-import java.time.{Instant, LocalDate, Month}
+import java.time.{Instant, LocalDate, Month, ZonedDateTime}
 import java.time.format.DateTimeFormatter
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters.{IteratorHasAsScala, ListHasAsScala}
@@ -54,7 +54,8 @@ class PolygonDataSource(apiKey: String) extends DataSource{
     referenceClient.getTickers(request).map(toCoreType)
   }
 
-  def getSnapshot(date: String): ZIO[Any, Throwable, Map[String, Aggregate]] = {
+  def getSnapshot(date: String): Task[Map[String, Aggregate]] = {
+    println(s"Getting snapshot for $date at ${ZonedDateTime.now()}")
     val request = GroupedDailyRequest(date)
     val marketClient = new MarketClient(PolygonSettings())
     marketClient.getGroupedDaily(request)

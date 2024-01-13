@@ -16,27 +16,33 @@ object GetDailySnapshot extends ZIOAppDefault {
       ZStream.fromJavaStream(startDate.datesUntil(endDate))
   }
 
-  val datesToRetrieve = getDatesBetween(LocalDate.now().minusDays(3 * 365), LocalDate.now())
+  val datesToRetrieve = getDatesBetween(LocalDate.now().minusDays(100), LocalDate.now())
 
   def flattenChunk(chunk: Chunk[ZIO[Any, Throwable, Map[String, Aggregate]]]) = {
     //TODO
   }
 
-  val getAggregatesRangeApp: ZIO[MongoDbDataRepo with PolygonDataSource with Client, Throwable, Unit] = {
+  val getAggregatesRangeApp: ZIO[MongoDbDataRepo with PolygonDataSource, Throwable, Unit] = {
     val time = java.lang.System.currentTimeMillis()
     for {
       source <- ZIO.service[PolygonDataSource]
       repo <- ZIO.service[MongoDbDataRepo]
-      responseAggregates = datesToRetrieve
+      responseAggregates = datesToRetrieve.schedule(Schedule.spaced(16.seconds))
         .map(_.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")))
-        .map(source.getSnapshot)
-
-
-
-      allData <- source.getSnapshot("2024-01-09")
-      _ = allData foreach {
-        case (ticker, agg) => repo.saveAggregates(ticker, Seq(agg))
+        .map(source.getSnapshot).grouped(3)
+        .map(c => ZIO.collectAll(c).map(Chunk.fromIterable)) map {
+        zioChunk =>
+          zioChunk map {
+            chunk =>
+              chunk.flatMap(_.toList).groupBy(_._1).view.mapValues(_.map(_._2)).toMap
+          }
       }
+      _ <- responseAggregates.foreach(_.map(allStocks => {
+        val time = java.lang.System.currentTimeMillis()
+        val r = allStocks.map(kv => repo.saveAggregates(kv._1, kv._2))
+        println(s"Saved ${allStocks.size} stocks in ${(java.lang.System.currentTimeMillis() - time)/1000} sec")
+        r
+      }))
       _ = println(s"Finished in ${(java.lang.System.currentTimeMillis() - time) / 1000} seconds")
     } yield ()
   }
@@ -57,6 +63,6 @@ object GetDailySnapshot extends ZIOAppDefault {
   }
 
   override def run: ZIO[Environment with ZIOAppArgs with Scope, Any, Any] = {
-    getAggregatesApp.provide(MongoDbDataRepo.layer ++ PolygonDataSource.layer ++ Client.default)
+    getAggregatesRangeApp.provide(MongoDbDataRepo.layer ++ PolygonDataSource.layer ++ Client.default)
   }
 }
