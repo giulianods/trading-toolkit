@@ -17,13 +17,14 @@ import java.time.format.DateTimeFormatter
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters.{IteratorHasAsScala, ListHasAsScala}
 import scala.language.implicitConversions
+import zio.*
 
 object PolygonDataSource{
 
   val layer: ULayer[PolygonDataSource] = ZLayer.succeed(build())
 
   def build() = {
-    val apiKey = System.getenv("POLYGON_API_KEY")
+    val apiKey = java.lang.System.getenv("POLYGON_API_KEY")
     new PolygonDataSource(apiKey)
   }
 }
@@ -58,7 +59,7 @@ class PolygonDataSource(apiKey: String) extends DataSource{
     println(s"Getting snapshot for $date at ${ZonedDateTime.now()}")
     val request = GroupedDailyRequest(date)
     val marketClient = new MarketClient(PolygonSettings())
-    marketClient.getGroupedDaily(request)
+    marketClient.getGroupedDaily(request).delay(16.seconds)
   }
 
 

@@ -16,20 +16,22 @@ object GetDailySnapshot extends ZIOAppDefault {
       ZStream.fromJavaStream(startDate.datesUntil(endDate))
   }
 
-  val datesToRetrieve = getDatesBetween(LocalDate.now().minusDays(100), LocalDate.now())
+  val datesToRetrieve = getDatesBetween(LocalDate.now().minusDays(2*365), LocalDate.now())
 
   def flattenChunk(chunk: Chunk[ZIO[Any, Throwable, Map[String, Aggregate]]]) = {
     //TODO
   }
+
+  val apiCallSchedule = Schedule.spaced(16.seconds)
 
   val getAggregatesRangeApp: ZIO[MongoDbDataRepo with PolygonDataSource, Throwable, Unit] = {
     val time = java.lang.System.currentTimeMillis()
     for {
       source <- ZIO.service[PolygonDataSource]
       repo <- ZIO.service[MongoDbDataRepo]
-      responseAggregates = datesToRetrieve.schedule(Schedule.spaced(16.seconds))
+      responseAggregates = datesToRetrieve
         .map(_.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")))
-        .map(source.getSnapshot).grouped(3)
+        .map(c => source.getSnapshot(c)).grouped(50)
         .map(c => ZIO.collectAll(c).map(Chunk.fromIterable)) map {
         zioChunk =>
           zioChunk map {
