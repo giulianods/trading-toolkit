@@ -7,7 +7,7 @@ import io.greensheep.providers.polygon.datatypes.Aggregate
 import io.greensheep.providers.polygon.{PolygonSettings, ReferenceClient}
 import io.greensheep.providers.polygon.requests.TickersRequest
 import io.greensheep.trading.core.services.{DataRepo, DataSource}
-import io.greensheep.trading.core.types.{Quote, Stock}
+import io.greensheep.trading.core.types.{DailyAggregate, Quote, Stock}
 import org.bson.Document
 import zio.http.Client
 import zio.stream.ZStream
@@ -82,20 +82,24 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     collection.insertMany(aggregates.map(aggregateToDocument).asJava)
   }
 
-  def getAggregates(symbol: String): ZStream[Any, Throwable, Aggregate] = {
+  def convertUnixTimestampToLocalDate(unixTimestamp: Long): LocalDate = {
+    val instant = Instant.ofEpochSecond(unixTimestamp)
+    instant.atZone(ZoneId.of("America/New_York")).toLocalDate
+  }
+
+  def getAggregates(symbol: String): ZStream[Any, Throwable, DailyAggregate] = {
     val tryIterable = Try{
       val collection = getAggregatesCollection(symbol)
       val iterable = collection.find().asScala
       def documentToAggregate(doc: Document) = {
-        new Aggregate(
+        DailyAggregate(
           o = doc.get("o").toString.toDouble,
           h = doc.get("h").toString.toDouble,
           l = doc.get("l").toString.toDouble,
           c = doc.get("c").toString.toDouble,
           v = Option(doc.get("v")).map(_.toString.toDouble).getOrElse(0.0),
-          t = doc.get("t").toString.toLong,
-          n = Some(doc.get("n").toString.toInt),
-          vw = Option(doc.get("vw")).map(_.toString.toDouble)
+          t = convertUnixTimestampToLocalDate(doc.get("t").toString.toLong),
+
         )
       }
       iterable.map(documentToAggregate)
