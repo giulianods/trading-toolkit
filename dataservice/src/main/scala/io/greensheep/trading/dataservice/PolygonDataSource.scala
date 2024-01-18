@@ -2,12 +2,12 @@ package io.greensheep.trading.dataservice
 
 import io.greensheep.providers.polygon.datatypes.{Aggregate, Ticker}
 import io.greensheep.providers.polygon.{MarketClient, PolygonSettings, ReferenceClient}
-import io.greensheep.providers.polygon.requests.{AggregatesRequest, GroupedDailyRequest, TickersRequest}
+import io.greensheep.providers.polygon.requests.{AggregatesRequest, GroupedDailyRequest, StockFinancialsRequest, TickersRequest}
 import io.polygon.kotlin.sdk.DefaultJvmHttpClientProvider
 import io.polygon.kotlin.sdk.rest.{AggregatesParameters, PolygonRestApiCallback, PolygonRestClient}
 import io.polygon.kotlin.sdk.rest.reference.{SupportedTickersParameters, SupportedTickersParametersBuilder, TickersDTO}
 import io.greensheep.trading.core.services.DataSource
-import io.greensheep.trading.core.types.{Quote, Stock}
+import io.greensheep.trading.core.types.{QuarterlyFinancialData, Quote, Stock}
 import zio.http.Client
 import zio.stream.ZStream
 import zio.{IO, Schedule, Task, ULayer, ZIO, ZLayer}
@@ -76,6 +76,24 @@ class PolygonDataSource(apiKey: String) extends DataSource{
     val marketClient = new MarketClient(PolygonSettings())
     val request = AggregatesRequest(stocksTicker = ticker, from = "2022-01-01", to = "2024-01-07", sort = "desc")
     marketClient.getAggregates(request)
+  }
+
+  def getFinancials(ticker: String): ZStream[Any, Throwable, QuarterlyFinancialData] = {
+    val referenceClient = new ReferenceClient(PolygonSettings())
+    val request = StockFinancialsRequest(ticker)
+    referenceClient.getStockFinancials(request)
+      .filter(_.fiscalPeriod != "FY")
+      .filter(_.financials.incomeStatement.isDefined) map {
+      data =>
+        QuarterlyFinancialData(
+          quarter = data.fiscalPeriod,
+          year = data.fiscalYear.toInt,
+          revenues = data.financials.incomeStatement.get.revenues.value,
+          grossProfit = data.financials.incomeStatement.get.grossProfit.value,
+          basicEarningsPerShare = data.financials.incomeStatement.get.basicEarningsPerShare.value,
+          dilutedEarningsPerShare = data.financials.incomeStatement.get.dilutedEarningsPerShare.value
+        )
+    }
   }
 
   def getQuotes(ticker: String): Task[Seq[Quote]] = {
