@@ -8,6 +8,7 @@ import io.polygon.kotlin.sdk.rest.{AggregatesParameters, PolygonRestApiCallback,
 import io.polygon.kotlin.sdk.rest.reference.{SupportedTickersParameters, SupportedTickersParametersBuilder, TickersDTO}
 import io.greensheep.trading.core.services.DataSource
 import io.greensheep.trading.core.types.{QuarterlyFinancialData, Quote, Stock}
+import io.greensheep.trading.dataservice.PolygonDataSource.layer
 import zio.http.Client
 import zio.stream.ZStream
 import zio.{IO, Schedule, Task, ULayer, ZIO, ZLayer}
@@ -80,18 +81,28 @@ class PolygonDataSource(apiKey: String) extends DataSource{
 
   def getFinancials(ticker: String): ZStream[Any, Throwable, QuarterlyFinancialData] = {
     val referenceClient = new ReferenceClient(PolygonSettings())
-    val request = StockFinancialsRequest(ticker)
+    val request = StockFinancialsRequest(ticker, limit = 30)
     referenceClient.getStockFinancials(request)
       .filter(_.fiscalPeriod != "FY")
       .filter(_.financials.incomeStatement.isDefined) map {
       data =>
+
         QuarterlyFinancialData(
           quarter = data.fiscalPeriod,
           year = data.fiscalYear.toInt,
           revenues = data.financials.incomeStatement.get.revenues.value,
           grossProfit = data.financials.incomeStatement.get.grossProfit.value,
           basicEarningsPerShare = data.financials.incomeStatement.get.basicEarningsPerShare.value,
-          dilutedEarningsPerShare = data.financials.incomeStatement.get.dilutedEarningsPerShare.value
+          dilutedEarningsPerShare = data.financials.incomeStatement.get.dilutedEarningsPerShare.value,
+          costOfRevenue = data.financials.incomeStatement.get.costOfRevenue.value,
+
+          netCashFlow = data.financials.cashFlowStatement.map(_.netCashFlow.value).getOrElse(0.0),
+          netCashFlowFromOperatingActivities =
+            data.financials.cashFlowStatement.map(_.netCashFlowFromOperatingActivities.value).getOrElse(0.0),
+          netCashFlowFromInvestingActivities =
+            data.financials.cashFlowStatement.map(_.netCashFlowFromInvestingActivities.value).getOrElse(0.0),
+          netCashFlowFromFinancingActivities =
+            data.financials.cashFlowStatement.map(_.netCashFlowFromFinancingActivities.value).getOrElse(0.0)
         )
     }
   }

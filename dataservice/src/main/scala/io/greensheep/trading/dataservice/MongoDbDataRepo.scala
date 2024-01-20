@@ -7,14 +7,17 @@ import io.greensheep.providers.polygon.datatypes.Aggregate
 import io.greensheep.providers.polygon.{PolygonSettings, ReferenceClient}
 import io.greensheep.providers.polygon.requests.TickersRequest
 import io.greensheep.trading.core.services.{DataRepo, DataSource}
-import io.greensheep.trading.core.types.{DailyAggregate, Quote, Stock}
+import io.greensheep.trading.core.types.{DailyAggregate, QuarterlyFinancialData, Quote, Stock}
 import org.bson.Document
 import zio.http.Client
 import zio.stream.ZStream
-import zio.{IO, Task, ULayer, ZIO, ZLayer}
+import zio.{Chunk, IO, Task, ULayer, ZIO, ZLayer}
+import zio.json.EncoderOps
+import zio.json.ast.Json
 
 import java.time.format.DateTimeFormatter
 import java.time.{Instant, LocalDate, ZoneId}
+import scala.collection.mutable
 import scala.jdk.CollectionConverters.MapHasAsJava
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 import scala.jdk.CollectionConverters.IterableHasAsScala
@@ -55,6 +58,16 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     val database = mongoClient.getDatabase(databaseName + "-data")
     var collection = database.getCollection(symbol)
     if(collection == null){
+      createAggregatesCollection(symbol)
+      collection = database.getCollection(symbol)
+    }
+    collection
+  }
+
+  private def getFinancialsCollection(symbol: String) = {
+    val database = mongoClient.getDatabase(databaseName + "-financials")
+    var collection = database.getCollection(symbol)
+    if (collection == null) {
       createAggregatesCollection(symbol)
       collection = database.getCollection(symbol)
     }
@@ -118,6 +131,44 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
         "ipoDate" -> stock.ipoDate).asJava
     )
     collection.insertOne(doc)
+  }
+
+  def jsonToMap(json: Json): Map[String, Object] = {
+    json.asObject match {
+      case Some(obj) =>
+        val map = mutable.Map[String, Object]()
+        obj.fields.foreach { case (key, value) =>
+          val objValue: Object = value match {
+            case Json.Null => null
+            case Json.Bool(b) => b: java.lang.Boolean
+            case Json.Str(s) => s
+            case Json.Num(n) => n: java.math.BigDecimal
+            case Json.Arr(a) => a.map(jsonToMap).toList
+            case Json.Obj(o) => jsonToMap(Json.Obj(o))
+          }
+          map(key) = objValue
+        }
+        map.toMap
+      case None => Map.empty
+    }
+  }
+
+  def saveFinancials(ticker: String, data: Chunk[QuarterlyFinancialData]) = {
+    val collection = getFinancialsCollection(ticker)
+
+    def toDocument(agg: QuarterlyFinancialData) = {
+      val dataMap = data.toJsonAST.map(jsonToMap) match
+        case Left(value) =>
+          println(value)
+          Map.empty[String, Object]
+        case Right(value) =>
+          value
+
+      new Document(
+        (dataMap + ("_id" -> (agg.year.toString + "-" + agg.quarter))).asJava)
+    }
+
+    collection.insertMany(data.map(toDocument).asJava)
   }
 
   def getTickers: ZStream[Any, Throwable, Stock] = {

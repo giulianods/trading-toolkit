@@ -4,7 +4,7 @@ import io.greensheep.trading.core.services.{DataRepo, DataSource}
 import io.greensheep.trading.dataservice.{LocalFileDataRepo, MongoDbDataRepo, PolygonDataSource}
 import zio.http.Client
 import zio.{ZIO, *}
-
+import zio.json.EncoderOps
 
 object GetFinancials extends ZIOAppDefault {
 
@@ -14,9 +14,17 @@ object GetFinancials extends ZIOAppDefault {
     for {
       source <- ZIO.service[PolygonDataSource]
       repo <- ZIO.service[MongoDbDataRepo]
+      tickers = repo.getTickers
+      resultStream <- tickers foreach  {
+        ticker =>
+          val finResult = source.getFinancials(ticker.symbol)
+          for{
+            allData <- finResult.runCollect
+            _ = repo.saveFinancials(ticker.symbol, allData)
+          } yield()
 
-      allData = source.getFinancials("AAPL")
-      _ <- allData.foreach(a => ZIO.succeed(println(a)))
+      }
+     // _ <- resultStream.map(s => ZIO.succeed(s))
       _ = println(s"Finished in ${(java.lang.System.currentTimeMillis() - time) / 1000} seconds")
     } yield ()
   }
