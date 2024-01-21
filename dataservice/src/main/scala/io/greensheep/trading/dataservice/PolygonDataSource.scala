@@ -80,9 +80,11 @@ class PolygonDataSource(apiKey: String) extends DataSource{
   }
 
   def getFinancials(ticker: String): ZStream[Any, Throwable, QuarterlyFinancialData] = {
+    println(s"Get financials for $ticker")
     val referenceClient = new ReferenceClient(PolygonSettings())
     val request = StockFinancialsRequest(ticker, limit = 30)
     referenceClient.getStockFinancials(request)
+      .mapError(th => new scala.RuntimeException(s"Failed to get data for $ticker", th))
       .filter(_.fiscalPeriod != "FY")
       .filter(_.fiscalPeriod != "TTM")
       .filter(_.financials.incomeStatement.isDefined) map {
@@ -91,19 +93,21 @@ class PolygonDataSource(apiKey: String) extends DataSource{
         QuarterlyFinancialData(
           quarter = data.fiscalPeriod,
           year = data.fiscalYear.toInt,
-          revenues = data.financials.incomeStatement.get.revenues.value,
-          grossProfit = data.financials.incomeStatement.get.grossProfit.value,
-          basicEarningsPerShare = data.financials.incomeStatement.get.basicEarningsPerShare.value,
-          dilutedEarningsPerShare = data.financials.incomeStatement.get.dilutedEarningsPerShare.value,
-          costOfRevenue = data.financials.incomeStatement.get.costOfRevenue.value,
+          revenues = data.financials.incomeStatement
+            .flatMap(_.revenues).map(_.value).getOrElse(0.0),
+          basicEarningsPerShare = data.financials.incomeStatement
+            .flatMap(_.basicEarningsPerShare).map(_.value).getOrElse(0.0),
+          dilutedEarningsPerShare = data.financials.incomeStatement
+            .flatMap(_.dilutedEarningsPerShare).map(_.value).getOrElse(0.0),
 
-          netCashFlow = data.financials.cashFlowStatement.map(_.netCashFlow.value).getOrElse(0.0),
+
+          netCashFlow = data.financials.cashFlowStatement.flatMap(_.netCashFlow).map(_.value).getOrElse(0.0),
           netCashFlowFromOperatingActivities =
-            data.financials.cashFlowStatement.map(_.netCashFlowFromOperatingActivities.value).getOrElse(0.0),
+            data.financials.cashFlowStatement.flatMap(_.netCashFlowFromOperatingActivities).map(_.value).getOrElse(0.0),
           netCashFlowFromInvestingActivities =
-            data.financials.cashFlowStatement.map(_.netCashFlowFromInvestingActivities.value).getOrElse(0.0),
+            data.financials.cashFlowStatement.flatMap(_.netCashFlowFromInvestingActivities).map(_.value).getOrElse(0.0),
           netCashFlowFromFinancingActivities =
-            data.financials.cashFlowStatement.map(_.netCashFlowFromFinancingActivities.value).getOrElse(0.0)
+            data.financials.cashFlowStatement.flatMap(_.netCashFlowFromFinancingActivities).map(_.value).getOrElse(0.0)
         )
     }
   }

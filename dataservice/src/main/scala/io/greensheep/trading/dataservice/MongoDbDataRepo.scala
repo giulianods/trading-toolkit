@@ -157,7 +157,7 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     val collection = getFinancialsCollection(ticker)
 
     def toDocument(agg: QuarterlyFinancialData) = {
-      val dataMap = data.toJsonAST.map(jsonToMap) match
+      val dataMap = agg.toJsonAST.map(jsonToMap) match
         case Left(value) =>
           println(value)
           Map.empty[String, Object]
@@ -168,7 +168,12 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
         (dataMap + ("_id" -> (agg.year.toString + "-" + agg.quarter))).asJava)
     }
 
-    collection.insertMany(data.map(toDocument).asJava)
+    if(data.nonEmpty){
+      val results = data.map(toDocument)
+      val unduplicate = results.map(d => d.get("_id") -> d).toMap.values
+      collection.insertMany(unduplicate.toSeq.asJava)
+    }
+
   }
 
   def getTickers: ZStream[Any, Throwable, Stock] = {
