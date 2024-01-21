@@ -21,6 +21,10 @@ val zioLibraries = Seq(
   "dev.zio" %% "zio-test-magnolia" % zioVersion % Test
 )
 
+val logbackLib = Seq(
+  "ch.qos.logback" % "logback-classic" % "1.0.13"
+)
+
 val dataSourceLibraries = Seq(
   "io.greensheep" %% "polygon-client-zio" % "0.1.0-SNAPSHOT"
 )
@@ -29,23 +33,23 @@ val zioTestFramework = new TestFramework("zio.test.sbt.ZTestFramework")
 
 lazy val core = (project in file("core"))
   .settings(
-    libraryDependencies := zioLibraries,
+    libraryDependencies := zioLibraries ++ logbackLib,
     testFrameworks := Seq(zioTestFramework)
   )
 
 lazy val dataservice = (project in file("dataservice")).dependsOn(core)
   .settings(
-    libraryDependencies := Seq("dev.zio" %% "zio-json" % "0.4.2") ++ zioLibraries ++ dataSourceLibraries,
+    libraryDependencies := Seq("dev.zio" %% "zio-json" % "0.4.2") ++ zioLibraries ++ dataSourceLibraries ++ logbackLib,
     testFrameworks := Seq(zioTestFramework)
   )
 
 lazy val service = (project in file("service")).dependsOn(core, dataservice)
   .settings(
-    libraryDependencies := zioLibraries,
+    libraryDependencies := zioLibraries ++ logbackLib,
     testFrameworks := Seq(zioTestFramework)
   )
 
-libraryDependencies ++= zioLibraries
+libraryDependencies ++= (zioLibraries ++ logbackLib)
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
 
 Test / fork := true

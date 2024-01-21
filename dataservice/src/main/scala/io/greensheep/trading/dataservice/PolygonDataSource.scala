@@ -75,7 +75,7 @@ class PolygonDataSource(apiKey: String) extends DataSource{
 
   def getDailyAggregates(ticker: String): ZIO[Client, Throwable, Seq[Aggregate]] = {
     val marketClient = new MarketClient(PolygonSettings())
-    val request = AggregatesRequest(stocksTicker = ticker, from = "2022-01-01", to = "2024-01-07", sort = "desc")
+    val request = AggregatesRequest(stocksTicker = ticker, from = "2022-01-01", to = "2024-01-20", sort = "desc")
     marketClient.getAggregates(request)
   }
 
@@ -84,6 +84,7 @@ class PolygonDataSource(apiKey: String) extends DataSource{
     val request = StockFinancialsRequest(ticker, limit = 30)
     referenceClient.getStockFinancials(request)
       .filter(_.fiscalPeriod != "FY")
+      .filter(_.fiscalPeriod != "TTM")
       .filter(_.financials.incomeStatement.isDefined) map {
       data =>
 
