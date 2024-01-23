@@ -23,11 +23,12 @@ import scala.jdk.CollectionConverters.IteratorHasAsScala
 import scala.jdk.CollectionConverters.IterableHasAsScala
 import scala.jdk.CollectionConverters.SeqHasAsJava
 import scala.util.Try
+import io.greensheep.trading.core.utils.JsonUtils._
 object MongoDbDataRepo{
 
   val layer: ULayer[MongoDbDataRepo] = ZLayer.succeed(build())
 
-  def build() = {
+  def build(): MongoDbDataRepo = {
     new MongoDbDataRepo("mongodb://localhost:27017", "polygon")
   }
 }
@@ -133,36 +134,16 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     collection.insertOne(doc)
   }
 
-  def jsonToMap(json: Json): Map[String, Object] = {
-    json.asObject match {
-      case Some(obj) =>
-        val map = mutable.Map[String, Object]()
-        obj.fields.foreach { case (key, value) =>
-          val objValue: Object = value match {
-            case Json.Null => null
-            case Json.Bool(b) => b: java.lang.Boolean
-            case Json.Str(s) => s
-            case Json.Num(n) => n: java.math.BigDecimal
-            case Json.Arr(a) => a.map(jsonToMap).toList
-            case Json.Obj(o) => jsonToMap(Json.Obj(o))
-          }
-          map(key) = objValue
-        }
-        map.toMap
-      case None => Map.empty
-    }
-  }
-
   def saveFinancials(ticker: String, data: Chunk[QuarterlyFinancialData]) = {
     val collection = getFinancialsCollection(ticker)
 
     def toDocument(agg: QuarterlyFinancialData) = {
-      val dataMap = agg.toJsonAST.map(jsonToMap) match
+      val dataMap = agg.toJsonAST match
         case Left(value) =>
           println(value)
           Map.empty[String, Object]
         case Right(value) =>
-          value
+          value.toMap
 
       new Document(
         (dataMap + ("_id" -> (agg.year.toString + "-" + agg.quarter))).asJava)

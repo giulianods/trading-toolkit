@@ -2,7 +2,7 @@ package io.greensheep.trading.dataservice
 
 import io.greensheep.providers.polygon.datatypes.{Aggregate, Ticker}
 import io.greensheep.providers.polygon.{MarketClient, PolygonSettings, ReferenceClient}
-import io.greensheep.providers.polygon.requests.{AggregatesRequest, GroupedDailyRequest, StockFinancialsRequest, TickersRequest}
+import io.greensheep.providers.polygon.requests.{AggregatesRequest, GroupedDailyRequest, StockFinancialsRequest, TickerDetailsRequest, TickersRequest}
 import io.polygon.kotlin.sdk.DefaultJvmHttpClientProvider
 import io.polygon.kotlin.sdk.rest.{AggregatesParameters, PolygonRestApiCallback, PolygonRestClient}
 import io.polygon.kotlin.sdk.rest.reference.{SupportedTickersParameters, SupportedTickersParametersBuilder, TickersDTO}
@@ -38,13 +38,13 @@ class PolygonDataSource(apiKey: String) extends DataSource{
       ticker.ticker,
       ticker.name,
       LocalDate.of(1970, Month.JANUARY, 1),
-      ""
+
     )
   }
 
   val polygonClient = new PolygonRestClient(apiKey)
 
-  def getTickers: ZStream[Client, Throwable, Stock] = {
+  def getTickers: ZStream[Any, Throwable, Stock] = {
     val request = TickersRequest(
       _type = "CS",
       market = Some("stocks"),
@@ -68,7 +68,25 @@ class PolygonDataSource(apiKey: String) extends DataSource{
     ZIO.succeed(Seq.empty)
   }
 
-  def getStock(symbol: String): IO[Throwable, Stock]= ???
+  def getStock(symbol: String): Task[Stock]= {
+    val referenceClient = new ReferenceClient(PolygonSettings())
+    referenceClient.getTickerDetails(TickerDetailsRequest(symbol)) map {
+      details =>
+        Stock(
+          symbol = details.ticker,
+          companyName = details.name,
+          ipoDate = LocalDate.parse(details.listDate),
+          primaryExchange = details.primaryExchange,
+          description = details.description,
+          totalEmployees = details.totalEmployees,
+          sicCode = details.sicCode,
+          sicDescription = details.sicDescription,
+          marketCap = details.marketCap.toLong,
+          weightedSharesOutstanding = details.weightedSharesOutstanding
+        )
+    }
+
+  }
 
   def getStocks(): Map[String, Stock]= ???
 

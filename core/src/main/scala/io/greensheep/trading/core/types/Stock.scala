@@ -1,14 +1,28 @@
 package io.greensheep.trading.core.types
 
 import zio.Chunk
+import zio.json.{DeriveJsonDecoder, DeriveJsonEncoder, JsonDecoder, JsonEncoder}
 
 import java.time.LocalDate
+
+object Stock {
+
+  implicit val Encoder: JsonEncoder[Stock] = DeriveJsonEncoder.gen[Stock]
+
+  implicit val Decoder: JsonDecoder[Stock] = DeriveJsonDecoder.gen[Stock]
+}
 
 case class Stock(
                 symbol: String,
                 companyName: String,
                 ipoDate: LocalDate,
-                primaryExchange: String,
+                primaryExchange: String = "",
+                description: String = "",
+                totalEmployees: Int = 0,
+                sicCode: String = "",
+                sicDescription: String = "",
+                marketCap: Long = 0,
+                weightedSharesOutstanding: Long = 0,
                 dailyAggregates: Chunk[DailyAggregate] = Chunk.empty
 
                 ){
@@ -30,11 +44,11 @@ case class Stock(
 
   lazy val low52Week: Double = dailyAggregates.map(_.c).takeRight(252).min
 
-  lazy val perfQ1 = currentPrice / dailyAggregates.takeRight(63).head.c
+  lazy val perfQ1: Double = currentPrice / dailyAggregates.takeRight(63).head.c
 
-  lazy val perfQ2 = currentPrice / dailyAggregates.takeRight(126).head.c
+  lazy val perfQ2: Double = currentPrice / dailyAggregates.takeRight(126).head.c
 
-  lazy val perfQ3 = currentPrice / dailyAggregates.takeRight(189).head.c
+  lazy val perfQ3: Double = currentPrice / dailyAggregates.takeRight(189).head.c
 
-  lazy val perfQ4 = currentPrice / dailyAggregates.takeRight(252).head.c
+  lazy val perfQ4: Double = currentPrice / dailyAggregates.takeRight(252).head.c
 }
