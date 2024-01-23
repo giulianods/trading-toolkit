@@ -23,6 +23,7 @@ object GetTickers extends ZIOAppDefault{
       repo <- ZIO.service[MongoDbDataRepo]
       stock <- source.getStock("AAPL")
       _ = println(stock.toJsonPretty)
+      _ = repo.saveTicker(stock)
 
     } yield ()
   }

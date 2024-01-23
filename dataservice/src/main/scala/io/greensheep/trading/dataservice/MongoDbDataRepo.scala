@@ -1,8 +1,8 @@
 package io.greensheep.trading.dataservice
 
 import com.mongodb.client.MongoClients
-import com.mongodb.client.model.{CreateCollectionOptions, TimeSeriesGranularity, TimeSeriesOptions}
-import com.mongodb.client.result.{InsertManyResult, InsertOneResult}
+import com.mongodb.client.model.{CreateCollectionOptions, Filters, TimeSeriesGranularity, TimeSeriesOptions, UpdateOptions}
+import com.mongodb.client.result.{InsertManyResult, InsertOneResult, UpdateResult}
 import io.greensheep.providers.polygon.datatypes.Aggregate
 import io.greensheep.providers.polygon.{PolygonSettings, ReferenceClient}
 import io.greensheep.providers.polygon.requests.TickersRequest
@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters.IteratorHasAsScala
 import scala.jdk.CollectionConverters.IterableHasAsScala
 import scala.jdk.CollectionConverters.SeqHasAsJava
 import scala.util.Try
-import io.greensheep.trading.core.utils.JsonUtils._
+import io.greensheep.trading.core.utils.JsonUtils.*
 object MongoDbDataRepo{
 
   val layer: ULayer[MongoDbDataRepo] = ZLayer.succeed(build())
@@ -121,17 +121,21 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     ZStream.fromZIO(ZIO.fromTry(tryIterable)).flatMap(ZStream.fromIterable)
   }
 
-  def saveTicker(stock: Stock): InsertOneResult = {
+  def saveTicker(stock: Stock): UpdateResult = {
     println(s"Saving ${stock.symbol}")
     val collection = getCollection("tickers").get
-    val doc = new Document(
-      Map(
-        "_id" -> stock.symbol,
-        "symbol" -> stock.symbol,
-        "name" -> stock.companyName,
-        "ipoDate" -> stock.ipoDate).asJava
-    )
-    collection.insertOne(doc)
+    val docMap = stock.toJsonAST match
+      case Left(value) =>
+        throw new RuntimeException(value)
+      case Right(value) =>
+        value.toMap
+
+    val filteredMap = docMap - ("dailyAggregates") // TODO investigate
+    val doc = new Document((filteredMap + ("_id" -> stock.symbol)).asJava)
+    val filter = Filters.eq("_id", stock.symbol)
+    val options = new UpdateOptions().upsert(true)
+
+    collection.updateOne(filter, new Document("$set", doc), options)
   }
 
   def saveFinancials(ticker: String, data: Chunk[QuarterlyFinancialData]) = {

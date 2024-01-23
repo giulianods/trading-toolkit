@@ -1,7 +1,7 @@
 package io.greensheep.trading.core.types
 
 import zio.Chunk
-import zio.json.{DeriveJsonDecoder, DeriveJsonEncoder, JsonDecoder, JsonEncoder}
+import zio.json.{DeriveJsonDecoder, DeriveJsonEncoder, JsonDecoder, JsonEncoder, jsonExclude}
 
 import java.time.LocalDate
 
@@ -23,8 +23,7 @@ case class Stock(
                 sicDescription: String = "",
                 marketCap: Long = 0,
                 weightedSharesOutstanding: Long = 0,
-                dailyAggregates: Chunk[DailyAggregate] = Chunk.empty
-
+                @jsonExclude dailyAggregates: Chunk[DailyAggregate] = Chunk.empty
                 ){
 
   def ma(len: Int): Double = {
