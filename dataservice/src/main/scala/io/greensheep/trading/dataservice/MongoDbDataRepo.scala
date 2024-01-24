@@ -182,7 +182,7 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
 
   override def getStock(symbol: String): IO[Throwable, Stock] = ???
 
-  override def getStocks(): Map[String, Stock] = ???
+  override def getStocks(): Task[Map[String, Stock]] = ???
 
   override def getQuotes(symbol: String): Task[Seq[Quote]] = ???
 }

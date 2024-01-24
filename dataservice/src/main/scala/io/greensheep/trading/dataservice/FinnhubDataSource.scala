@@ -90,7 +90,7 @@ class FinnhubDataSource()  {
 
 
 
-  def getStocks(): Map[String, Stock] = ???
+  def getStocks(): Task[Map[String, Stock]] = ???
 
   def getSymbols: Task[Seq[String]] = {
     for{

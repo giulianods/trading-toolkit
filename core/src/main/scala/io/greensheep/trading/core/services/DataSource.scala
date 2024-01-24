@@ -20,7 +20,7 @@ trait DataSource {
 
   def getStock(symbol: String): IO[Throwable, Stock]
 
-  def getStocks(): Map[String,Stock]
+  def getStocks(): Task[Map[String,Stock]]
 
   def getQuotes(symbol: String): Task[Seq[Quote]]
 

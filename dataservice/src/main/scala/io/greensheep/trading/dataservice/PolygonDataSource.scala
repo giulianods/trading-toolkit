@@ -75,20 +75,28 @@ class PolygonDataSource(apiKey: String) extends DataSource{
         Stock(
           symbol = details.ticker,
           companyName = details.name,
-          ipoDate = LocalDate.parse(details.listDate),
+          ipoDate = LocalDate.parse(details.listDate.getOrElse("1970-01-01")),
           primaryExchange = details.primaryExchange,
           description = details.description,
-          totalEmployees = details.totalEmployees,
-          sicCode = details.sicCode,
-          sicDescription = details.sicDescription,
-          marketCap = details.marketCap.toLong,
-          weightedSharesOutstanding = details.weightedSharesOutstanding
+          totalEmployees = details.totalEmployees.getOrElse(0),
+          sicCode = details.sicCode.getOrElse(""),
+          sicDescription = details.sicDescription.getOrElse(""),
+          marketCap = details.marketCap.map(_.toLong).getOrElse(0L),
+          weightedSharesOutstanding = details.weightedSharesOutstanding.getOrElse(0L)
         )
     }
 
   }
 
-  def getStocks(): Map[String, Stock]= ???
+  def getStocks(): Task[Map[String, Stock]]= {
+    for{
+      symbols <- this.getSymbols
+      stocks = symbols.map(s => s -> getStock(s)).toMap
+      taskMap <- ZIO.foreach(stocks) {
+        case (key, task) => task.map(value => key -> value)
+      }.map(_.toMap)
+    } yield taskMap
+  }
 
 
   def getDailyAggregates(ticker: String): ZIO[Client, Throwable, Seq[Aggregate]] = {

@@ -2,8 +2,11 @@ package io.greensheep.trading.service
 
 import io.greensheep.trading.dataservice.{MongoDbDataRepo, PolygonDataSource}
 import io.greensheep.trading.service.GetAggregates.Environment
-import zio.{Scope, ZIO, ZIOAppArgs, ZIOAppDefault}
-import zio.json._
+import zio.json.*
+import zio.*
+
+import java.time.LocalDateTime
+
 object GetTickers extends ZIOAppDefault{
 
   val getTickersApp: ZIO[MongoDbDataRepo with PolygonDataSource, Throwable, Unit] = {
@@ -12,7 +15,13 @@ object GetTickers extends ZIOAppDefault{
       source <- ZIO.service[PolygonDataSource]
       repo <- ZIO.service[MongoDbDataRepo]
       tickerStream = source.getTickers
-      _ <- tickerStream.foreach(t => ZIO.succeed(println(t)))
+      _ <- tickerStream.schedule(Schedule.spaced(16.seconds)) foreach {
+        ticker => for{
+          s <- source.getStock(ticker.symbol)
+          _ = println(s"Got data for ${ticker.symbol} at ${LocalDateTime.now()}")
+          r = repo.saveTicker(s)
+        } yield()
+      }
       _ = println(s"Finished in ${(java.lang.System.currentTimeMillis() - time) / 1000} seconds")
     } yield ()
   }
@@ -30,7 +39,7 @@ object GetTickers extends ZIOAppDefault{
 
 
   override def run: ZIO[Environment with ZIOAppArgs with Scope, Any, Any] = {
-    getSingleTickerApp.provide(MongoDbDataRepo.layer ++ PolygonDataSource.layer)
+    getTickersApp.provide(MongoDbDataRepo.layer ++ PolygonDataSource.layer)
 
   }
 }
