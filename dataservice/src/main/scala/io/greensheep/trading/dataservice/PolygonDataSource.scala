@@ -77,7 +77,7 @@ class PolygonDataSource(apiKey: String) extends DataSource{
           companyName = details.name,
           ipoDate = LocalDate.parse(details.listDate.getOrElse("1970-01-01")),
           primaryExchange = details.primaryExchange,
-          description = details.description,
+          description = details.description.getOrElse(""),
           totalEmployees = details.totalEmployees.getOrElse(0),
           sicCode = details.sicCode.getOrElse(""),
           sicDescription = details.sicDescription.getOrElse(""),
