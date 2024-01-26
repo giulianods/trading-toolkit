@@ -3,6 +3,8 @@
 /project/target/
 /project/project/target/
 /.bsp/
-
+*/target/
+*/project/target/
+*/.bsp/
 *.iml
 

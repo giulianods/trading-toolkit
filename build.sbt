@@ -1,3 +1,7 @@
+import sbt.Keys.testFrameworks
+
+import scala.collection.Seq
+
 ThisBuild / version := "0.1.0-SNAPSHOT"
 
 ThisBuild / scalaVersion := "3.3.1"
@@ -40,6 +44,13 @@ lazy val core = (project in file("core"))
 lazy val dataservice = (project in file("dataservice")).dependsOn(core)
   .settings(
     libraryDependencies := Seq("dev.zio" %% "zio-json" % "0.4.2") ++ zioLibraries ++ dataSourceLibraries ++ logbackLib,
+    testFrameworks := Seq(zioTestFramework)
+  )
+
+lazy val restApi = (project in file("rest-api")).dependsOn(core).dependsOn(dataservice)
+  .settings(
+    libraryDependencies := zioLibraries ++  Seq("dev.zio" %% "zio-json" % "0.4.2") ++ logbackLib
+      ++ Seq("dev.zio" %% "zio-http" % "3.0.0-RC4"),
     testFrameworks := Seq(zioTestFramework)
   )
 
