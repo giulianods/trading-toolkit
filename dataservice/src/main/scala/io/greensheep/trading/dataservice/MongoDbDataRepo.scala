@@ -178,7 +178,10 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
 
   override def saveQuotes(symbol: String, quotes: Seq[Quote]): Task[Unit] = ???
 
-  override def getSymbols: Task[Seq[String]] = ???
+  override def getSymbols: ZIO[Any, Throwable, Seq[String]] = {
+    val result = getTickers.map(_.symbol).runCollect
+    result
+  }
 
   override def getStock(symbol: String): IO[Throwable, Stock] = ???
 

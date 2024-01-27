@@ -16,7 +16,7 @@ object DataSource{
 
 trait DataSource {
 
-  def getSymbols: Task[Seq[String]]
+  def getSymbols: ZIO[Any, Throwable, Seq[String]]
 
   def getStock(symbol: String): IO[Throwable, Stock]
 

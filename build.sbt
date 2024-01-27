@@ -10,11 +10,9 @@ lazy val root = (project in file("."))
   .settings(
     name := "trading-toolkit",
     idePackagePrefix := Some("io.greensheep.trading")
-  ).aggregate(dataservice, core, service)
+  ).aggregate(dataservice, core, service, restApi)
 
 credentials += Credentials(Path.userHome / ".sbt" / ".credentials")
-
-
 
 val zioVersion = "2.0.19"
 
@@ -49,8 +47,7 @@ lazy val dataservice = (project in file("dataservice")).dependsOn(core)
 
 lazy val restApi = (project in file("rest-api")).dependsOn(core).dependsOn(dataservice)
   .settings(
-    libraryDependencies := zioLibraries ++  Seq("dev.zio" %% "zio-json" % "0.4.2") ++ logbackLib
-      ++ Seq("dev.zio" %% "zio-http" % "3.0.0-RC4"),
+    libraryDependencies := Seq("dev.zio" %% "zio" % "2.0.19", "dev.zio" %% "zio-http" % "3.0.0-RC4"),
     testFrameworks := Seq(zioTestFramework)
   )
 
