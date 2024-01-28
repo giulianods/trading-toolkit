@@ -1,11 +1,12 @@
 package io.greensheep.trading.service
 
 import io.greensheep.trading.core.screens.SepaScreens
-import io.greensheep.trading.core.types.StockMarket
+import io.greensheep.trading.core.types.{StockMarket, Watchlist}
 import zio.ZIOAppDefault
 import io.greensheep.trading.dataservice.{MongoDbDataRepo, PolygonDataSource}
 import zio.ZIOAppDefault
 import zio.*
+import zio.Config.LocalDate
 import zio.interop.catz.*
 import zio.http.Client
 
@@ -25,6 +26,9 @@ object Screener extends ZIOAppDefault  {
       sepaScreens = SepaScreens(stockMarket)
       results = sepaScreens.sepaScreens()
       _ = results.foreach(s => println(s.symbol + ","))
+      wl = Watchlist(day = java.time.LocalDate.now().toString,
+        screenName = "SEPA", dataSource = "polygon", tickers = results.map(_.symbol))
+      _ = repo.saveWatchlist(wl)
       _ = println(s"Finished in ${(java.lang.System.currentTimeMillis() - time) / 1000} seconds")
     } yield ()
   }

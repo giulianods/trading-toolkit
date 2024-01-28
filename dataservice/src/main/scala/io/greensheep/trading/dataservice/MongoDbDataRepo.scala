@@ -1,13 +1,13 @@
 package io.greensheep.trading.dataservice
 
 import com.mongodb.client.MongoClients
-import com.mongodb.client.model.{CreateCollectionOptions, Filters, TimeSeriesGranularity, TimeSeriesOptions, UpdateOptions}
+import com.mongodb.client.model.{CreateCollectionOptions, Filters, InsertOneOptions, TimeSeriesGranularity, TimeSeriesOptions, UpdateOptions}
 import com.mongodb.client.result.{InsertManyResult, InsertOneResult, UpdateResult}
 import io.greensheep.providers.polygon.datatypes.Aggregate
 import io.greensheep.providers.polygon.{PolygonSettings, ReferenceClient}
 import io.greensheep.providers.polygon.requests.TickersRequest
 import io.greensheep.trading.core.services.{DataRepo, DataSource}
-import io.greensheep.trading.core.types.{DailyAggregate, QuarterlyFinancialData, Quote, Stock}
+import io.greensheep.trading.core.types.{DailyAggregate, QuarterlyFinancialData, Quote, Stock, Watchlist}
 import org.bson.Document
 import zio.http.Client
 import zio.stream.ZStream
@@ -24,6 +24,8 @@ import scala.jdk.CollectionConverters.IterableHasAsScala
 import scala.jdk.CollectionConverters.SeqHasAsJava
 import scala.util.Try
 import io.greensheep.trading.core.utils.JsonUtils.*
+
+import java.util
 object MongoDbDataRepo{
 
   val layer: ULayer[MongoDbDataRepo] = ZLayer.succeed(build())
@@ -37,8 +39,8 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
 
   private val mongoClient = MongoClients.create(url)
 
-  private def getCollection(name: String): Try[com.mongodb.client.MongoCollection[Document]] = Try {
-    val database = mongoClient.getDatabase(databaseName)
+  private def getCollection(name: String, dbName: String = databaseName): Try[com.mongodb.client.MongoCollection[Document]] = Try {
+    val database = mongoClient.getDatabase(dbName)
     var collection = database.getCollection(name)
     if(collection == null) {
       database.createCollection(name)
@@ -138,6 +140,25 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     collection.updateOne(filter, new Document("$set", doc), options)
   }
 
+  def saveWatchlist(w: Watchlist) = {
+    val wlCollection = getCollection("watchlist", "greensheep-trading")
+
+    def toDocument(agg: Watchlist) = {
+      val javaMap = new util.LinkedHashMap[String, Object]()
+      javaMap.put("_id", agg.uuid)
+      javaMap.put("day", agg.day)
+      javaMap.put("screenName", agg.screenName)
+      javaMap.put("dataSource", agg.dataSource)
+      javaMap.put("tickers", agg.tickers.asJava)
+
+      new Document(javaMap)
+    }
+
+    val doc = toDocument(w)
+    wlCollection.get.insertOne(doc)
+  }
+
+
   def saveFinancials(ticker: String, data: Chunk[QuarterlyFinancialData]) = {
     val collection = getFinancialsCollection(ticker)
 
@@ -175,6 +196,7 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     val stockIterator = collection.find().map(documentToStock).iterator().asScala
     ZStream.fromIterator(stockIterator)
   }
+
 
   override def saveQuotes(symbol: String, quotes: Seq[Quote]): Task[Unit] = ???
 
