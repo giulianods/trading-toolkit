@@ -1,3 +1,5 @@
+package io.greensheep.trading.api
+
 import io.greensheep.trading.dataservice.MongoDbDataRepo
 import zio.*
 import zio.http.*
@@ -9,7 +11,10 @@ object Main extends ZIOAppDefault{
   }
   private val app: HttpApp[Any] = {
     val symbolsZIO = MongoDbDataRepo.build().getSymbols.map(_.mkString("\n"))
-    val resp = symbolsZIO.mapBoth(e => Response.internalServerError(e.getMessage),x => Response.text(x))
+    val resp = symbolsZIO.mapBoth(e => {
+      e.printStackTrace()
+      Response.internalServerError(e.getMessage)
+    },x => Response.text(x))
     Routes(
       // This line works fine
       Method.GET / "symbols" -> Handler.fromZIO(ZIO.succeed(Seq("a", "b", "c")).map(r => Response.text(r.mkString("\n")))),
