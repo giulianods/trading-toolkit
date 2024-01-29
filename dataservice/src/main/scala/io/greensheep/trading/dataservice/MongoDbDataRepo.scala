@@ -140,7 +140,7 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     collection.updateOne(filter, new Document("$set", doc), options)
   }
 
-  def saveWatchlist(w: Watchlist) = {
+  def saveWatchlist(w: Watchlist): InsertOneResult = {
     val wlCollection = getCollection("watchlist", "greensheep-trading")
 
     def toDocument(agg: Watchlist) = {
@@ -156,6 +156,18 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
 
     val doc = toDocument(w)
     wlCollection.get.insertOne(doc)
+  }
+
+  def getWatchlist(day: String, screen: String): Watchlist = {
+    val uuid = s"$day-$screen-polygon"
+    val wlCollection = getCollection("watchlist", "greensheep-trading").get
+    val document = wlCollection.find(com.mongodb.client.model.Filters.eq("_id", uuid)).first()
+    Watchlist(
+      day = document.get("day").asInstanceOf[String],
+      screenName = document.get("screenName").asInstanceOf[String],
+      dataSource = document.get("dataSource").asInstanceOf[String],
+      tickers = document.get("tickers").asInstanceOf[java.lang.Iterable[String]].asScala.toSeq
+    )
   }
 
 

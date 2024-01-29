@@ -20,7 +20,7 @@ object Main extends ZIOAppDefault{
       Method.GET / "symbols" -> Handler.fromZIO(ZIO.succeed(Seq("a", "b", "c")).map(r => Response.text(r.mkString("\n")))),
 
       Method.GET / "symbols2" -> Handler.fromZIO(resp),
-
+      Method.GET / "watchlist" -> Handler.fromZIO(ApiEndpoints.watchlistApi()),
     ).toHttpApp
   }
   override val run =
