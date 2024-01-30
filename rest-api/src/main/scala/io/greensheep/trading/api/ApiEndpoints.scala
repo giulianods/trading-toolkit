@@ -19,7 +19,7 @@ object ApiEndpoints {
     )
   }
 
-  def financialData(tickers: Seq[String]) = {
+  def financialData(tickers: Seq[String]): ZIO[Any, Response, Response] = {
     ZIO.attempt(tickers.map(t => t -> mongoRepo.getFinancialsQuarterly(t)).toMap).mapBoth(
       th => {
         th.printStackTrace()

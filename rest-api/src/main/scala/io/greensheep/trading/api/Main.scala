@@ -21,6 +21,14 @@ object Main extends ZIOAppDefault{
 
       Method.GET / "symbols2" -> Handler.fromZIO(resp),
       Method.GET / "watchlist" -> Handler.fromZIO(ApiEndpoints.watchlistApi()),
+
+      Method.POST / "financials" / "quarterly" -> handler { (req: Request) =>
+        for{
+          tickers <- req.body.asString.mapBoth(throwableToResponse, s => s.split(",").toSeq)
+          results <- ApiEndpoints.financialData(tickers)
+        } yield results
+      }
+
     ).toHttpApp
   }
   override val run =
