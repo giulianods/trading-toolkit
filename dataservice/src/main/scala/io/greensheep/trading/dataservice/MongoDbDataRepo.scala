@@ -24,6 +24,7 @@ import scala.jdk.CollectionConverters.IterableHasAsScala
 import scala.jdk.CollectionConverters.SeqHasAsJava
 import scala.util.Try
 import io.greensheep.trading.core.utils.JsonUtils.*
+import org.bson.types.Decimal128
 
 import java.util
 object MongoDbDataRepo{
@@ -170,6 +171,25 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     )
   }
 
+
+  def getFinancialsQuarterly(ticker: String): Seq[QuarterlyFinancialData] = {
+    val collection = getFinancialsCollection(ticker)
+    val entries = collection.find()
+    val qdata = entries.asScala map { doc =>
+      QuarterlyFinancialData(
+        quarter = doc.get("quarter").asInstanceOf[String],
+        year = doc.get("year").asInstanceOf[Decimal128].intValue(),
+        revenues = doc.get("revenues").asInstanceOf[Decimal128].doubleValue(),
+        basicEarningsPerShare = doc.get("basicEarningsPerShare").asInstanceOf[Decimal128].doubleValue(),
+        dilutedEarningsPerShare = doc.get("dilutedEarningsPerShare").asInstanceOf[Decimal128].doubleValue(),
+        netCashFlow = doc.get("netCashFlow").asInstanceOf[Decimal128].doubleValue(),
+        netCashFlowFromOperatingActivities = doc.get("netCashFlowFromOperatingActivities").asInstanceOf[Decimal128].doubleValue(),
+        netCashFlowFromInvestingActivities = doc.get("netCashFlowFromInvestingActivities").asInstanceOf[Decimal128].doubleValue(),
+        netCashFlowFromFinancingActivities = doc.get("netCashFlowFromFinancingActivities").asInstanceOf[Decimal128].doubleValue()
+      )
+    }
+    qdata.toSeq.sortBy(_.uuid)
+  }
 
   def saveFinancials(ticker: String, data: Chunk[QuarterlyFinancialData]) = {
     val collection = getFinancialsCollection(ticker)

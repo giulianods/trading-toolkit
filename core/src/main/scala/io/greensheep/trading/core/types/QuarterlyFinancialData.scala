@@ -17,6 +17,8 @@ case class QuarterlyFinancialData(
                                  netCashFlowFromFinancingActivities: Double
                              ) {
 
+  lazy val uuid: String = year.toString + "-" + quarter
+
 
   override def toString: String = {
     s"$year | $quarter | $revenues | $dilutedEarningsPerShare"
