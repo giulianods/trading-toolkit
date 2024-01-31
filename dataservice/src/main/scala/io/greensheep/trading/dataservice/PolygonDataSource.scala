@@ -7,7 +7,7 @@ import io.polygon.kotlin.sdk.DefaultJvmHttpClientProvider
 import io.polygon.kotlin.sdk.rest.{AggregatesParameters, PolygonRestApiCallback, PolygonRestClient}
 import io.polygon.kotlin.sdk.rest.reference.{SupportedTickersParameters, SupportedTickersParametersBuilder, TickersDTO}
 import io.greensheep.trading.core.services.DataSource
-import io.greensheep.trading.core.types.{QuarterlyFinancialData, Quote, Stock}
+import io.greensheep.trading.core.types.{AnnualFinancialData, QuarterlyFinancialData, Quote, Stock}
 import io.greensheep.trading.dataservice.PolygonDataSource.layer
 import zio.http.Client
 import zio.stream.ZStream
@@ -105,7 +105,35 @@ class PolygonDataSource(apiKey: String) extends DataSource{
     marketClient.getAggregates(request)
   }
 
-  def getFinancials(ticker: String): ZStream[Any, Throwable, QuarterlyFinancialData] = {
+  def getFinancialsYearly(ticker: String):  ZStream[Any, Throwable, AnnualFinancialData] = {
+    println(s"Get financials for $ticker")
+    val referenceClient = new ReferenceClient(PolygonSettings())
+    val request = StockFinancialsRequest(ticker, limit = 50)
+    referenceClient.getStockFinancials(request)
+      .mapError(th => new scala.RuntimeException(s"Failed to get data for $ticker", th))
+      .filter(_.fiscalPeriod == "FY")
+      .filter(_.financials.incomeStatement.isDefined) map {
+      data =>
+        AnnualFinancialData(
+          year = data.fiscalYear.toInt,
+          revenues = data.financials.incomeStatement
+            .flatMap(_.revenues).map(_.value).getOrElse(0.0),
+          basicEarningsPerShare = data.financials.incomeStatement
+            .flatMap(_.basicEarningsPerShare).map(_.value).getOrElse(0.0),
+          dilutedEarningsPerShare = data.financials.incomeStatement
+            .flatMap(_.dilutedEarningsPerShare).map(_.value).getOrElse(0.0),
+          netCashFlow = data.financials.cashFlowStatement.flatMap(_.netCashFlow).map(_.value).getOrElse(0.0),
+          netCashFlowFromOperatingActivities =
+            data.financials.cashFlowStatement.flatMap(_.netCashFlowFromOperatingActivities).map(_.value).getOrElse(0.0),
+          netCashFlowFromInvestingActivities =
+            data.financials.cashFlowStatement.flatMap(_.netCashFlowFromInvestingActivities).map(_.value).getOrElse(0.0),
+          netCashFlowFromFinancingActivities =
+            data.financials.cashFlowStatement.flatMap(_.netCashFlowFromFinancingActivities).map(_.value).getOrElse(0.0)
+        )
+    }
+  }
+
+  def getFinancialsQuarterly(ticker: String): ZStream[Any, Throwable, QuarterlyFinancialData] = {
     println(s"Get financials for $ticker")
     val referenceClient = new ReferenceClient(PolygonSettings())
     val request = StockFinancialsRequest(ticker, limit = 30)

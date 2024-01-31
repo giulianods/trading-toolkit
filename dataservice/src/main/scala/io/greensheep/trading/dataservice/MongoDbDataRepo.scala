@@ -1,13 +1,14 @@
 package io.greensheep.trading.dataservice
 
+import com.mongodb.BasicDBObject
 import com.mongodb.client.MongoClients
-import com.mongodb.client.model.{CreateCollectionOptions, Filters, InsertOneOptions, TimeSeriesGranularity, TimeSeriesOptions, UpdateOptions}
+import com.mongodb.client.model.{CreateCollectionOptions, Filters, InsertOneOptions, TimeSeriesGranularity, TimeSeriesOptions, UpdateOneModel, UpdateOptions}
 import com.mongodb.client.result.{InsertManyResult, InsertOneResult, UpdateResult}
 import io.greensheep.providers.polygon.datatypes.Aggregate
 import io.greensheep.providers.polygon.{PolygonSettings, ReferenceClient}
 import io.greensheep.providers.polygon.requests.TickersRequest
 import io.greensheep.trading.core.services.{DataRepo, DataSource}
-import io.greensheep.trading.core.types.{DailyAggregate, QuarterlyFinancialData, Quote, Stock, Watchlist}
+import io.greensheep.trading.core.types.{AnnualFinancialData, DailyAggregate, QuarterlyFinancialData, Quote, Stock, Watchlist}
 import org.bson.Document
 import zio.http.Client
 import zio.stream.ZStream
@@ -189,6 +190,34 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
       )
     }
     qdata.toSeq.sortBy(_.uuid)
+  }
+
+  def saveFinancialsAnnually(ticker: String, data: Chunk[AnnualFinancialData]) = {
+    val collection = getCollection("annual-financials", "polygon").get
+
+    def toDocument(agg: AnnualFinancialData) = {
+      val dataMap = agg.toJsonAST match
+        case Left(value) =>
+          println(value)
+          Map.empty[String, Object]
+        case Right(value) =>
+          value.toMap
+
+      new Document(
+        (dataMap + ("_id" -> (ticker + "-" + agg.year.toString))).asJava)
+    }
+
+    if (data.nonEmpty) {
+      val opt = new UpdateOptions().upsert(true)
+      val actions = data map { d =>
+        val doc = toDocument(d)
+        val filter = new BasicDBObject()
+        filter.append("_id", doc.get("_id"))
+        val action = new BasicDBObject("$set", doc)
+        new UpdateOneModel[Document](filter, action, opt)
+      }
+      collection.bulkWrite(actions.asJava)
+    }
   }
 
   def saveFinancials(ticker: String, data: Chunk[QuarterlyFinancialData]) = {
