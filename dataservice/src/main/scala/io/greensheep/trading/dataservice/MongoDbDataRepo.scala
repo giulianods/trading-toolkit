@@ -192,6 +192,26 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     qdata.toSeq.sortBy(_.uuid)
   }
 
+
+  def getFinancialsYearly(ticker: String): Seq[AnnualFinancialData] = {
+    val collection = getCollection("annual-financials", "polygon").get
+    val filter = Filters.regex("_id", s"$ticker-.*")
+    val entries = collection.find(filter)
+    val qdata = entries.asScala map { doc =>
+      AnnualFinancialData(
+        year = doc.get("year").asInstanceOf[Decimal128].intValue(),
+        revenues = doc.get("revenues").asInstanceOf[Decimal128].doubleValue(),
+        basicEarningsPerShare = doc.get("basicEarningsPerShare").asInstanceOf[Decimal128].doubleValue(),
+        dilutedEarningsPerShare = doc.get("dilutedEarningsPerShare").asInstanceOf[Decimal128].doubleValue(),
+        netCashFlow = doc.get("netCashFlow").asInstanceOf[Decimal128].doubleValue(),
+        netCashFlowFromOperatingActivities = doc.get("netCashFlowFromOperatingActivities").asInstanceOf[Decimal128].doubleValue(),
+        netCashFlowFromInvestingActivities = doc.get("netCashFlowFromInvestingActivities").asInstanceOf[Decimal128].doubleValue(),
+        netCashFlowFromFinancingActivities = doc.get("netCashFlowFromFinancingActivities").asInstanceOf[Decimal128].doubleValue()
+      )
+    }
+    qdata.toSeq.sortBy(_.year)
+  }
+
   def saveFinancialsAnnually(ticker: String, data: Chunk[AnnualFinancialData]) = {
     val collection = getCollection("annual-financials", "polygon").get
 

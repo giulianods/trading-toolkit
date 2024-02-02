@@ -28,7 +28,17 @@ object ApiEndpoints {
       wl =>
         Response.json(wl.toJson)
     )
+  }
 
+  def financialDataYearly(tickers: Seq[String]): ZIO[Any, Response, Response] = {
+    ZIO.attempt(tickers.map(t => t -> mongoRepo.getFinancialsYearly(t)).toMap).mapBoth(
+      th => {
+        th.printStackTrace()
+        Response.internalServerError(th.getMessage)
+      },
+      wl =>
+        Response.json(wl.toJson)
+    )
   }
 
 }

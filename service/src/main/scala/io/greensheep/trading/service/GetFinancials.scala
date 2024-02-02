@@ -50,6 +50,6 @@ object GetFinancials extends ZIOAppDefault {
   }
 
   override def run: ZIO[Environment with ZIOAppArgs with Scope, Any, Any] = {
-    getFinancialsAnnuallyApp.provide(MongoDbDataRepo.layer ++ PolygonDataSource.layer ++ Client.default)
+    getFinancialsAnnuallyApp.provide(MongoDbDataRepo.layer ++ PolygonDataSource.layer)
   }
 }
