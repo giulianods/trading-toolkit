@@ -115,6 +115,7 @@ class PolygonDataSource(apiKey: String) extends DataSource{
       .filter(_.financials.incomeStatement.isDefined) map {
       data =>
         AnnualFinancialData(
+          ticker = ticker,
           year = data.fiscalYear.toInt,
           revenues = data.financials.incomeStatement
             .flatMap(_.revenues).map(_.value).getOrElse(0.0),

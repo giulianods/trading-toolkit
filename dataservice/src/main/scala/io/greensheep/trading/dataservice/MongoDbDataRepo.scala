@@ -199,6 +199,7 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     val entries = collection.find(filter)
     val qdata = entries.asScala map { doc =>
       AnnualFinancialData(
+        ticker = ticker,
         year = doc.get("year").asInstanceOf[Decimal128].intValue(),
         revenues = doc.get("revenues").asInstanceOf[Decimal128].doubleValue(),
         basicEarningsPerShare = doc.get("basicEarningsPerShare").asInstanceOf[Decimal128].doubleValue(),
