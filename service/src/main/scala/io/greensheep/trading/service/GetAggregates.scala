@@ -17,9 +17,12 @@ object GetAggregates extends ZIOAppDefault {
       tickerStream = repo.getTickers
       xx <- tickerStream.schedule(Schedule.spaced(16.seconds)) foreach {
         ticker =>
+          val time = java.lang.System.currentTimeMillis()
           for {
+            _ <- ZIO.log(s"Getting aggregates for ${ticker.symbol}")
             aggs <- source.getDailyAggregates(ticker.symbol)
             _ = repo.saveAggregates(ticker.symbol, aggs)
+            _ = println(s"Saved in ${java.lang.System.currentTimeMillis() - time}")
           } yield ()
       }
       _ = println(s"Finished in ${(java.lang.System.currentTimeMillis() -  time) / 1000} seconds")

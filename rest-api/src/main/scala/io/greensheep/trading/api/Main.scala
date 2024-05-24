@@ -24,6 +24,12 @@ object Main extends ZIOAppDefault {
       Method.GET / "symbols2" -> Handler.fromZIO(resp),
       Method.GET / "watchlist" -> Handler.fromZIO(ApiEndpoints.watchlistApi()),
 
+      Method.POST / "financials" / "annually" -> handler { (req: Request) =>
+        for {
+          tickers <- req.body.asString.mapBoth(throwableToResponse, s => s.split(",").toSeq)
+          results <- ApiEndpoints.financialDataYearly (tickers)
+        } yield results
+      },
       Method.POST / "financials" / "quarterly" -> handler { (req: Request) =>
         for {
           tickers <- req.body.asString.mapBoth(throwableToResponse, s => s.split(",").toSeq)
@@ -31,12 +37,7 @@ object Main extends ZIOAppDefault {
         } yield results
       },
 
-      Method.POST / "financials" / "yearly" -> handler { (req: Request) =>
-        for {
-          tickers <- req.body.asString.mapBoth(throwableToResponse, s => s.split(",").toSeq)
-          results <- ApiEndpoints.financialDataYearly (tickers)
-        } yield results
-      }
+
 
     ).toHttpApp
   }

@@ -79,7 +79,7 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     collection
   }
 
-  def saveAggregates(symbol: String, aggregates: Seq[Aggregate]): InsertManyResult = {
+  def saveAggregates(symbol: String, aggregates: Seq[Aggregate]): Unit = {
     val collection = getAggregatesCollection(symbol)
     def aggregateToDocument(agg: Aggregate) = {
       new Document(
@@ -97,7 +97,17 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
           "vw" -> agg.wwap
       ).asJava)
     }
-    collection.insertMany(aggregates.map(aggregateToDocument).asJava)
+    if (aggregates.nonEmpty) {
+      val opt = new UpdateOptions().upsert(true)
+      val actions = aggregates map { d =>
+        val doc = aggregateToDocument(d)
+        val filter = new BasicDBObject()
+        filter.append("_id", doc.get("_id"))
+        val action = new BasicDBObject("$set", doc)
+        new UpdateOneModel[Document](filter, action, opt)
+      }
+      collection.bulkWrite(actions.asJava)
+    }
   }
 
   def convertUnixTimestampToLocalDate(unixTimestamp: Long): LocalDate = {

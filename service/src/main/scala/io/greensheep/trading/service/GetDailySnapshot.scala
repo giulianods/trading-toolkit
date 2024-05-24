@@ -16,7 +16,7 @@ object GetDailySnapshot extends ZIOAppDefault {
       ZStream.fromJavaStream(startDate.datesUntil(endDate))
   }
 
-  val datesToRetrieve = getDatesBetween(LocalDate.of(2024,1, 28), LocalDate.now().minusDays(1))
+  val datesToRetrieve = getDatesBetween(LocalDate.of(2024,3, 29), LocalDate.now())
 
   def flattenChunk(chunk: Chunk[ZIO[Any, Throwable, Map[String, Aggregate]]]) = {
     //TODO
