@@ -79,24 +79,31 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     collection
   }
 
+  private def aggregateToDocument(agg: Aggregate) =
+    new Document(
+      Map(
+        "_id" -> agg.t,
+        "o" -> agg.o,
+        "h" -> agg.h,
+        "l" -> agg.l,
+        "c" -> agg.c,
+        "t" -> agg.t,
+        "v" -> agg.v,
+        "day" -> Instant.ofEpochMilli(agg.t).atZone(ZoneId.of("America/New_York"))
+          .format(DateTimeFormatter.ISO_DATE),
+        "n" -> agg.numberOfShares,
+        "vw" -> agg.wwap
+      ).asJava)
+
+  def saveAggregate(agg: Aggregate) = {
+    //println(s"Saving  $agg")
+    val collection = getAggregatesCollection(agg.T.getOrElse("?"))
+    val doc = aggregateToDocument(agg)
+    collection.insertOne(doc)
+  }
+
   def saveAggregates(symbol: String, aggregates: Seq[Aggregate]): InsertManyResult = {
     val collection = getAggregatesCollection(symbol)
-    def aggregateToDocument(agg: Aggregate) = {
-      new Document(
-        Map(
-          "_id" -> agg.t,
-          "o" -> agg.o,
-          "h" -> agg.h,
-          "l" -> agg.l,
-          "c" -> agg.c,
-          "t" -> agg.t,
-          "v" -> agg.v,
-          "day" -> Instant.ofEpochMilli(agg.t).atZone(ZoneId.of("America/New_York"))
-            .format(DateTimeFormatter.ISO_DATE),
-          "n" -> agg.numberOfShares,
-          "vw" -> agg.wwap
-      ).asJava)
-    }
     collection.insertMany(aggregates.map(aggregateToDocument).asJava)
   }
 
