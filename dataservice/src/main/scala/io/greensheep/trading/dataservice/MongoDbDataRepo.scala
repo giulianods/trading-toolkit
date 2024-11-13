@@ -1,10 +1,10 @@
 package io.greensheep.trading.dataservice
 
 import com.mongodb.BasicDBObject
-import com.mongodb.client.MongoClients
-import com.mongodb.client.model.{CreateCollectionOptions, Filters, InsertOneOptions, TimeSeriesGranularity, TimeSeriesOptions, UpdateOneModel, UpdateOptions}
+import com.mongodb.client.{MongoClients, MongoCollection, MongoDatabase}
+import com.mongodb.client.model.{CreateCollectionOptions, Filters, InsertOneOptions, TimeSeriesGranularity, TimeSeriesOptions, UpdateOneModel, UpdateOptions, Updates}
 import com.mongodb.client.result.{InsertManyResult, InsertOneResult, UpdateResult}
-import io.greensheep.providers.polygon.datatypes.Aggregate
+import io.greensheep.providers.polygon.datatypes.{Aggregate, TickerDetails}
 import io.greensheep.providers.polygon.{PolygonSettings, ReferenceClient}
 import io.greensheep.providers.polygon.requests.TickersRequest
 import io.greensheep.trading.core.services.{DataRepo, DataSource}
@@ -13,7 +13,7 @@ import org.bson.Document
 import zio.http.Client
 import zio.stream.ZStream
 import zio.{Chunk, IO, Task, ULayer, ZIO, ZLayer}
-import zio.json.EncoderOps
+import zio.json.{DeriveJsonEncoder, EncoderOps, JsonEncoder}
 import zio.json.ast.Json
 
 import java.time.format.DateTimeFormatter
@@ -28,6 +28,7 @@ import io.greensheep.trading.core.utils.JsonUtils.*
 import org.bson.types.Decimal128
 
 import java.util
+import scala.collection.immutable.ListMap
 object MongoDbDataRepo{
 
   val layer: ULayer[MongoDbDataRepo] = ZLayer.succeed(build())
@@ -40,6 +41,8 @@ object MongoDbDataRepo{
 class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
 
   private val mongoClient = MongoClients.create(url)
+  val database: MongoDatabase = mongoClient.getDatabase(databaseName)
+  val quotesCollection: MongoCollection[Document] = getCollection("daily-quotes", databaseName).get
 
   private def getCollection(name: String, dbName: String = databaseName): Try[com.mongodb.client.MongoCollection[Document]] = Try {
     val database = mongoClient.getDatabase(dbName)
@@ -89,14 +92,14 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
         "c" -> agg.c,
         "t" -> agg.t,
         "v" -> agg.v,
-        "day" -> Instant.ofEpochMilli(agg.t).atZone(ZoneId.of("America/New_York"))
+        "day" -> Instant.ofEpochMilli(agg.t)
+          .atZone(ZoneId.of("America/New_York"))
           .format(DateTimeFormatter.ISO_DATE),
         "n" -> agg.numberOfShares,
         "vw" -> agg.wwap
       ).asJava)
 
-  def saveAggregate(agg: Aggregate) = {
-    //println(s"Saving  $agg")
+  def saveAggregate(agg: Aggregate): InsertOneResult = {
     val collection = getAggregatesCollection(agg.T.getOrElse("?"))
     val doc = aggregateToDocument(agg)
     collection.insertOne(doc)
@@ -107,9 +110,56 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     collection.insertMany(aggregates.map(aggregateToDocument).asJava)
   }
 
-  def convertUnixTimestampToLocalDate(unixTimestamp: Long): LocalDate = {
+  def aggregateToMap(agg: Aggregate) = {
+    ListMap(
+    "o" -> agg.o,
+      "h" -> agg.h,
+      "l" -> agg.l,
+      "c" -> agg.c,
+      "t" -> agg.t,
+      "v" -> agg.v,
+      "day" -> Instant.ofEpochMilli(agg.t)
+        .atZone(ZoneId.of("America/New_York"))
+        .format(DateTimeFormatter.ISO_DATE),
+      "n" -> agg.numberOfShares,
+      "vw" -> agg.wwap
+    ).asJava
+  }
+
+  def updateAggregates(symbol: String, aggregates: Seq[Aggregate]) = {
+    val filter = Filters.eq("_id", symbol)
+    val updates = Updates.pushEach("quotes", aggregates.map(aggregateToMap).asJava)
+    val options = new UpdateOptions().upsert(true)
+    val result = quotesCollection.updateOne(filter, updates, options)
+    //TODO check result
+  }
+
+  private def convertUnixTimestampToLocalDate(unixTimestamp: Long): LocalDate = {
     val instant = Instant.ofEpochSecond(unixTimestamp)
     instant.atZone(ZoneId.of("America/New_York")).toLocalDate
+  }
+
+  def getAggregates2(symbol: String): ZIO[Any, Throwable, Chunk[DailyAggregate]] = {
+    val tryIterable = Try{
+      val iterable = quotesCollection.find(Filters.eq("_id", symbol)).asScala
+      iterable.headOption match {
+        case Some(doc) =>
+          val quotes = doc.get("quotes").asInstanceOf[java.lang.Iterable[Document]].asScala
+          val processed = quotes.map { doc =>
+            DailyAggregate(
+              o = doc.get("o").toString.toDouble,
+              h = doc.get("h").toString.toDouble,
+              l = doc.get("l").toString.toDouble,
+              c = doc.get("c").toString.toDouble,
+              v = Option(doc.get("v")).map(_.toString.toDouble).getOrElse(0.0),
+              t = convertUnixTimestampToLocalDate(doc.get("t").toString.toLong),
+            )
+          }.toSeq
+          Chunk.fromIterable(processed)
+        case None => Chunk.empty
+      }
+    }
+    ZIO.fromTry(tryIterable)
   }
 
   def getAggregates(symbol: String): ZStream[Any, Throwable, DailyAggregate] = {
@@ -133,17 +183,33 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
   }
 
   def saveTicker(stock: Stock): UpdateResult = {
-    println(s"Saving ${stock.symbol}")
-    val collection = getCollection("tickers").get
+    val collection = getCollection("ticker-details").get
     val docMap = stock.toJsonAST match
       case Left(value) =>
         throw new RuntimeException(value)
       case Right(value) =>
         value.toMap
 
-    val filteredMap = docMap - ("dailyAggregates") // TODO investigate
-    val doc = new Document((filteredMap + ("_id" -> stock.symbol)).asJava)
+    val doc = new Document((docMap + ("_id" -> stock.symbol)).asJava)
     val filter = Filters.eq("_id", stock.symbol)
+    val options = new UpdateOptions().upsert(true)
+
+    collection.updateOne(filter, new Document("$set", doc), options)
+  }
+
+  implicit val Encoder: JsonEncoder[TickerDetails] = DeriveJsonEncoder.gen[TickerDetails]
+
+  def saveTicker(stock: TickerDetails): UpdateResult = {
+    println(s"Saving ticker ${stock.ticker}")
+    val collection = getCollection("ticker-details").get
+    val docMap = stock.toJsonAST match
+      case Left(value) =>
+        throw new RuntimeException(value)
+      case Right(value) =>
+        value.toMap
+
+    val doc = new Document((docMap + ("_id" -> stock.ticker)).asJava)
+    val filter = Filters.eq("_id", stock.ticker)
     val options = new UpdateOptions().upsert(true)
 
     collection.updateOne(filter, new Document("$set", doc), options)

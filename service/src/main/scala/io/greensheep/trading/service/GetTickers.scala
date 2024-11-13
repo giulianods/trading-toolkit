@@ -6,6 +6,7 @@ import zio.json.*
 import zio.*
 
 import java.time.LocalDateTime
+import scala.util.Try
 
 object GetTickers extends ZIOAppDefault{
 
@@ -15,12 +16,14 @@ object GetTickers extends ZIOAppDefault{
       source <- ZIO.service[PolygonDataSource]
       repo <- ZIO.service[MongoDbDataRepo]
       tickerStream = source.getTickers
-      _ <- tickerStream.schedule(Schedule.spaced(16.seconds)) foreach {
-        ticker => for{
-          s <- source.getStock(ticker.symbol)
-          _ = println(s"Got data for ${ticker.symbol} at ${LocalDateTime.now()}")
-          r = repo.saveTicker(s)
-        } yield()
+      _ <- tickerStream foreach {
+        ticker =>
+          //val s = Stock(ticker.symbol, ticker.name, ticker.lastTrade, ticker.lastTradeTime, LocalDateTime.now()
+          ZIO.fromTry(Try {
+            println(ticker)
+            repo.saveTicker(ticker)
+          })
+
       }
       _ = println(s"Finished in ${(java.lang.System.currentTimeMillis() - time) / 1000} seconds")
     } yield ()
@@ -40,6 +43,5 @@ object GetTickers extends ZIOAppDefault{
 
   override def run: ZIO[Environment with ZIOAppArgs with Scope, Any, Any] = {
     getTickersApp.provide(MongoDbDataRepo.layer ++ PolygonDataSource.layer)
-
   }
 }

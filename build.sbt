@@ -41,11 +41,17 @@ lazy val core = (project in file("core"))
 
 lazy val dataservice = (project in file("dataservice")).dependsOn(core)
   .settings(
+
     libraryDependencies := Seq("dev.zio" %% "zio-json" % "0.4.2") ++ zioLibraries ++ dataSourceLibraries ++ logbackLib,
     testFrameworks := Seq(zioTestFramework)
   )
 
-lazy val restApi = (project in file("rest-api")).dependsOn(core).dependsOn(dataservice)
+lazy val restApi = (project in file("rest-api"))
+  .dependsOn(core)
+  .dependsOn(dataservice)
+  .settings(
+    name := "rest-api",
+  )
 
 
 lazy val service = (project in file("service")).dependsOn(core, dataservice)

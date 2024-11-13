@@ -25,7 +25,7 @@ object GetDailySnapshot extends ZIOAppDefault {
 
   private def datesBetween(startDate: LocalDate, endDate: LocalDate) = startDate.datesUntil(endDate).iterator().asScala.toSeq
 
-  val datesToRetrieve = datesBetween(LocalDate.of(2023,1, 3), LocalDate.now().minusDays(1))
+  val datesToRetrieve = datesBetween(LocalDate.of(2023,1, 25), LocalDate.now().minusDays(1))
 
   def flattenChunk(chunk: Chunk[ZIO[Any, Throwable, Map[String, Aggregate]]]) = {
     //TODO
@@ -39,13 +39,18 @@ object GetDailySnapshot extends ZIOAppDefault {
       repo <- ZIO.service[MongoDbDataRepo]
       api <- PolygonAsyncApi.build()
       responseAggregates = datesToRetrieve
-        .map(c => api.getGroupedDaily(c))
-      all <- ZIO.collectAll(responseAggregates)
-      result = all.map(_.map(allAggs => {
-        val start = java.lang.System.currentTimeMillis()
-        allAggs.map(repo.saveAggregate)
-        println(s"Saved in ${(java.lang.System.currentTimeMillis() - start)} millis")
-      }).recover(th => th.printStackTrace()))
+        .map(c => api.getGroupedDaily(c).map(_.map(s => {println(s"Got results for $c"); s}))).grouped(50).toSeq
+      all <- ZIO.collectAll(responseAggregates.map(ZIO.collectAll(_)))
+
+      result = all.map(chunk => {
+        val chunkFuture = Future.sequence(chunk)
+        chunkFuture.map(allAggs => {
+          val valueMap = allAggs.flatten.groupBy(_.T.getOrElse("?")).view.mapValues(a => a.sorted(Ordering.by(_.t))).toMap
+          val start = java.lang.System.currentTimeMillis()
+          valueMap.foreach(kv => repo.updateAggregates(kv._1, kv._2))
+          println(s"Saved to MongoDB in ${(java.lang.System.currentTimeMillis() - start)} millis")
+        }).recover(th => th.printStackTrace())
+      })
       allF = Future.sequence(result)
       _ <- ZIO.fromFuture(ec => allF)
       _ = println(s"Finished in ${(java.lang.System.currentTimeMillis() - time) / 1000} seconds")

@@ -18,7 +18,7 @@ object Screener extends ZIOAppDefault  {
     for {
       repo <- ZIO.service[MongoDbDataRepo]
       tickers = repo.getTickers
-      allAggs = tickers.map(e => repo.getAggregates(e.symbol).runCollect.map(r => e.copy(dailyAggregates = r.sortBy(_.t))))
+      allAggs = tickers.map(e => repo.getAggregates2(e.symbol).map(r => e.copy(dailyAggregates = r.sortBy(_.t))))
       results <- allAggs.runCollect
       stocks <- ZIO.collectAll(results)
       filtered = stocks.filter(!_.dailyAggregates.isEmpty)
