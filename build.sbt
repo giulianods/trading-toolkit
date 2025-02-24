@@ -53,10 +53,11 @@ lazy val restApi = (project in file("rest-api"))
     name := "rest-api",
   )
 
+val cronScheduling = "com.github.tharwaninitin" %% "cron4zio" % "1.0.0"
 
 lazy val service = (project in file("service")).dependsOn(core, dataservice)
   .settings(
-    libraryDependencies := zioLibraries ++ logbackLib,
+    libraryDependencies := zioLibraries ++ logbackLib :+ cronScheduling,
     testFrameworks := Seq(zioTestFramework)
   )
 

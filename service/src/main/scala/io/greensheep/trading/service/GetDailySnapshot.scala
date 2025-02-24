@@ -1,5 +1,6 @@
 package io.greensheep.trading.service
 
+
 import io.greensheep.providers.polygon.PolygonAsyncApi
 import io.greensheep.providers.polygon.datatypes.Aggregate
 import io.greensheep.trading.dataservice.{MongoDbDataRepo, PolygonDataSource}
@@ -25,7 +26,7 @@ object GetDailySnapshot extends ZIOAppDefault {
 
   private def datesBetween(startDate: LocalDate, endDate: LocalDate) = startDate.datesUntil(endDate).iterator().asScala.toSeq
 
-  val datesToRetrieve = datesBetween(LocalDate.of(2023,1, 25), LocalDate.now().minusDays(1))
+  val datesToRetrieve = datesBetween(LocalDate.of(2025,1, 31), LocalDate.now().minusDays(1))
 
   def flattenChunk(chunk: Chunk[ZIO[Any, Throwable, Map[String, Aggregate]]]) = {
     //TODO

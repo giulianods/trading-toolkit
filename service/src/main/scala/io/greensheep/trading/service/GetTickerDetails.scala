@@ -16,11 +16,20 @@ object GetTickerDetails extends ZIOAppDefault{
     for {
       repo <- ZIO.service[MongoDbDataRepo]
       api <- PolygonAsyncApi.build()
-      stock <- api.getTickers.foreach( ticker =>
-        for{
+      tickerStream = api.getTickers.mapError(e => {
+        e.printStackTrace()
+        e
+      })
+      existing <- repo.getTickerDetails
+      existingSymbols = existing.map(_.symbol).toSet
+      stock <- tickerStream.filterNot(t => existingSymbols.contains(t.ticker)).foreach( ticker => {
+        println(s"Getting details for ${ticker.ticker}")
+        for {
           details <- api.getTickerDetails(ticker.ticker)
-          _ = details.map(repo.saveTicker)(scala.concurrent.ExecutionContext.global)
-        } yield()
+          _ = repo.saveTicker(details)
+        } yield ()
+      }
+
       )
 
 

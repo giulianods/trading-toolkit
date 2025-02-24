@@ -126,12 +126,23 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     ).asJava
   }
 
-  def updateAggregates(symbol: String, aggregates: Seq[Aggregate]) = {
+
+  def updateAggregates(symbol: String, aggregates: Seq[Aggregate]): Any = {
     val filter = Filters.eq("_id", symbol)
-    val updates = Updates.pushEach("quotes", aggregates.map(aggregateToMap).asJava)
-    val options = new UpdateOptions().upsert(true)
-    val result = quotesCollection.updateOne(filter, updates, options)
-    //TODO check result
+    Option(quotesCollection.find(filter).first()) match
+      case Some(document) =>
+        val quotes = document.getList("quotes", classOf[Document], List.empty[Document].asJava).asScala
+        val existing = quotes.map(doc => doc.get("t").toString.toLong).toSet
+        val newQuotes = aggregates.filter(agg => !existing.contains(agg.t))
+        if (newQuotes.nonEmpty) {
+          val updates = Updates.pushEach("quotes", newQuotes.map(aggregateToMap).asJava)
+          val options = new UpdateOptions().upsert(true)
+          quotesCollection.updateOne(filter, updates, options)
+        }
+      case None =>
+        val updates = Updates.pushEach("quotes", aggregates.map(aggregateToMap).asJava)
+        val options = new UpdateOptions().upsert(true)
+        quotesCollection.updateOne(filter, updates, options)
   }
 
   private def convertUnixTimestampToLocalDate(unixTimestamp: Long): LocalDate = {
@@ -182,13 +193,34 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     ZStream.fromZIO(ZIO.fromTry(tryIterable)).flatMap(ZStream.fromIterable)
   }
 
-  def saveTicker(stock: Stock): UpdateResult = {
+  def getTickerDetails: ZIO[Any, Throwable, Seq[Stock]] = {
     val collection = getCollection("ticker-details").get
-    val docMap = stock.toJsonAST match
-      case Left(value) =>
-        throw new RuntimeException(value)
-      case Right(value) =>
-        value.toMap
+    val stockIterator = collection.find().asScala.map { doc =>
+      Stock(
+        symbol = doc.get("_id").asInstanceOf[String],
+        companyName = doc.get("name").asInstanceOf[String],
+        ipoDate = LocalDate.parse(Option(doc.get("list_date").asInstanceOf[String]).getOrElse("1970-01-01")),
+        primaryExchange = doc.get("primary_exchange").asInstanceOf[String],
+        description = doc.get("description").asInstanceOf[String],
+        totalEmployees = Option(doc.get("total_employees").asInstanceOf[Decimal128]).map(_.intValue()).getOrElse(0),
+        sicCode = doc.get("sic_code").asInstanceOf[String],
+        sicDescription = doc.get("sic_description").asInstanceOf[String],
+        marketCap = Option(doc.get("market_cap").asInstanceOf[Decimal128]).map(_.longValue()).getOrElse(0L),
+        weightedSharesOutstanding = Option(doc.get("weighted_shares_outstanding").asInstanceOf[Decimal128]).map(_.longValue()).getOrElse(0L),
+      )
+    }
+    ZIO.succeed(stockIterator.toSeq)
+  }
+
+  def saveTicker(stock: Stock): UpdateResult = {
+    val collection = getCollection("tickers").get
+
+
+    val docMap = Map(
+      "symbol" -> stock.symbol,
+      "companyName" -> stock.companyName,
+      "ipoDate" -> stock.ipoDate.toString
+    )
 
     val doc = new Document((docMap + ("_id" -> stock.symbol)).asJava)
     val filter = Filters.eq("_id", stock.symbol)
@@ -340,8 +372,8 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
   def getTickers: ZStream[Any, Throwable, Stock] = {
     def documentToStock(d: Document): Stock = {
       Stock(
-        d.get("symbol", classOf[String]),
-        d.get("name", classOf[String]),
+        d.get("_id", classOf[String]),
+        d.get("companyName", classOf[String]),
         LocalDate.now(),
         ""
       )
