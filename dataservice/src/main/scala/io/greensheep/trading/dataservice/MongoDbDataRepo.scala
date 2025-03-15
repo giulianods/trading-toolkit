@@ -2,8 +2,9 @@ package io.greensheep.trading.dataservice
 
 import com.mongodb.BasicDBObject
 import com.mongodb.client.{MongoClients, MongoCollection, MongoDatabase}
-import com.mongodb.client.model.{CreateCollectionOptions, Filters, InsertOneOptions, TimeSeriesGranularity, TimeSeriesOptions, UpdateOneModel, UpdateOptions, Updates}
+import com.mongodb.client.model.{CreateCollectionOptions, Filters, FindOneAndUpdateOptions, InsertOneOptions, TimeSeriesGranularity, TimeSeriesOptions, UpdateOneModel, UpdateOptions, Updates}
 import com.mongodb.client.result.{InsertManyResult, InsertOneResult, UpdateResult}
+import io.github.zeal18.zio.mongodb.driver.MongoClient
 import io.greensheep.providers.polygon.datatypes.{Aggregate, TickerDetails}
 import io.greensheep.providers.polygon.{PolygonSettings, ReferenceClient}
 import io.greensheep.providers.polygon.requests.TickersRequest
@@ -36,6 +37,13 @@ object MongoDbDataRepo{
   def build(): MongoDbDataRepo = {
     new MongoDbDataRepo("mongodb://localhost:27017", "polygon")
   }
+
+
+  val mongoClient = MongoClient.live("mongodb://localhost:27017")
+
+  val database = mongoClient >>> ZLayer.fromZIO(ZIO.serviceWith[MongoClient](_.getDatabase("database-name")))
+
+
 }
 
 class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
@@ -43,6 +51,42 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
   private val mongoClient = MongoClients.create(url)
   val database: MongoDatabase = mongoClient.getDatabase(databaseName)
   val quotesCollection: MongoCollection[Document] = getCollection("daily-quotes", databaseName).get
+
+
+
+
+
+  def saveStockUniverse(universe: StockUniverse): Task[StockUniverse] = ZIO.fromTry {
+    Try {
+      val collection = getCollection("stock-universe").get
+      val doc = universe.toJsonAST.getOrElse(throw new RuntimeException("Failed to convert to JSON"))
+      collection.findOneAndUpdate(
+        Filters.eq("_id", universe.id),
+        new Document("$set", doc.asObject.get.toMap),
+        new FindOneAndUpdateOptions().upsert(true)
+          .comment("Updated by greensheep-trading service on " + Instant.now())
+      )
+      universe
+    }
+  }
+
+  def getStockUniverse(id: String): Task[StockUniverse] = ZIO.fromTry {
+    Try {
+      val collection = getCollection("stock-universe").get
+      val doc = collection.find(Filters.eq("_id", "stock-universe")).first()
+      StockUniverse(
+        doc.getString("_id"),
+        doc.getString("name"),
+        LocalDate.parse(doc.getString("lastUpdateQuotes")),
+        Seq.empty
+      )
+    }
+  }
+
+
+
+
+
 
   private def getCollection(name: String, dbName: String = databaseName): Try[com.mongodb.client.MongoCollection[Document]] = Try {
     val database = mongoClient.getDatabase(dbName)
@@ -107,7 +151,10 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
 
   def saveAggregates(symbol: String, aggregates: Seq[Aggregate]): InsertManyResult = {
     val collection = getAggregatesCollection(symbol)
+    val filter = Filters.eq("_id", symbol)
+    Option(quotesCollection.find(filter).first())
     collection.insertMany(aggregates.map(aggregateToDocument).asJava)
+
   }
 
   def aggregateToMap(agg: Aggregate) = {
@@ -127,18 +174,29 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
   }
 
 
-  def updateAggregates(symbol: String, aggregates: Seq[Aggregate]): Any = {
+  def updateAggregates(symbol: String, aggregates: Seq[Aggregate], overwrite: Boolean = false): Any = {
     val filter = Filters.eq("_id", symbol)
     Option(quotesCollection.find(filter).first()) match
       case Some(document) =>
-        val quotes = document.getList("quotes", classOf[Document], List.empty[Document].asJava).asScala
-        val existing = quotes.map(doc => doc.get("t").toString.toLong).toSet
-        val newQuotes = aggregates.filter(agg => !existing.contains(agg.t))
-        if (newQuotes.nonEmpty) {
-          val updates = Updates.pushEach("quotes", newQuotes.map(aggregateToMap).asJava)
+        if(overwrite) {
+          val updates = Updates.set("quotes", aggregates.map(aggregateToMap).asJava)
           val options = new UpdateOptions().upsert(true)
           quotesCollection.updateOne(filter, updates, options)
         }
+        else{
+          val quotes = document.getList("quotes", classOf[Document], List.empty[Document].asJava).asScala
+          val existing = quotes.map(doc => doc.get("t").toString.toLong).toSet
+          val newQuotes = aggregates.filter(agg => !existing.contains(agg.t))
+          if (newQuotes.nonEmpty) {
+            val updates = Updates.pushEach("quotes", newQuotes.map(aggregateToMap).asJava)
+            val options = new UpdateOptions().upsert(true)
+            quotesCollection.updateOne(filter, updates, options)
+          }
+          else {
+            //don't add the same quotes
+          }
+        }
+
       case None =>
         val updates = Updates.pushEach("quotes", aggregates.map(aggregateToMap).asJava)
         val options = new UpdateOptions().upsert(true)
@@ -148,6 +206,24 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
   private def convertUnixTimestampToLocalDate(unixTimestamp: Long): LocalDate = {
     val instant = Instant.ofEpochSecond(unixTimestamp)
     instant.atZone(ZoneId.of("America/New_York")).toLocalDate
+  }
+
+
+  override def getQuotes(symbol: String): Task[Seq[Quote]] = {
+    for {
+      aggregates <- getAggregates2(symbol)
+      quotes = aggregates.map { agg =>
+        Quote(
+          day = agg.t,
+          o = agg.o,
+          h = agg.h,
+          l = agg.l,
+          c = agg.c,
+          v = agg.v.toInt
+        )
+      }
+
+    } yield quotes
   }
 
   def getAggregates2(symbol: String): ZIO[Any, Throwable, Chunk[DailyAggregate]] = {
@@ -396,5 +472,5 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
 
   override def getStocks(): Task[Map[String, Stock]] = ???
 
-  override def getQuotes(symbol: String): Task[Seq[Quote]] = ???
+
 }
