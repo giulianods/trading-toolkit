@@ -1,7 +1,8 @@
 package io.greensheep.trading.service.services
 
+import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.providers.polygon.PolygonAsyncApi
-import io.greensheep.trading.dataservice.{MongoDbDataRepo, StockUniverse}
+import io.greensheep.trading.dataservice.{MongoDataRepo, MongoDbDataRepo, PolygonBridge, StockUniverse}
 import zio.*
 import zio.stream.ZStream
 
@@ -15,53 +16,49 @@ object QuotesServices {
 
   implicit val WriteExecutionContext: ExecutionContextExecutor = ExecutionContext.global
 
+  val SaveBatchSize = 10
+
   private def datesBetween(startDate: LocalDate, endDate: LocalDate) = startDate.datesUntil(endDate).iterator().asScala.toSeq
 
-  def getDailySnapshotService(start: LocalDate, end: LocalDate): ZIO[MongoDbDataRepo with PolygonAsyncApi, Throwable, Unit] = {
-    val time = java.lang.System.currentTimeMillis()
+  val DailyQuotesRetrieval: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] = {
     for {
-      repo <- ZIO.service[MongoDbDataRepo]
-      api <- ZIO.service[PolygonAsyncApi]
+      _ <- ZIO.logInfo("Stock universe found retrieving quotes from the last update")
+      stockUniverse <- MongoDataRepo.getStockUniverse
+      start = stockUniverse.lastUpdateQuotes
+      end = LocalDate.now()
+      _ <- if (start.isBefore(end)) QuotesServices.getDailySnapshotService(start, end) else ZIO.unit
+      _ <- MongoDataRepo.saveStockUniverse(stockUniverse.copy(lastUpdateQuotes = end))
+    } yield ()
+  }
+
+  def getDailySnapshotService(start: LocalDate, end: LocalDate): ZIO[MongoDatabase with PolygonAsyncApi, Throwable, Unit] = ZIO.logSpan("get-daily-quotes") {
+    for {
+      _ <- ZIO.logInfo(s"Getting daily snapshots from $start to $end and saving them every $SaveBatchSize days")
+      remoteApi <- ZIO.service[PolygonAsyncApi]
       datesToRetrieve = datesBetween(start, end)
       _ <- ZIO.cond(datesToRetrieve.nonEmpty, (), new IllegalArgumentException("No dates to retrieve"))
       _ <- ZIO.logInfo(s"Retrieving daily snapshots from ${datesToRetrieve.head} to ${datesToRetrieve.last}")
       dateStream = ZStream.fromIterable(datesToRetrieve)
-      aggregateMaps = dateStream.mapZIO(api.getGroupedDaily).map(_.map(x => x.T.getOrElse("?") -> x).toMap)
-      r = aggregateMaps.grouped(10).map(_.flatMap(_.toSeq).groupBy(_._1).transform((_,v) => v.map(_._2))) mapZIO {
+      aggregateMaps = dateStream mapZIO { ld =>
+        for {
+          r <- remoteApi.getGroupedDaily(ld)
+          _ <- ZIO.logInfo(s"Retrieved ${r.size} records for date $ld")
+        } yield r
+      } map(_.map(x => x.T.getOrElse("?") -> x).toMap)
+
+      result = aggregateMaps.grouped(SaveBatchSize).map(_.flatMap(_.toSeq).groupBy(_._1).transform((_,v) => v.map(_._2))) mapZIO {
         date =>
           val results = date.map {
             case (ticker, aggregates) =>
-              for{
-                _ <- ZIO.fromTry(Try{
-                  repo.updateAggregates(ticker, aggregates, overwrite = false)
-                  ticker
-                })
-              } yield ()
-
+              MongoDataRepo.updateDailyQuotes(ticker, aggregates.map(PolygonBridge.aggregateToQuote))
           }
-          ZIO.collectAll(results) flatMap  {
-            it =>
-              ZIO.logInfo(s"Saved to MongoDB ${it.size} records")
-          }
+          ZIO.collectAll(results).flatMap(i => ZIO.logInfo(s"Saved to MongoDB ${i.size} records"))
       }
-      _ <- r.runCollect
-      _ <- repo.saveStockUniverse(StockUniverse("us-stocks", "US common stocks", end, Seq.empty))
-      _ <- ZIO.logInfo(s"Finished in ${(java.lang.System.currentTimeMillis() - time) / 1000} seconds")
+      _ <- result.runCollect
     } yield ()
   }
 
 
-
-  def updateMissingQuotes(): ZIO[MongoDbDataRepo with PolygonAsyncApi, Throwable, Unit] = {
-    for {
-      repo <- ZIO.service[MongoDbDataRepo]
-      univ <- repo.getStockUniverse("us-stocks")
-      startDate = univ.lastUpdateQuotes.minusDays(1)
-      _ <- ZIO.logInfo(s"Last update was on ${univ.lastUpdateQuotes}")
-      endDate = LocalDate.now().minusDays(1)
-      _ <- getDailySnapshotService(startDate, endDate)
-    } yield ()
-  }
 
 
 }

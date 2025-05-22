@@ -4,7 +4,7 @@ import scala.collection.Seq
 
 ThisBuild / version := "0.1.0-SNAPSHOT"
 
-ThisBuild / scalaVersion := "3.3.1"
+ThisBuild / scalaVersion := "3.7.0"
 
 lazy val root = (project in file("."))
   .settings(
@@ -24,6 +24,8 @@ val zioLibraries = Seq(
   "dev.zio" %% "zio-logging-slf4j" % zioLoggingVersion,
   "dev.zio" %% "zio-test-magnolia" % zioVersion % Test
 )
+
+
 
 val mongoZioLibraries = Seq(
   "io.github.zeal18" %% "zio-mongodb-bson"    % "0.11.1",
@@ -63,7 +65,7 @@ lazy val restApi = (project in file("rest-api"))
 
 val cronScheduling = "com.github.tharwaninitin" %% "cron4zio" % "1.0.0"
 
-lazy val service = (project in file("service")).dependsOn(core, dataservice)
+lazy val service = (project in file("service")).dependsOn(core, dataservice, restApi)
   .settings(
     libraryDependencies := zioLibraries ++ logbackLib :+ cronScheduling,
     testFrameworks := Seq(zioTestFramework)

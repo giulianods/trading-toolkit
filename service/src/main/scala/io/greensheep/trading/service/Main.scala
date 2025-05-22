@@ -1,12 +1,15 @@
 package io.greensheep.trading.service
 
+import io.github.zeal18.zio.mongodb.driver.MongoClient
 import io.greensheep.providers.polygon.PolygonAsyncApi
+import io.greensheep.trading.api.ApiEndpoints
 import io.greensheep.trading.core.services.{DataRepo, DataSource}
 import io.greensheep.trading.core.types.Quote
-import io.greensheep.trading.dataservice.{LocalFileDataRepo, MongoDbDataRepo, PolygonDataSource}
-import io.greensheep.trading.service.services.QuotesServices
+import io.greensheep.trading.dataservice.{LocalFileDataRepo, MongoDataRepo, MongoDbDataRepo, PolygonDataSource}
+import io.greensheep.trading.service.app.CronJobs
+import io.greensheep.trading.service.services.{InitializationService, QuotesServices}
 import zio.*
-import zio.http.{Client, URL}
+import zio.http.{Client, Server, URL}
 import zio.http.Header.Authorization
 import zio.logging.LogFormat
 import zio.logging.backend.SLF4J
@@ -42,7 +45,25 @@ object Main extends ZIOAppDefault {
 
     val logging = Runtime.removeDefaultLoggers ++ logger
 
-    val program = QuotesServices.getDailySnapshotService(LocalDate.of(2025 ,1 ,1), LocalDate.now().minusDays(1)).provide(environment ++ MongoDbDataRepo.layer ++ logging)
+    val mongoLayer = MongoClient.live("mongodb://127.0.0.1:27017") >>> ZLayer.fromZIO(ZIO.serviceWith[MongoClient](_.getDatabase("polygon")))
+    // MongoDataRepo.build("mongodb://127.0.0.1:27017", "polygon")
+
+    val intitializer = InitializationService.initializeApp()
+
+    val everything = for {
+      _ <- ZIO.logInfo("Starting initialization")
+      _ <- intitializer
+      _ <- ZIO.logInfo("Initialization completed")
+      _ <- ZIO.logInfo("Starting rest api")
+      api = ApiEndpoints.buildRestApi
+      _ <- Server.install(api)
+      _ <- ZIO.logInfo(s"Rest api started on ${Server.Config.default.address}:${Server.Config.default.port}")
+      _ <- CronJobs.start
+      _ <- ZIO.logInfo("Cron jobs started")
+      _ <- ZIO.never
+    } yield ()
+
+    val program = everything.provide(environment ++ mongoLayer ++ logging ++ Server.defaultWithPort(7777))
 
     program catchAll {
       th =>

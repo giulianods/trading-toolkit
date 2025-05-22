@@ -18,4 +18,7 @@ case class DailyAggregate(
                          c: Double,
                          v: Double,
                          t: LocalDate
-                    )
+                    ) {
+
+  def toQuote: Quote = Quote(t, o, h, l, c, v.toInt)
+}

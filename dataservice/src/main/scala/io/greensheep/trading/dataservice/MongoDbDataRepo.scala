@@ -56,38 +56,6 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
 
 
 
-  def saveStockUniverse(universe: StockUniverse): Task[StockUniverse] = ZIO.fromTry {
-    Try {
-      val collection = getCollection("stock-universe").get
-      val doc = universe.toJsonAST.getOrElse(throw new RuntimeException("Failed to convert to JSON"))
-      collection.findOneAndUpdate(
-        Filters.eq("_id", universe.id),
-        new Document("$set", doc.asObject.get.toMap),
-        new FindOneAndUpdateOptions().upsert(true)
-          .comment("Updated by greensheep-trading service on " + Instant.now())
-      )
-      universe
-    }
-  }
-
-  def getStockUniverse(id: String): Task[StockUniverse] = ZIO.fromTry {
-    Try {
-      val collection = getCollection("stock-universe").get
-      val doc = collection.find(Filters.eq("_id", "stock-universe")).first()
-      StockUniverse(
-        doc.getString("_id"),
-        doc.getString("name"),
-        LocalDate.parse(doc.getString("lastUpdateQuotes")),
-        Seq.empty
-      )
-    }
-  }
-
-
-
-
-
-
   private def getCollection(name: String, dbName: String = databaseName): Try[com.mongodb.client.MongoCollection[Document]] = Try {
     val database = mongoClient.getDatabase(dbName)
     var collection = database.getCollection(name)
