@@ -20,18 +20,22 @@ object QuotesServices {
 
   private def datesBetween(startDate: LocalDate, endDate: LocalDate) = startDate.datesUntil(endDate).iterator().asScala.toSeq
 
+  val TickersUsCommonStocks: ZIO[PolygonAsyncApi, Throwable, Seq[String]] = {
+    ZIO.service[PolygonAsyncApi].flatMap(_.getTickers.runCollect.map(_.map(_.ticker)))
+  }
+
   val DailyQuotesRetrieval: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] = {
     for {
       _ <- ZIO.logInfo("Stock universe found retrieving quotes from the last update")
       stockUniverse <- MongoDataRepo.getStockUniverse
-      start = stockUniverse.lastUpdateQuotes
-      end = LocalDate.now()
+      start = stockUniverse.lastUpdateQuotes.minusDays(1)
+      end = LocalDate.now().minusDays(1)
       _ <- if (start.isBefore(end)) QuotesServices.getDailySnapshotService(start, end) else ZIO.unit
       _ <- MongoDataRepo.saveStockUniverse(stockUniverse.copy(lastUpdateQuotes = end))
     } yield ()
   }
 
-  def getDailySnapshotService(start: LocalDate, end: LocalDate): ZIO[MongoDatabase with PolygonAsyncApi, Throwable, Unit] = ZIO.logSpan("get-daily-quotes") {
+  def getDailySnapshotService(start: LocalDate, end: LocalDate): ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] = ZIO.logSpan("get-daily-quotes") {
     for {
       _ <- ZIO.logInfo(s"Getting daily snapshots from $start to $end and saving them every $SaveBatchSize days")
       remoteApi <- ZIO.service[PolygonAsyncApi]

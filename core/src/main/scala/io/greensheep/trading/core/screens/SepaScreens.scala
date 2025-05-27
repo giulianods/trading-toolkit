@@ -3,7 +3,7 @@ package io.greensheep.trading.core.screens
 import io.greensheep.trading.core.types.{Stock, StockMarket}
 
 class SepaScreens(stockMarket: StockMarket) {
-  def sepaScreens(): Seq[Stock] = {
+  def screen(): Seq[Stock] = {
     val filtered = stockMarket.stocks.values filter {
       stock =>
         stock.currentPrice > stock.ma50 &&

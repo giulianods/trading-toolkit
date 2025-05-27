@@ -1,10 +1,14 @@
 package io.greensheep.trading.dataservice
 
 import io.github.zeal18.zio.mongodb.driver.model.{ReplaceOptions, UpdateOptions}
+import io.github.zeal18.zio.mongodb.driver.sorts.Sort
 import io.github.zeal18.zio.mongodb.driver.updates.{Update, addEachToSet}
 import io.github.zeal18.zio.mongodb.driver.{MongoClient, MongoDatabase, filters, updates}
-import io.greensheep.trading.core.types.{DailyQuoteData, Quote}
+import io.greensheep.trading.core.types.{DailyQuoteData, Quote, Stock, StockDescription, Watchlist}
 import zio.*
+import zio.stream.ZStream
+import zio.interop.reactivestreams._
+
 
 object MongoDataRepo {
 
@@ -25,6 +29,12 @@ object MongoDataRepo {
 
       override def hasStockUniverse: ZIO[Any, Throwable, Boolean] =
         MongoDataRepo.hasStockUniverse.provideLayer(mongoLayer)
+
+      override def saveWatchlist(wl: Watchlist): ZIO[Any, Throwable, Unit] =
+        MongoDataRepo.saveWatchlist(wl).provideLayer(mongoLayer)
+
+      override def getWatchlistLatest(name: String): ZIO[Any, Throwable, Watchlist] =
+        MongoDataRepo.getWatchlistLatest(name).provideLayer(mongoLayer)
     }
   }
 
@@ -78,6 +88,53 @@ object MongoDataRepo {
     } yield quotes
   }
 
+  def saveWatchlist(wl: Watchlist): ZIO[MongoDatabase, Throwable, Unit] = {
+    for {
+      db <- ZIO.service[MongoDatabase]
+      coll = db.getCollection[Watchlist]("watchlist")
+      _ <- coll.replaceOne(filters.eq("_id", wl.uuid),
+        wl,
+        ReplaceOptions(upsert = true)).map(_.wasAcknowledged())
+    } yield ()
+  }
+
+  def getWatchlistLatest(name: String) : ZIO[MongoDatabase, Throwable, Watchlist] = {
+    for {
+      db <- ZIO.service[MongoDatabase]
+      coll = db.getCollection[Watchlist]("watchlist")
+      watchlistOpt <- coll.find(filters.eq("screenName", name)).sort(Sort.Desc("day")).runHead
+      watchlist <- ZIO.fromOption(watchlistOpt).orElseFail(new NoSuchElementException(s"No watchlist found for name $name"))
+    } yield watchlist
+  }
+
+  def saveStockDescription(stock: StockDescription): ZIO[MongoDatabase, Throwable, StockDescription] = {
+    for {
+      db <- ZIO.service[MongoDatabase]
+      coll = db.getCollection[StockDescription]("stocks-description")
+      _ <- coll.replaceOne(filters.eq("_id", stock.symbol),
+        stock,
+        ReplaceOptions(upsert = true)).map(_.wasAcknowledged())
+    } yield stock
+  }
+
+  def getStockDescription(symbol: String): ZIO[MongoDatabase, Throwable, StockDescription] = {
+    for {
+      db <- ZIO.service[MongoDatabase]
+      coll = db.getCollection[StockDescription]("stocks-description")
+      stockOpt <- coll.find(filters.eq("_id", symbol)).runHead
+      stock <- ZIO.fromOption(stockOpt).orElseFail(new NoSuchElementException(s"No stock found for symbol $symbol"))
+    } yield stock
+  }
+
+  def getAllStockDescriptions: ZIO[MongoDatabase, Throwable, Seq[StockDescription]] = {
+    for {
+      db <- ZIO.service[MongoDatabase]
+      coll = db.getCollection[StockDescription]("stocks-description")
+      pub = coll.find().sort(Sort.Asc("_id")).run
+      stocks <- pub.toZIOStream().runCollect.map(_.toSeq)
+    } yield stocks
+  }
+
 }
 
 trait MongoDataRepo {
@@ -91,4 +148,8 @@ trait MongoDataRepo {
   def updateDailyQuotes(ticker: String, quotes: Seq[Quote]): ZIO[Any, Throwable, Unit]
 
   def getPriceData(ticker: String): ZIO[Any, Throwable, DailyQuoteData]
+
+  def saveWatchlist(wl: Watchlist): ZIO[Any, Throwable, Unit]
+
+  def getWatchlistLatest(name: String): ZIO[Any, Throwable, Watchlist]
 }

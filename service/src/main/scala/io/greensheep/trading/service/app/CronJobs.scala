@@ -13,7 +13,8 @@ import zio.durationInt
 object CronJobs {
 
 
-  val UpdateDailyQuotes: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] = QuotesServices.DailyQuotesRetrieval
+  val UpdateDailyQuotes: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] =
+    QuotesServices.DailyQuotesRetrieval
 
   val RunScreens: ZIO[Any, Nothing, Unit] = {
     ZIO.logInfo("Running screens") *>
@@ -30,7 +31,7 @@ object CronJobs {
 
 
   val start: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] = for {
-    _ <- repeatEffectForCron(UpdateDailyQuotes, unsafeParse("0 0 0 * * ?")).fork
+    _ <- repeatEffectForCron(UpdateDailyQuotes, unsafeParse("0 0 0 * * ?")).catchAllCause(th => ZIO.logErrorCause("Failed", th)).fork
     _ <- repeatEffectForCron(CheckDatesInconsistencies, unsafeParse("0 0 1 * * ?")).fork
     _ <- repeatEffectForCron(RunScreens, unsafeParse("0 0 2 * * ?")).fork
   } yield ()

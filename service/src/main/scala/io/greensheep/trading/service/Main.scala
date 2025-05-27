@@ -29,7 +29,7 @@ object Main extends ZIOAppDefault {
   private val logger: ZLayer[Any, Nothing, Unit] = SLF4J.slf4j
 
 
-  override def run: ZIO[Environment with ZIOAppArgs with Scope, Any, Any] = {
+  override def run: ZIO[Environment & ZIOAppArgs & Scope, Any, Any] = {
 
     val apiKey = java.lang.System.getenv("POLYGON_API_KEY")
 
@@ -57,7 +57,7 @@ object Main extends ZIOAppDefault {
       _ <- ZIO.logInfo("Starting rest api")
       api = ApiEndpoints.buildRestApi
       _ <- Server.install(api)
-      _ <- ZIO.logInfo(s"Rest api started on ${Server.Config.default.address}:${Server.Config.default.port}")
+      _ <- ZIO.logInfo(s"Rest api started on ${Server.Config.default.address}")
       _ <- CronJobs.start
       _ <- ZIO.logInfo("Cron jobs started")
       _ <- ZIO.never

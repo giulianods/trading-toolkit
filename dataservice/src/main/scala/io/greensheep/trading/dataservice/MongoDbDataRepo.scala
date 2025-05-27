@@ -299,7 +299,6 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
       javaMap.put("_id", agg.uuid)
       javaMap.put("day", agg.day)
       javaMap.put("screenName", agg.screenName)
-      javaMap.put("dataSource", agg.dataSource)
       javaMap.put("tickers", agg.tickers.asJava)
 
       new Document(javaMap)
@@ -314,9 +313,8 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     val wlCollection = getCollection("watchlist", "greensheep-trading").get
     val document = wlCollection.find(com.mongodb.client.model.Filters.eq("_id", uuid)).first()
     Watchlist(
-      day = document.get("day").asInstanceOf[String],
+      day = document.get("day").asInstanceOf[LocalDate],
       screenName = document.get("screenName").asInstanceOf[String],
-      dataSource = document.get("dataSource").asInstanceOf[String],
       tickers = document.get("tickers").asInstanceOf[java.lang.Iterable[String]].asScala.toSeq
     )
   }
