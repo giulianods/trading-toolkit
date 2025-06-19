@@ -7,7 +7,7 @@ import java.time.LocalTime
 import cron4zio.*
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.providers.polygon.PolygonAsyncApi
-import io.greensheep.trading.service.services.QuotesServices
+import io.greensheep.trading.service.services.{QuotesServices, ScreenerServices}
 import zio.durationInt
 
 object CronJobs {
@@ -16,10 +16,8 @@ object CronJobs {
   val UpdateDailyQuotes: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] =
     QuotesServices.DailyQuotesRetrieval
 
-  val RunScreens: ZIO[Any, Nothing, Unit] = {
-    ZIO.logInfo("Running screens") *>
-      ZIO.sleep(5.seconds) *>
-      ZIO.logInfo("Screens completed")
+  val RunScreens: ZIO[MongoDatabase, Throwable, Unit] = {
+    ScreenerServices.ScreenerTask
   }
 
   val CheckDatesInconsistencies: ZIO[Any, Nothing, Unit] = {

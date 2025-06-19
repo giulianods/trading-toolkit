@@ -24,7 +24,7 @@ val zioLibraries = Seq(
   "dev.zio" %% "zio-logging-slf4j" % zioLoggingVersion,
   "dev.zio" %% "zio-test-magnolia" % zioVersion % Test
 )
-
+libraryDependencySchemes += "io.circe" %% "circe-yaml" % VersionScheme.Always
 
 
 val mongoZioLibraries = Seq(

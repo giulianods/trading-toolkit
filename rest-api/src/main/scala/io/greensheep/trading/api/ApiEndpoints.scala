@@ -31,6 +31,17 @@ object ApiEndpoints {
             } yield Response.json(data.toJson)
           }
         }.mapError(handleError)
+      },
+      (Method.GET / "watchlists" / string("name")) -> {
+        Handler.fromFunctionZIO[(String, Request)]{
+          case (name, _) => {
+            for {
+              _ <- ZIO.logInfo(s"Received request for watchlist: $name")
+              watchlist <- MongoDataRepo.getWatchlistLatest(name)
+              symbolsCsv  = watchlist.tickers.mkString("\n")
+            } yield Response.text(symbolsCsv)
+          }
+        }.mapError(handleError)
       }
     ).toHttpApp
   }

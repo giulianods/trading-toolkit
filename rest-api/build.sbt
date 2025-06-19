@@ -15,9 +15,14 @@ val tapirDependencies = Seq(
   "com.softwaremill.sttp.tapir" %% "tapir-json-zio" % "1.9.6",         // ZIO JSON
   "dev.zio" %% "zio-json" % "0.6.2",                                   // zio-json itself
   "com.softwaremill.sttp.tapir" %% "tapir-swagger-ui-bundle" % "1.9.6",
+  "com.softwaremill.sttp.tapir" %% "tapir-openapi-circe-yaml" % "1.0.0-M9"
 )
 
 libraryDependencies ++= tapirDependencies
+libraryDependencySchemes += "io.circe" %% "circe-yaml" % VersionScheme.Always
+dependencyOverrides ++= Seq (
+  "io.circe" %% "circe-yaml" % "0.15.1"
+)
 
 def settingsApp = Seq(
   name := "zio-http-start",
