@@ -1,10 +1,11 @@
 package io.greensheep.trading.dataservice
 
 import com.mongodb.BasicDBObject
-import com.mongodb.client.MongoClients
-import com.mongodb.client.model.{CreateCollectionOptions, Filters, InsertOneOptions, TimeSeriesGranularity, TimeSeriesOptions, UpdateOneModel, UpdateOptions}
+import com.mongodb.client.{MongoClients, MongoCollection, MongoDatabase}
+import com.mongodb.client.model.{CreateCollectionOptions, Filters, FindOneAndUpdateOptions, InsertOneOptions, TimeSeriesGranularity, TimeSeriesOptions, UpdateOneModel, UpdateOptions, Updates}
 import com.mongodb.client.result.{InsertManyResult, InsertOneResult, UpdateResult}
-import io.greensheep.providers.polygon.datatypes.Aggregate
+import io.github.zeal18.zio.mongodb.driver.MongoClient
+import io.greensheep.providers.polygon.datatypes.{Aggregate, TickerDetails}
 import io.greensheep.providers.polygon.{PolygonSettings, ReferenceClient}
 import io.greensheep.providers.polygon.requests.TickersRequest
 import io.greensheep.trading.core.services.{DataRepo, DataSource}
@@ -13,7 +14,7 @@ import org.bson.Document
 import zio.http.Client
 import zio.stream.ZStream
 import zio.{Chunk, IO, Task, ULayer, ZIO, ZLayer}
-import zio.json.EncoderOps
+import zio.json.{DeriveJsonEncoder, EncoderOps, JsonEncoder}
 import zio.json.ast.Json
 
 import java.time.format.DateTimeFormatter
@@ -28,6 +29,7 @@ import io.greensheep.trading.core.utils.JsonUtils.*
 import org.bson.types.Decimal128
 
 import java.util
+import scala.collection.immutable.ListMap
 object MongoDbDataRepo{
 
   val layer: ULayer[MongoDbDataRepo] = ZLayer.succeed(build())
@@ -35,11 +37,24 @@ object MongoDbDataRepo{
   def build(): MongoDbDataRepo = {
     new MongoDbDataRepo("mongodb://localhost:27017", "polygon")
   }
+
+
+  val mongoClient = MongoClient.live("mongodb://localhost:27017")
+
+  val database = mongoClient >>> ZLayer.fromZIO(ZIO.serviceWith[MongoClient](_.getDatabase("database-name")))
+
+
 }
 
 class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
 
   private val mongoClient = MongoClients.create(url)
+  val database: MongoDatabase = mongoClient.getDatabase(databaseName)
+  val quotesCollection: MongoCollection[Document] = getCollection("daily-quotes", databaseName).get
+
+
+
+
 
   private def getCollection(name: String, dbName: String = databaseName): Try[com.mongodb.client.MongoCollection[Document]] = Try {
     val database = mongoClient.getDatabase(dbName)
@@ -79,40 +94,127 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     collection
   }
 
-  def saveAggregates(symbol: String, aggregates: Seq[Aggregate]): Unit = {
-    val collection = getAggregatesCollection(symbol)
-    def aggregateToDocument(agg: Aggregate) = {
-      new Document(
-        Map(
-          "_id" -> agg.t,
-          "o" -> agg.o,
-          "h" -> agg.h,
-          "l" -> agg.l,
-          "c" -> agg.c,
-          "t" -> agg.t,
-          "v" -> agg.v,
-          "day" -> Instant.ofEpochMilli(agg.t).atZone(ZoneId.of("America/New_York"))
-            .format(DateTimeFormatter.ISO_DATE),
-          "n" -> agg.numberOfShares,
-          "vw" -> agg.wwap
+  private def aggregateToDocument(agg: Aggregate) =
+    new Document(
+      Map(
+        "_id" -> agg.t,
+        "o" -> agg.o,
+        "h" -> agg.h,
+        "l" -> agg.l,
+        "c" -> agg.c,
+        "t" -> agg.t,
+        "v" -> agg.v,
+        "day" -> Instant.ofEpochMilli(agg.t)
+          .atZone(ZoneId.of("America/New_York"))
+          .format(DateTimeFormatter.ISO_DATE),
+        "n" -> agg.numberOfShares,
+        "vw" -> agg.wwap
       ).asJava)
-    }
-    if (aggregates.nonEmpty) {
-      val opt = new UpdateOptions().upsert(true)
-      val actions = aggregates map { d =>
-        val doc = aggregateToDocument(d)
-        val filter = new BasicDBObject()
-        filter.append("_id", doc.get("_id"))
-        val action = new BasicDBObject("$set", doc)
-        new UpdateOneModel[Document](filter, action, opt)
-      }
-      collection.bulkWrite(actions.asJava)
-    }
+
+  def saveAggregate(agg: Aggregate): InsertOneResult = {
+    val collection = getAggregatesCollection(agg.T.getOrElse("?"))
+    val doc = aggregateToDocument(agg)
+    collection.insertOne(doc)
   }
 
-  def convertUnixTimestampToLocalDate(unixTimestamp: Long): LocalDate = {
+  def saveAggregates(symbol: String, aggregates: Seq[Aggregate]): InsertManyResult = {
+    val collection = getAggregatesCollection(symbol)
+    val filter = Filters.eq("_id", symbol)
+    Option(quotesCollection.find(filter).first())
+    collection.insertMany(aggregates.map(aggregateToDocument).asJava)
+
+  }
+
+  def aggregateToMap(agg: Aggregate) = {
+    ListMap(
+    "o" -> agg.o,
+      "h" -> agg.h,
+      "l" -> agg.l,
+      "c" -> agg.c,
+      "t" -> agg.t,
+      "v" -> agg.v,
+      "day" -> Instant.ofEpochMilli(agg.t)
+        .atZone(ZoneId.of("America/New_York"))
+        .format(DateTimeFormatter.ISO_DATE),
+      "n" -> agg.numberOfShares,
+      "vw" -> agg.wwap
+    ).asJava
+  }
+
+
+  def updateAggregates(symbol: String, aggregates: Seq[Aggregate], overwrite: Boolean = false): Any = {
+    val filter = Filters.eq("_id", symbol)
+    Option(quotesCollection.find(filter).first()) match
+      case Some(document) =>
+        if(overwrite) {
+          val updates = Updates.set("quotes", aggregates.map(aggregateToMap).asJava)
+          val options = new UpdateOptions().upsert(true)
+          quotesCollection.updateOne(filter, updates, options)
+        }
+        else{
+          val quotes = document.getList("quotes", classOf[Document], List.empty[Document].asJava).asScala
+          val existing = quotes.map(doc => doc.get("t").toString.toLong).toSet
+          val newQuotes = aggregates.filter(agg => !existing.contains(agg.t))
+          if (newQuotes.nonEmpty) {
+            val updates = Updates.pushEach("quotes", newQuotes.map(aggregateToMap).asJava)
+            val options = new UpdateOptions().upsert(true)
+            quotesCollection.updateOne(filter, updates, options)
+          }
+          else {
+            //don't add the same quotes
+          }
+        }
+
+      case None =>
+        val updates = Updates.pushEach("quotes", aggregates.map(aggregateToMap).asJava)
+        val options = new UpdateOptions().upsert(true)
+        quotesCollection.updateOne(filter, updates, options)
+  }
+
+  private def convertUnixTimestampToLocalDate(unixTimestamp: Long): LocalDate = {
     val instant = Instant.ofEpochSecond(unixTimestamp)
     instant.atZone(ZoneId.of("America/New_York")).toLocalDate
+  }
+
+
+  override def getQuotes(symbol: String): Task[Seq[Quote]] = {
+    for {
+      aggregates <- getAggregates2(symbol)
+      quotes = aggregates.map { agg =>
+        Quote(
+          day = agg.t,
+          o = agg.o,
+          h = agg.h,
+          l = agg.l,
+          c = agg.c,
+          v = agg.v.toInt
+        )
+      }
+
+    } yield quotes
+  }
+
+  def getAggregates2(symbol: String): ZIO[Any, Throwable, Chunk[DailyAggregate]] = {
+    val tryIterable = Try{
+      val iterable = quotesCollection.find(Filters.eq("_id", symbol)).asScala
+      iterable.headOption match {
+        case Some(doc) =>
+          val quotes = doc.get("quotes").asInstanceOf[java.lang.Iterable[Document]].asScala
+          val processed = quotes.map { doc =>
+            DailyAggregate(
+              o = doc.get("o").toString.toDouble,
+              h = doc.get("h").toString.toDouble,
+              l = doc.get("l").toString.toDouble,
+              c = doc.get("c").toString.toDouble,
+              v = Option(doc.get("v")).map(_.toString.toDouble).getOrElse(0.0),
+              t = convertUnixTimestampToLocalDate(doc.get("t").toString.toLong),
+            )
+          }.toSeq
+          Chunk.fromIterable(processed)
+        case None => Chunk.empty
+      }
+    }
+    ZIO.fromTry(tryIterable)
   }
 
   def getAggregates(symbol: String): ZStream[Any, Throwable, DailyAggregate] = {
@@ -135,18 +237,55 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     ZStream.fromZIO(ZIO.fromTry(tryIterable)).flatMap(ZStream.fromIterable)
   }
 
+  def getTickerDetails: ZIO[Any, Throwable, Seq[Stock]] = {
+    val collection = getCollection("ticker-details").get
+    val stockIterator = collection.find().asScala.map { doc =>
+      Stock(
+        symbol = doc.get("_id").asInstanceOf[String],
+        companyName = doc.get("name").asInstanceOf[String],
+        ipoDate = LocalDate.parse(Option(doc.get("list_date").asInstanceOf[String]).getOrElse("1970-01-01")),
+        primaryExchange = doc.get("primary_exchange").asInstanceOf[String],
+        description = doc.get("description").asInstanceOf[String],
+        totalEmployees = Option(doc.get("total_employees").asInstanceOf[Decimal128]).map(_.intValue()).getOrElse(0),
+        sicCode = doc.get("sic_code").asInstanceOf[String],
+        sicDescription = doc.get("sic_description").asInstanceOf[String],
+        marketCap = Option(doc.get("market_cap").asInstanceOf[Decimal128]).map(_.longValue()).getOrElse(0L),
+        weightedSharesOutstanding = Option(doc.get("weighted_shares_outstanding").asInstanceOf[Decimal128]).map(_.longValue()).getOrElse(0L),
+      )
+    }
+    ZIO.succeed(stockIterator.toSeq)
+  }
+
   def saveTicker(stock: Stock): UpdateResult = {
-    println(s"Saving ${stock.symbol}")
     val collection = getCollection("tickers").get
+
+
+    val docMap = Map(
+      "symbol" -> stock.symbol,
+      "companyName" -> stock.companyName,
+      "ipoDate" -> stock.ipoDate.toString
+    )
+
+    val doc = new Document((docMap + ("_id" -> stock.symbol)).asJava)
+    val filter = Filters.eq("_id", stock.symbol)
+    val options = new UpdateOptions().upsert(true)
+
+    collection.updateOne(filter, new Document("$set", doc), options)
+  }
+
+  implicit val Encoder: JsonEncoder[TickerDetails] = DeriveJsonEncoder.gen[TickerDetails]
+
+  def saveTicker(stock: TickerDetails): UpdateResult = {
+    println(s"Saving ticker ${stock.ticker}")
+    val collection = getCollection("ticker-details").get
     val docMap = stock.toJsonAST match
       case Left(value) =>
         throw new RuntimeException(value)
       case Right(value) =>
         value.toMap
 
-    val filteredMap = docMap - ("dailyAggregates") // TODO investigate
-    val doc = new Document((filteredMap + ("_id" -> stock.symbol)).asJava)
-    val filter = Filters.eq("_id", stock.symbol)
+    val doc = new Document((docMap + ("_id" -> stock.ticker)).asJava)
+    val filter = Filters.eq("_id", stock.ticker)
     val options = new UpdateOptions().upsert(true)
 
     collection.updateOne(filter, new Document("$set", doc), options)
@@ -160,7 +299,6 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
       javaMap.put("_id", agg.uuid)
       javaMap.put("day", agg.day)
       javaMap.put("screenName", agg.screenName)
-      javaMap.put("dataSource", agg.dataSource)
       javaMap.put("tickers", agg.tickers.asJava)
 
       new Document(javaMap)
@@ -175,9 +313,8 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     val wlCollection = getCollection("watchlist", "greensheep-trading").get
     val document = wlCollection.find(com.mongodb.client.model.Filters.eq("_id", uuid)).first()
     Watchlist(
-      day = document.get("day").asInstanceOf[String],
+      day = document.get("day").asInstanceOf[LocalDate],
       screenName = document.get("screenName").asInstanceOf[String],
-      dataSource = document.get("dataSource").asInstanceOf[String],
       tickers = document.get("tickers").asInstanceOf[java.lang.Iterable[String]].asScala.toSeq
     )
   }
@@ -277,8 +414,8 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
   def getTickers: ZStream[Any, Throwable, Stock] = {
     def documentToStock(d: Document): Stock = {
       Stock(
-        d.get("symbol", classOf[String]),
-        d.get("name", classOf[String]),
+        d.get("_id", classOf[String]),
+        d.get("companyName", classOf[String]),
         LocalDate.now(),
         ""
       )
@@ -301,5 +438,5 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
 
   override def getStocks(): Task[Map[String, Stock]] = ???
 
-  override def getQuotes(symbol: String): Task[Seq[Quote]] = ???
+
 }

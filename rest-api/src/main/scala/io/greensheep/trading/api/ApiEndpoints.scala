@@ -1,44 +1,50 @@
 package io.greensheep.trading.api
-import io.greensheep.trading.core.types.Watchlist
+import io.github.zeal18.zio.mongodb.driver.MongoDatabase
+import io.greensheep.trading.core.types.{DailyQuoteData, Watchlist}
+import io.greensheep.trading.dataservice.{MongoDataRepo, MongoDbDataRepo}
 import zio.*
-import zio.http.{Response, *}
-import io.greensheep.trading.dataservice.MongoDbDataRepo
+import zio.http.*
 import zio.json.EncoderOps
+
+
+import java.io.{PrintWriter, StringWriter}
 object ApiEndpoints {
 
-  val mongoRepo = MongoDbDataRepo.build()
 
-  def watchlistApi() = {
-    ZIO.attempt(mongoRepo.getWatchlist("2024-01-28", "SEPA")).mapBoth(
-      th => {
-        th.printStackTrace()
-        Response.internalServerError(th.getMessage)
-      },
-      wl =>
-        Response.json(wl.toJson)
-    )
+
+  def handleError(t: Throwable): Response = {
+    val stringWriter = new StringWriter()
+    t.printStackTrace(new PrintWriter(stringWriter))
+    val stackTrace = stringWriter.toString
+    (Response.text(stackTrace).status(Status.InternalServerError))
   }
 
-  def financialData(tickers: Seq[String]): ZIO[Any, Response, Response] = {
-    ZIO.attempt(tickers.map(t => t -> mongoRepo.getFinancialsQuarterly(t)).toMap).mapBoth(
-      th => {
-        th.printStackTrace()
-        Response.internalServerError(th.getMessage)
+  def buildRestApi: HttpApp[MongoDatabase] = {
+    Routes(
+      // This line works fine
+      (Method.GET / "quotes" / string("ticker")) -> {
+        Handler.fromFunctionZIO[(String, Request)]{
+          case (ticker, _) => {
+            for {
+              _ <- ZIO.logInfo(s"Received request for ticker: $ticker")
+              data <- MongoDataRepo.getPriceData(ticker)
+            } yield Response.json(data.toJson)
+          }
+        }.mapError(handleError)
       },
-      wl =>
-        Response.json(wl.toJson)
-    )
+      (Method.GET / "watchlists" / string("name")) -> {
+        Handler.fromFunctionZIO[(String, Request)]{
+          case (name, _) => {
+            for {
+              _ <- ZIO.logInfo(s"Received request for watchlist: $name")
+              watchlist <- MongoDataRepo.getWatchlistLatest(name)
+              symbolsCsv  = watchlist.tickers.mkString("\n")
+            } yield Response.text(symbolsCsv)
+          }
+        }.mapError(handleError)
+      }
+    ).toHttpApp
   }
 
-  def financialDataYearly(tickers: Seq[String]): ZIO[Any, Response, Response] = {
-    ZIO.attempt(tickers.map(t => t -> mongoRepo.getFinancialsYearly(t)).toMap).mapBoth(
-      th => {
-        th.printStackTrace()
-        Response.internalServerError(th.getMessage)
-      },
-      wl =>
-        Response.json(wl.toJson)
-    )
-  }
 
 }

@@ -14,7 +14,7 @@ object GetAndWrite extends ZIOAppDefault {
       source <- ZIO.service[PolygonDataSource]
       repo <- ZIO.service[MongoDbDataRepo]
       tickerStream = source.getTickers
-      _ <- tickerStream.foreach(t => ZIO.succeed(repo.saveTicker(t)))
+      _ <- tickerStream.foreach(t => ZIO.succeed(println(t.symbol)))
 
     } yield ()
   }

@@ -23,6 +23,7 @@ case class Stock(
                 sicDescription: String = "",
                 marketCap: Long = 0,
                 weightedSharesOutstanding: Long = 0,
+                
                 @jsonExclude dailyAggregates: Chunk[DailyAggregate] = Chunk.empty
                 ){
 
@@ -32,6 +33,10 @@ case class Stock(
   }
 
   lazy val currentPrice: Double = dailyAggregates.last.c
+
+  def performanceDays(days: Int): Double = {
+    100 * (currentPrice - dailyAggregates.takeRight(days).head.c) / currentPrice
+  }
 
   lazy val ma50: Double = ma(50)
 
