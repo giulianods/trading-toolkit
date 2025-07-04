@@ -8,3 +8,13 @@
 */.bsp/
 *.iml
 
+/.bloop
+/.metals
+/.vscode
+/project/.bloop
+/project/project/project/target
+/project/project/project/project/target
+project/metals.sbt
+/project/project/.bloop
+project/project/metals.sbt
+project/project/project/metals.sbt
