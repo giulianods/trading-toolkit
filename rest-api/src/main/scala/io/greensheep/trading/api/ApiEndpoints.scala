@@ -1,7 +1,8 @@
 package io.greensheep.trading.api
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.trading.core.types.{DailyQuoteData, Watchlist}
-import io.greensheep.trading.dataservice.{MongoDataRepo, MongoDbDataRepo}
+import io.greensheep.trading.dataservice.MongoDataRepo
+import io.greensheep.trading.api.services.ChartServices
 import zio.*
 import zio.http.*
 import zio.json.EncoderOps
@@ -41,6 +42,15 @@ object ApiEndpoints {
               symbolsCsv  = watchlist.tickers.mkString("\n")
             } yield Response.text(symbolsCsv)
           }
+        }.mapError(handleError)
+      },
+      (Method.GET / "chart" / string("ticker")) -> {
+        Handler.fromFunctionZIO[(String, Request)] {
+          case (ticker, _) =>
+            for {
+              _   <- ZIO.logInfo(s"Received chart request for ticker: $ticker")
+              svg <- ChartServices.chartSvg(ticker)
+            } yield Response.text(svg).withHeader(Header.Custom("Content-Type", "image/svg+xml"))
         }.mapError(handleError)
       }
     ).toHttpApp
