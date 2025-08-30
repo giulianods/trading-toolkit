@@ -50,7 +50,7 @@ object ApiEndpoints {
             for {
               _   <- ZIO.logInfo(s"Received chart request for ticker: $ticker")
               svg <- ChartServices.chartSvg(ticker)
-            } yield Response.text(svg).withHeader(Header.Custom("Content-Type", "image/svg+xml"))
+            } yield Response.text(svg).addHeader(Header.Custom("Content-Type", "image/svg+xml"))
         }.mapError(handleError)
       }
     ).toHttpApp

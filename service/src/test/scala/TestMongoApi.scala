@@ -15,6 +15,7 @@ object TestMongoApi extends ZIOSpecDefault {
         stocks <- repo.getTickerDetails
         _ = println(s"Got ${stocks.size} stocks")
       } yield assert(stocks)(isNonEmpty)
-    }
+    },
+    
   )
 }

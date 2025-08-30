@@ -103,8 +103,15 @@ object InitializationService {
           _ <- MongoDataRepo.saveStockUniverse(stockUniverse.copy(lastUpdateQuotes = end, symbols = usCommonStocks))
         } yield ()
       }
+    } yield ()
+  }
 
-      
+  private def rectifySplits: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] = {
+    for{
+      _ <- ZIO.logInfo("Rectifying split data")
+      universe <- MongoDataRepo.getStockUniverse
+      _ <- QuotesServices.rectifySplits(universe.lastUpdateSplits.minusDays(7), LocalDate.now())
+
     } yield ()
   }
 
@@ -112,8 +119,9 @@ object InitializationService {
   def initializeApp(): ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] =  {
     for {
       _ <- InitializeStockUniverse
-      _ <- InitializeDescriptions
+      //_ <- InitializeDescriptions
       _ <- initializeQuotes()
+      _ <- rectifySplits
       _ <- ScreenerServices.ScreenerTask
     } yield ()
   }

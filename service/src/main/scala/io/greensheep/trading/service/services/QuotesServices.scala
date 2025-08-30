@@ -62,6 +62,29 @@ object QuotesServices {
     } yield ()
   }
 
+  def rectifySplits(start: LocalDate, end: LocalDate): ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] = ZIO.logSpan("rectify-split-quotes") {
+    val defaultHistory = LocalDate.now().minusDays(600)
+    for {
+      remoteApi <- ZIO.service[PolygonAsyncApi]
+      splits <- remoteApi.getSplits(start, end).map(_.map(_.ticker))
+      reverseSplits <- remoteApi.getReverseSplits(start, end).map(_.map(_.ticker))
+      allSplits = ZStream.fromIterable(splits ++ reverseSplits)
+      retrievalTask = allSplits mapZIO {
+        ticker =>
+          for{
+            quotes <- remoteApi.getAggregates(ticker,defaultHistory)
+            _ <- ZIO.logInfo(s"Retrieved historical quotes for $ticker")
+            _ <- MongoDataRepo.updateDailyQuotes(ticker, quotes.map(PolygonBridge.aggregateToQuote))
+            _ <- ZIO.logInfo(s"Updated split data $ticker")
+          } yield ticker
+      }
+      allResults <- retrievalTask.runCollect
+      _ <- ZIO.logInfo(s"Rectified the following: \n $allResults")
+      universe <- MongoDataRepo.getStockUniverse
+      _ <- MongoDataRepo.saveStockUniverse(universe.copy(lastUpdateSplits = LocalDate.now()))
+    } yield ()
+  }
+
 
 
 

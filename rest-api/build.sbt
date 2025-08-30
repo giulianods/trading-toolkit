@@ -18,11 +18,19 @@ val tapirDependencies = Seq(
   "com.softwaremill.sttp.tapir" %% "tapir-openapi-circe-yaml" % "1.0.0-M9"
 )
 
+
+
 libraryDependencies ++= tapirDependencies
 libraryDependencySchemes += "io.circe" %% "circe-yaml" % VersionScheme.Always
 dependencyOverrides ++= Seq (
   "io.circe" %% "circe-yaml" % "0.15.1"
 )
+
+libraryDependencies ++= Seq(
+  "org.jfree" % "jfreechart" % "<latest>",
+  "org.jfree" % "jfreesvg"   % "<latest>"
+)
+
 
 def settingsApp = Seq(
   name := "zio-http-start",

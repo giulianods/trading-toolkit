@@ -64,7 +64,6 @@ object MongoDataRepo {
       _ <- db.createCollection("stock-universe")
       coll = db.getCollection[StockUniverse]("stock-universe")
       su <- coll.find(filters.eq("_id", "stock-universe")).runHead
-      _ <- ZIO.logInfo(s"Found stock universe $su")
       _ <- ZIO.cond(su.isDefined, (), new NoSuchElementException("No stock universe found"))
     } yield su.get
   }

@@ -15,6 +15,9 @@ lazy val root = (project in file("."))
 
 credentials += Credentials(Path.userHome / ".sbt" / ".credentials")
 
+
+scalacOptions += "-Yretain-trees"
+
 val zioVersion = "2.0.19"
 val zioLoggingVersion = "2.5.0"
 val zioLibraries = Seq(
