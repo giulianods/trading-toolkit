@@ -27,8 +27,8 @@ dependencyOverrides ++= Seq (
 )
 
 libraryDependencies ++= Seq(
-  "org.jfree" % "jfreechart" % "<latest>",
-  "org.jfree" % "jfreesvg"   % "<latest>"
+  "org.jfree" % "jfreechart" % "1.5.4",
+  "org.jfree" % "jfreesvg"   % "3.4"
 )
 
 
