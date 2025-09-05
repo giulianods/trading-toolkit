@@ -18,3 +18,4 @@ project/metals.sbt
 /project/project/.bloop
 project/project/metals.sbt
 project/project/project/metals.sbt
+/ttk.log
