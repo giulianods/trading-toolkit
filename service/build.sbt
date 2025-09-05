@@ -1,6 +1,9 @@
 
-
-libraryDependencies += "dev.zio" %% "zio-interop-cats" % "23.0.0.2"
+libraryDependencies ++= Seq(
+  "dev.zio" %% "zio-interop-cats" % "23.0.0.2",
+  "org.jfree" % "jfreechart" % "<latest>",
+  "org.jfree" % "jfreesvg"   % "<latest>"
+)
 
 val ttkMainClass = "io.greensheep.trading.service.Main"
 libraryDependencySchemes += "io.circe" %% "circe-yaml" % VersionScheme.Always
