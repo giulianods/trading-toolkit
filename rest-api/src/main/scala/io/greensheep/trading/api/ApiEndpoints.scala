@@ -47,9 +47,8 @@ object ApiEndpoints {
       (Method.GET / "chart" / string("ticker")) -> {
         Handler.fromFunctionZIO[(String, Request)] {
           case (ticker, req) =>
-            val daysOpt = req.url.queryParams.get("days").flatMap(_.headOption.flatMap(_.toIntOption))
+            val days = req.url.queryParams.get("days").map(_.toInt).getOrElse(100)
             for {
-              days <- ZIO.fromOption(daysOpt).orElseFail(new IllegalArgumentException("Missing or invalid 'days' parameter"))
               _    <- ZIO.logInfo(s"Received chart request for ticker: $ticker for $days days")
               svg  <- ChartServices.chartSvg(ticker, days)
             } yield Response.text(svg).addHeader(Header.Custom("Content-Type", "image/svg+xml"))
