@@ -2,7 +2,7 @@ package io.greensheep.trading.api
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.trading.core.types.{DailyQuoteData, Watchlist}
 import io.greensheep.trading.dataservice.MongoDataRepo
-import io.greensheep.trading.api.services.ChartServices
+
 import zio.*
 import zio.http.*
 import zio.json.EncoderOps

@@ -120,9 +120,9 @@ object InitializationService {
     for {
       _ <- InitializeStockUniverse
       //_ <- InitializeDescriptions
-      _ <- initializeQuotes()
-      _ <- rectifySplits
-      _ <- ScreenerServices.ScreenerTask
+      //_ <- initializeQuotes()
+      //_ <- rectifySplits
+      //_ <- ScreenerServices.ScreenerTask
     } yield ()
   }
 

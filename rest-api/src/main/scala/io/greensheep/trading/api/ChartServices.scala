@@ -1,9 +1,9 @@
-package io.greensheep.trading.service.services
+package io.greensheep.trading.api
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.trading.dataservice.MongoDataRepo
 import org.jfree.chart.JFreeChart
-import org.jfree.chart.axis.{DateAxis, NumberAxis, SegmentedTimeline}
+import org.jfree.chart.axis.{DateAxis, NumberAxis}
 import org.jfree.chart.plot.{CombinedDomainXYPlot, XYPlot}
 import org.jfree.chart.renderer.xy.{CandlestickRenderer, XYBarRenderer, XYLineAndShapeRenderer}
 import org.jfree.data.time.{Day, TimeSeries, TimeSeriesCollection}

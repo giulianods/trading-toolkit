@@ -75,6 +75,9 @@ lazy val service = (project in file("service")).dependsOn(core, dataservice, res
     testFrameworks := Seq(zioTestFramework)
   )
 
+
+
+
 libraryDependencies ++= (zioLibraries ++ logbackLib)
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
 
