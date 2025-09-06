@@ -29,5 +29,6 @@ object WebApp {
         }
         responseFor(requested).catchAll(_ => responseFor("/dist/index.html"))
       }
+      .mapError(_ => Response.status(Status.InternalServerError))
       .toHttpApp
 }
