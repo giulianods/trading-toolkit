@@ -1,0 +1,8 @@
+<header>
+  <h1>{{ title }}</h1>
+</header>
+<div class="charts">
+  <div class="chart" *ngFor="let s of symbols">
+    <img [src]="chartUrl(s)" [alt]="s">
+  </div>
+</div>
