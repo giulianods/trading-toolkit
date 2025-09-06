@@ -21,12 +21,13 @@ object WebApp {
     resourceBytes(path).map(bytes => Response(body = Body.fromChunk(bytes)))
 
   val app: HttpApp[Any] =
-    Http.collectZIO[Request] {
-      case req if req.method == Method.GET =>
+    Handler
+      .fromFunctionZIO[Request] { req =>
         val requested = req.url.path.toString match {
           case "" | "/" => "/dist/index.html"
           case other      => s"/dist$other"
         }
         responseFor(requested).catchAll(_ => responseFor("/dist/index.html"))
-    }
+      }
+      .toHttpApp
 }
