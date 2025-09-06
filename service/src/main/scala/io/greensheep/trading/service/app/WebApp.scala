@@ -1,3 +1,5 @@
+package io.greensheep.trading.service.app
+
 import zio._
 import zio.http._
 
