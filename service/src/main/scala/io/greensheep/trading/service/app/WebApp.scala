@@ -2,16 +2,26 @@ package io.greensheep.trading.service.app
 
 import zio._
 import zio.http._
+import zio.Chunk
 
 object WebApp {
-  // Serve static files from the "dist" directory
-  val staticFiles: HttpApp[Any] = HttpApp.fromResource("/dist")
 
-  // Serve the index.html for unmatched routes
-  val fallbackToIndex: HttpApp[Any] = Http.collectHttp[Request] {
-    case Method.GET -> _ => Http.fromResource("/dist/index.html")
-  }
+  private def resourceBytes(path: String): Task[Chunk[Byte]] =
+    ZIO
+      .fromOption(Option(getClass.getResourceAsStream(path)))
+      .orElseFail(new Exception(s"resource $path not found"))
+      .flatMap(is => ZIO.fromAutoCloseable(ZIO.succeed(is)).flatMap(is => ZIO.attempt(Chunk.fromArray(is.readAllBytes()))))
 
-  // Combine static file server and fallback for SPA routing
-  val app: HttpApp[Any] = staticFiles ++ fallbackToIndex
+  private def responseFor(path: String): Task[Response] =
+    resourceBytes(path).map(bytes => Response(body = Body.fromChunk(bytes)))
+
+  val app: HttpApp[Any] =
+    Http.collectZIO[Request] {
+      case req if req.method == Method.GET =>
+        val requested = req.url.path.toString match {
+          case "" | "/" => "/dist/index.html"
+          case other      => s"/dist$other"
+        }
+        responseFor(requested).catchAll(_ => responseFor("/dist/index.html"))
+    }
 }
