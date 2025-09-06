@@ -10,7 +10,12 @@ object WebApp {
     ZIO
       .fromOption(Option(getClass.getResourceAsStream(path)))
       .orElseFail(new Exception(s"resource $path not found"))
-      .flatMap(is => ZIO.fromAutoCloseable(ZIO.succeed(is)).flatMap(is => ZIO.attempt(Chunk.fromArray(is.readAllBytes()))))
+      .flatMap { is =>
+        ZIO.attempt {
+          try Chunk.fromArray(is.readAllBytes())
+          finally is.close()
+        }
+      }
 
   private def responseFor(path: String): Task[Response] =
     resourceBytes(path).map(bytes => Response(body = Body.fromChunk(bytes)))
