@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
+    "start": "ng serve --proxy-config proxy.conf.json",
     "build": "ng build --output-path=../src/main/resources/dist",
     "watch": "ng build --watch --output-path=../src/main/resources/dist",
     "test": "ng test"
