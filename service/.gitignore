@@ -7,4 +7,3 @@
 *.iml
 /greensheep-stocks/.angular/
 /greensheep-stocks/package-lock.json
-/greensheep-stocks/proxy.conf.json
