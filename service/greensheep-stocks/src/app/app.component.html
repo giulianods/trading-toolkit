@@ -2,7 +2,7 @@
   <div class="stock" *ngFor="let s of symbols">
     <img [src]="chartUrl(s)" [alt]="s">
     <div class="description" *ngIf="descriptions[s]">
-      <h2>{{ descriptions[s].companyName }}</h2>
+      <h2>[{{ s }}] {{ descriptions[s].companyName }}</h2>
       <p class="sic">{{ descriptions[s].sicDescription }}</p>
       <p>{{ descriptions[s].description }}</p>
     </div>
