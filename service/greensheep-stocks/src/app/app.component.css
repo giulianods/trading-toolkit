@@ -1,20 +1,21 @@
-header {
-  text-align: center;
-  padding: 1rem;
-  background-color: #000;
-  color: #0f0;
-}
 .charts {
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 .chart {
+  display: flex;
   margin: 1rem 0;
+  width: 80%;
+  max-width: 800px;
 }
 .chart img {
-  width: 80%;
+  width: 60%;
   max-width: 600px;
   max-height: 300px;
   border: 1px solid #0f0;
+}
+.description {
+  margin-left: 1rem;
+  flex: 1;
 }

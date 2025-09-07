@@ -1,8 +1,9 @@
-<header>
-  <h1>{{ title }}</h1>
-</header>
 <div class="charts">
   <div class="chart" *ngFor="let s of symbols">
     <img [src]="chartUrl(s)" [alt]="s">
+    <div class="description" *ngIf="descriptions[s]">
+      <h2>{{ descriptions[s].companyName }}</h2>
+      <p>{{ descriptions[s].description }}</p>
+    </div>
   </div>
 </div>
