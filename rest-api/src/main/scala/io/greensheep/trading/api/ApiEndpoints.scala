@@ -53,7 +53,17 @@ object ApiEndpoints {
               svg  <- ChartServices.chartSvg(ticker, days)
             } yield Response.text(svg).addHeader(Header.Custom("Content-Type", "image/svg+xml"))
         }.mapError(handleError)
-      }
+      },
+      (Method.GET / "description" / string("ticker")) -> {
+        Handler.fromFunctionZIO[(String, Request)]{
+          case (ticker, _) => {
+            for {
+              _ <- ZIO.logInfo(s"Received request for ticker: $ticker")
+              data <- MongoDataRepo.getStockDescription(ticker)
+            } yield Response.json(data.toJson)
+          }
+        }.mapError(handleError)
+      },
     ).toHttpApp
   }
 

@@ -6,7 +6,7 @@ import io.greensheep.trading.api.ApiEndpoints
 import io.greensheep.trading.core.services.{DataRepo, DataSource}
 import io.greensheep.trading.core.types.Quote
 import io.greensheep.trading.dataservice.{LocalFileDataRepo, MongoDataRepo, MongoDbDataRepo, PolygonDataSource}
-import io.greensheep.trading.service.app.CronJobs
+import io.greensheep.trading.service.app.{CronJobs, WebApp}
 import io.greensheep.trading.service.services.{InitializationService, QuotesServices}
 import zio.*
 import zio.http.{Client, Server, URL}
@@ -56,7 +56,8 @@ object Main extends ZIOAppDefault {
       _ <- ZIO.logInfo("Initialization completed")
       _ <- ZIO.logInfo("Starting rest api")
       api = ApiEndpoints.buildRestApi
-      _ <- Server.install(api)
+      web = WebApp.app
+      _ <- Server.install(api ++ web)
       _ <- ZIO.logInfo(s"Rest api started on ${Server.Config.default.address}")
       _ <- CronJobs.start
       _ <- ZIO.logInfo("Cron jobs started")
