@@ -19,3 +19,8 @@ project/metals.sbt
 project/project/metals.sbt
 project/project/project/metals.sbt
 /ttk.log
+
+# frontend build artifacts
+service/greensheep-stocks/node_modules/
+service/greensheep-stocks/dist/
+
