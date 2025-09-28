@@ -1,0 +1,18 @@
+{
+  "/quotes": {
+    "target": "http://localhost:7777",
+    "secure": false
+  },
+  "/watchlists": {
+    "target": "http://localhost:7777",
+    "secure": false
+  },
+  "/chart": {
+    "target": "http://localhost:7777",
+    "secure": false
+  },
+  "/description": {
+    "target": "http://localhost:7777",
+    "secure": false
+  }
+}

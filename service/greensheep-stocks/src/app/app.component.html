@@ -1,8 +1,10 @@
-<header>
-  <h1>{{ title }}</h1>
-</header>
 <div class="charts">
-  <div class="chart" *ngFor="let s of symbols">
+  <div class="stock" *ngFor="let s of symbols">
     <img [src]="chartUrl(s)" [alt]="s">
+    <div class="description" *ngIf="descriptions[s]">
+      <h2>[{{ s }}] {{ descriptions[s].companyName }}</h2>
+      <p class="sic">{{ descriptions[s].sicDescription }}</p>
+      <p>{{ descriptions[s].description }}</p>
+    </div>
   </div>
 </div>
