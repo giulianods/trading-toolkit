@@ -3,19 +3,39 @@ package io.greensheep.trading.api
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.trading.dataservice.MongoDataRepo
 import org.jfree.chart.JFreeChart
-import org.jfree.chart.axis.{DateAxis, NumberAxis}
+import org.jfree.chart.axis.{DateAxis, NumberAxis, SegmentedTimeline}
 import org.jfree.chart.plot.{CombinedDomainXYPlot, XYPlot}
 import org.jfree.chart.renderer.xy.{CandlestickRenderer, XYBarRenderer, XYLineAndShapeRenderer}
 import org.jfree.data.time.{Day, TimeSeries, TimeSeriesCollection}
 import org.jfree.data.xy.DefaultHighLowDataset
 import org.jfree.svg.SVGGraphics2D
 import zio.*
+import zio.DurationInt
+import zio.cache.{Cache, Lookup}
 
 import java.awt.geom.Rectangle2D
 import java.time.ZoneId
 import java.util.Date
 
 object ChartServices {
+
+  private final case class CacheKey(ticker: String, days: Int, width: Int, height: Int)
+
+  private val cacheTtl = 8.hours
+  private lazy val chartCache: Cache[CacheKey, Throwable, String] =
+    Unsafe.unsafe { implicit unsafe =>
+      Runtime.default.unsafe
+        .run(
+          Cache.make(
+            capacity = 256L,
+            timeToLive = cacheTtl,
+            lookup = Lookup.fromFunctionZIO { (key: CacheKey) =>
+              renderChart(key.ticker, key.days, key.width, key.height)
+            }
+          )
+        )
+        .getOrThrowFiberFailure()
+    }
 
   /**
    * Generate a candlestick chart with 50 day moving average and volume bars in SVG format for the given ticker.
@@ -27,6 +47,11 @@ object ChartServices {
    * @return svg representation of the chart
    */
   def chartSvg(ticker: String, days: Int, width: Int = 800, height: Int = 400): ZIO[MongoDatabase, Throwable, String] = {
+    val key = CacheKey(ticker, days, width, height)
+    chartCache.get(key)
+  }
+
+  private def renderChart(ticker: String, days: Int, width: Int, height: Int): ZIO[MongoDatabase, Throwable, String] =
     for {
       data    <- MongoDataRepo.getPriceData(ticker)
       ordered  = data.quotes.sortBy(_.day.toEpochDay).takeRight(days)
@@ -86,6 +111,5 @@ object ChartServices {
       g2           = new SVGGraphics2D(width, height)
       _            = chart.draw(g2, new Rectangle2D.Double(0, 0, width, height))
     } yield g2.getSVGElement()
-  }
 }
 
