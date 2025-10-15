@@ -28,6 +28,15 @@ export class AppComponent implements OnInit {
   symbols: string[] = [];
   descriptions: { [symbol: string]: StockDescription } = {};
   stats: { [ticker: string]: { [key: string]: string } } = {};
+
+  watchlists: { label: string; value: string }[] = [
+    { label: 'SEPA', value: 'SEPA' },
+    { label: '7% Up', value: '7_PCT_UP' },
+    { label: '7% Down', value: '7_PCT_DOWN' },
+    { label: 'VCP', value: 'VCP' }
+  ];
+
+  selectedWatchlist: string = this.watchlists[1].value;
   
   // Mapping of stat keys to display names and their order
   private statDisplayMapping: { [key: string]: string } = {
@@ -46,22 +55,36 @@ export class AppComponent implements OnInit {
   constructor(private http: HttpClient) {}
 
   ngOnInit(): void {
-    this.http.get('/watchlists/7_PCT_UP', { responseType: 'json' }).subscribe(data => {
+    this.loadWatchlist(this.selectedWatchlist);
+  }
+
+  loadWatchlist(watchlist: string): void {
+    this.selectedWatchlist = watchlist;
+    this.symbols = [];
+    this.descriptions = {};
+    this.stats = {};
+
+    this.http.get(`/watchlists/${watchlist}`, { responseType: 'json' }).subscribe((data: any) => {
       this.symbols = data['tickers'].slice(0, 100);
-      
+
       // Extract and store stats data
       if (data['stats']) {
         data['stats'].forEach((statItem: StockStats) => {
           this.stats[statItem.ticker] = statItem.stats;
         });
       }
-      
+
       this.symbols.forEach(s => {
         this.http.get<StockDescription>(`/description/${s}`).subscribe(desc => {
           this.descriptions[s] = desc;
         });
       });
     });
+  }
+
+  onWatchlistChange(event: Event): void {
+    const selectedWatchlist = (event.target as HTMLSelectElement).value;
+    this.loadWatchlist(selectedWatchlist);
   }
 
   chartUrl(symbol: string): string {
