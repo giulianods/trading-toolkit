@@ -3,14 +3,46 @@ package io.greensheep.trading.dataservice
 import io.github.zeal18.zio.mongodb.driver.model.{ReplaceOptions, UpdateOptions}
 import io.github.zeal18.zio.mongodb.driver.sorts.Sort
 import io.github.zeal18.zio.mongodb.driver.updates.{Update, addEachToSet}
-import io.github.zeal18.zio.mongodb.driver.{MongoClient, MongoDatabase, filters, updates}
-import io.greensheep.trading.core.types.{DailyQuoteData, Quote, Stock, StockDescription, Watchlist}
+import io.github.zeal18.zio.mongodb.driver.{MongoClient, MongoClientSettings, MongoDatabase, filters, updates}
+import io.greensheep.trading.core.types.{DailyQuoteData, Quote, ScreenStats, Stock, StockDescription, Watchlist}
 import zio.*
 import zio.stream.ZStream
-import zio.interop.reactivestreams._
+import zio.interop.reactivestreams.*
+import io.github.zeal18.zio.mongodb.bson.codecs.Codec.*
+import io.github.zeal18.zio.mongodb.bson.codecs.{CaseClassCodec, Codec, Decoder, Encoder}
+import org.bson.BsonWriter
+import org.bson.codecs.EncoderContext
+import org.bson.codecs.configuration.CodecRegistries
+
+
+
 
 
 object MongoDataRepo {
+
+
+
+
+  implicit val screenStatsCodec: Codec[Map[String,String]] = Codec(
+    (writer: BsonWriter, value: Map[String, String], encoderContext) => {
+      writer.writeStartDocument()
+      value.foreach { case (k, v) =>
+        writer.writeString(k, v)
+      }
+      writer.writeEndDocument()
+    },
+    (reader, decoderContext) => {
+      reader.readStartDocument()
+      val map = scala.collection.mutable.Map[String, String]()
+      while (reader.readBsonType() != org.bson.BsonType.END_OF_DOCUMENT) {
+        val key = reader.readName()
+        val value = reader.readString()
+        map += (key -> value)
+      }
+      reader.readEndDocument()
+      map.toMap
+    }
+  )
 
   def build(url: String, dbName: String): ZLayer[Any, Throwable, MongoDataRepo] = ZLayer.succeed {
     val mongoLayer = MongoClient.live(url) >>> ZLayer.fromZIO(ZIO.serviceWith[MongoClient](_.getDatabase(dbName)))

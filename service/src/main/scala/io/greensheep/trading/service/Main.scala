@@ -2,7 +2,7 @@ package io.greensheep.trading.service
 
 import io.github.zeal18.zio.mongodb.driver.MongoClient
 import io.greensheep.providers.polygon.PolygonAsyncApi
-import io.greensheep.trading.api.ApiEndpoints
+import io.greensheep.trading.api.{ApiEndpoints, ChartServices}
 import io.greensheep.trading.core.services.{DataRepo, DataSource}
 import io.greensheep.trading.core.types.Quote
 import io.greensheep.trading.dataservice.{LocalFileDataRepo, MongoDataRepo, MongoDbDataRepo, PolygonDataSource}
@@ -46,6 +46,9 @@ object Main extends ZIOAppDefault {
     val logging = Runtime.removeDefaultLoggers ++ logger
 
     val mongoLayer = MongoClient.live("mongodb://127.0.0.1:27017") >>> ZLayer.fromZIO(ZIO.serviceWith[MongoClient](_.getDatabase("polygon")))
+
+    val chartServiceLayer = mongoLayer >>> ChartServices.buildLayer
+
     // MongoDataRepo.build("mongodb://127.0.0.1:27017", "polygon")
 
     val intitializer = InitializationService.initializeApp()
@@ -64,7 +67,7 @@ object Main extends ZIOAppDefault {
       _ <- ZIO.never
     } yield ()
 
-    val program = everything.provide(environment ++ mongoLayer ++ logging ++ Server.defaultWithPort(7777))
+    val program = everything.provide(environment ++ mongoLayer ++ logging ++ Server.defaultWithPort(7777) ++ chartServiceLayer)
 
     program catchAll {
       th =>

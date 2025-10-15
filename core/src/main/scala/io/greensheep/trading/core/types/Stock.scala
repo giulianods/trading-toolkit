@@ -44,15 +44,15 @@ case class Stock(
 
   lazy val ma200: Double = ma(200)
 
-  lazy val high52Week: Double = dailyAggregates.map(_.c).takeRight(252).max
+  lazy val high52Week: Double = dailyAggregates.map(_.c).takeRight(200).max
 
-  lazy val low52Week: Double = dailyAggregates.map(_.c).takeRight(252).min
+  lazy val low52Week: Double = dailyAggregates.map(_.c).takeRight(200).min
 
-  lazy val perfQ1: Double = currentPrice / dailyAggregates.takeRight(63).head.c
+  lazy val perfQ1: Double = currentPrice * 100 / dailyAggregates.takeRight(50).head.c
 
-  lazy val perfQ2: Double = currentPrice / dailyAggregates.takeRight(126).head.c
+  lazy val perfQ2: Double = currentPrice * 100 / dailyAggregates.takeRight(100).head.c
 
-  lazy val perfQ3: Double = currentPrice / dailyAggregates.takeRight(189).head.c
+  lazy val perfQ3: Double = currentPrice * 100 / dailyAggregates.takeRight(150).head.c
 
-  lazy val perfQ4: Double = currentPrice / dailyAggregates.takeRight(252).head.c
+  lazy val perfQ4: Double = currentPrice * 100 / dailyAggregates.takeRight(200).head.c
 }

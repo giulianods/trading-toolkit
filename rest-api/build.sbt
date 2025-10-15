@@ -28,7 +28,8 @@ dependencyOverrides ++= Seq (
 
 libraryDependencies ++= Seq(
   "org.jfree" % "jfreechart" % "1.5.4",
-  "org.jfree" % "org.jfree.svg"   % "5.0.7"
+  "org.jfree" % "org.jfree.svg"   % "5.0.7",
+  "dev.zio"  %% "zio-cache"       % "0.2.3"
 )
 
 

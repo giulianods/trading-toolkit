@@ -16,7 +16,8 @@ object Watchlist {
 case class Watchlist(
                       day: LocalDate,
                       screenName: String,
-                      tickers: Seq[String]
+                      tickers: Seq[String],
+                      stats: Seq[ScreenStats]
                        ) {
 
   lazy val uuid: String = screenName + "-" + day

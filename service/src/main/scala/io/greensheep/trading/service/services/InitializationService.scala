@@ -99,7 +99,7 @@ object InitializationService {
           stockUniverse <- MongoDataRepo.getStockUniverse
           start = stockUniverse.lastUpdateQuotes
           end = LocalDate.now().minusDays(1)
-          _ <- if(start.isBefore(end)) QuotesServices.getDailySnapshotService(start, end) else ZIO.unit
+          _ <- QuotesServices.getDailySnapshotService(start, end).when(start.isBefore(end))
           _ <- MongoDataRepo.saveStockUniverse(stockUniverse.copy(lastUpdateQuotes = end, symbols = usCommonStocks))
         } yield ()
       }
@@ -122,7 +122,7 @@ object InitializationService {
       //_ <- InitializeDescriptions
       //_ <- initializeQuotes()
       //_ <- rectifySplits
-      //_ <- ScreenerServices.ScreenerTask
+      _ <- ScreenerServices.ScreenerTask
     } yield ()
   }
 
