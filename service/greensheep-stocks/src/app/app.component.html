@@ -13,6 +13,7 @@
     *ngFor="let s of symbols; let i = index"
     [class.focused]="focusedIndex === i"
     tabindex="0"
+    (focus)="onCardFocus(i)"
     #stockCard
   >
     <div class="description" *ngIf="descriptions[s]">

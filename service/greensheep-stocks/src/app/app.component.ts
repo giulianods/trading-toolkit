@@ -148,12 +148,15 @@ export class AppComponent implements OnInit, AfterViewInit {
       return;
     }
 
-    if (event.key === 'ArrowDown') {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
-      this.focusNext();
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      this.focusPrevious();
+      this.syncFocusedIndexWithViewport();
+
+      if (event.key === 'ArrowDown') {
+        this.focusNext();
+      } else {
+        this.focusPrevious();
+      }
     }
   }
 
@@ -183,5 +186,34 @@ export class AppComponent implements OnInit, AfterViewInit {
     const element = card.nativeElement;
     element.focus({ preventScroll: true });
     element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  private syncFocusedIndexWithViewport(): void {
+    if (!this.stockCards || !this.stockCards.length) {
+      return;
+    }
+
+    const cards = this.stockCards.toArray();
+    const viewportCenter = window.innerHeight / 2;
+
+    let closestIndex = this.focusedIndex;
+    let closestDistance = Number.POSITIVE_INFINITY;
+
+    cards.forEach((card, index) => {
+      const rect = card.nativeElement.getBoundingClientRect();
+      const cardCenter = rect.top + rect.height / 2;
+      const distance = Math.abs(cardCenter - viewportCenter);
+
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = index;
+      }
+    });
+
+    this.focusedIndex = closestIndex;
+  }
+
+  onCardFocus(index: number): void {
+    this.focusedIndex = index;
   }
 }
