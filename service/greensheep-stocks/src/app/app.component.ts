@@ -14,6 +14,11 @@ interface StockDescription {
   weightedSharesOutstanding: number;
 }
 
+interface StockStats {
+  ticker: string;
+  stats: { [key: string]: string };
+}
+
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
@@ -22,12 +27,32 @@ interface StockDescription {
 export class AppComponent implements OnInit {
   symbols: string[] = [];
   descriptions: { [symbol: string]: StockDescription } = {};
+  stats: { [ticker: string]: { [key: string]: string } } = {};
+  
+  // Mapping of stat keys to display names and their order
+  private statDisplayMapping: { [key: string]: string } = {
+    'IBD rank': 'IBD rank',
+    'IBD strength': 'IBD strength',
+    'currentPrice': 'Price',
+    'ma50': '50 Day MA',
+    'ma150': '150 Day MA',
+    'ma200': '200 Day MA',
+    'revenue': 'Revenue',
+  };
 
   constructor(private http: HttpClient) {}
 
   ngOnInit(): void {
-    this.http.get('/watchlists/SEPA', { responseType: 'text' }).subscribe(data => {
-      this.symbols = data.split('\n').filter(s => s.trim().length > 0);
+    this.http.get('/watchlists/SEPA', { responseType: 'json' }).subscribe(data => {
+      this.symbols = data['tickers'].slice(0, 100);
+      
+      // Extract and store stats data
+      if (data['stats']) {
+        data['stats'].forEach((statItem: StockStats) => {
+          this.stats[statItem.ticker] = statItem.stats;
+        });
+      }
+      
       this.symbols.forEach(s => {
         this.http.get<StockDescription>(`/description/${s}`).subscribe(desc => {
           this.descriptions[s] = desc;
@@ -38,5 +63,33 @@ export class AppComponent implements OnInit {
 
   chartUrl(symbol: string): string {
     return `/chart/${symbol}?days=200`;
+  }
+
+  getStatsArray(ticker: string): { key: string; value: string }[] {
+    if (!this.stats[ticker]) {
+      return [];
+    }
+    
+    // Get stats in the order defined by the mapping
+    const orderedStats: { key: string; value: string }[] = [];
+    
+    // First, add stats that are in our mapping in the defined order
+    Object.keys(this.statDisplayMapping).forEach(statKey => {
+      if (this.stats[ticker][statKey]) {
+        orderedStats.push({
+          key: this.statDisplayMapping[statKey],
+          value: this.stats[ticker][statKey]
+        });
+      }
+    });
+    
+    // Then, add any remaining stats that aren't in our mapping
+    Object.entries(this.stats[ticker]).forEach(([key, value]) => {
+      if (!this.statDisplayMapping[key]) {
+        orderedStats.push({ key, value });
+      }
+    });
+    
+    return orderedStats;
   }
 }

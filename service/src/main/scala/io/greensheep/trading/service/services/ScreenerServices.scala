@@ -2,7 +2,7 @@ package io.greensheep.trading.service.services
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.trading.core.screens.{SepaScreens, TrendScreens}
-import io.greensheep.trading.core.types.{DailyAggregate, DailyQuoteData, Stock, StockMarket, Watchlist}
+import io.greensheep.trading.core.types.{DailyAggregate, DailyQuoteData, ScreenStats, Stock, StockMarket, Watchlist}
 import io.greensheep.trading.dataservice.MongoDataRepo
 import zio.{Chunk, ZIO, ZLayer}
 
@@ -31,11 +31,12 @@ object ScreenerServices {
     ))
   } yield StockMarket(stocks.map(s => s.symbol -> s).toMap)
 
-  def buildWatchlist(name: String)(stocks: Seq[Stock]): ZIO[Any, Throwable, Watchlist] = ZIO.succeed {
+  def buildWatchlist(name: String)(stocks: Seq[(Stock, ScreenStats)]): ZIO[Any, Throwable, Watchlist] = ZIO.succeed {
     Watchlist(
       day = java.time.LocalDate.now(),
       screenName = name,
-      tickers = stocks.map(_.symbol)
+      tickers = stocks.map(_._1.symbol),
+      stats = stocks.map(_._2)
     )
   }
 

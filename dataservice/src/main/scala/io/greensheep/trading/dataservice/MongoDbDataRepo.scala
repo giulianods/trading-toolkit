@@ -9,7 +9,7 @@ import io.greensheep.providers.polygon.datatypes.{Aggregate, TickerDetails}
 import io.greensheep.providers.polygon.{PolygonSettings, ReferenceClient}
 import io.greensheep.providers.polygon.requests.TickersRequest
 import io.greensheep.trading.core.services.{DataRepo, DataSource}
-import io.greensheep.trading.core.types.{AnnualFinancialData, DailyAggregate, QuarterlyFinancialData, Quote, Stock, Watchlist}
+import io.greensheep.trading.core.types.{AnnualFinancialData, DailyAggregate, QuarterlyFinancialData, Quote, ScreenStats, Stock, Watchlist}
 import org.bson.Document
 import zio.http.Client
 import zio.stream.ZStream
@@ -312,10 +312,17 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
     val uuid = s"$day-$screen-polygon"
     val wlCollection = getCollection("watchlist", "greensheep-trading").get
     val document = wlCollection.find(com.mongodb.client.model.Filters.eq("_id", uuid)).first()
+
     Watchlist(
       day = document.get("day").asInstanceOf[LocalDate],
       screenName = document.get("screenName").asInstanceOf[String],
-      tickers = document.get("tickers").asInstanceOf[java.lang.Iterable[String]].asScala.toSeq
+      tickers = document.get("tickers").asInstanceOf[java.lang.Iterable[String]].asScala.toSeq,
+      stats = document.get("stats").asInstanceOf[java.lang.Iterable[Document]].asScala.map { doc =>
+        ScreenStats(
+          ticker = doc.get("ticker").asInstanceOf[String],
+          stats = doc.get("stats").asInstanceOf[Document].asInstanceOf[Map[String, String]]
+        )
+      }.toSeq
     )
   }
 

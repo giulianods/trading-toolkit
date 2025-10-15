@@ -20,7 +20,7 @@ object ApiEndpoints {
     (Response.text(stackTrace).status(Status.InternalServerError))
   }
 
-  def buildRestApi: HttpApp[MongoDatabase] = {
+  def buildRestApi: HttpApp[MongoDatabase & ChartServices] = {
     Routes(
       // This line works fine
       (Method.GET / "quotes" / string("ticker")) -> {
@@ -39,8 +39,7 @@ object ApiEndpoints {
             for {
               _ <- ZIO.logInfo(s"Received request for watchlist: $name")
               watchlist <- MongoDataRepo.getWatchlistLatest(name)
-              symbolsCsv  = watchlist.tickers.mkString("\n")
-            } yield Response.text(symbolsCsv)
+            } yield Response.json(watchlist.toJson)
           }
         }.mapError(handleError)
       },
@@ -49,8 +48,8 @@ object ApiEndpoints {
           case (ticker, req) =>
             val days = req.url.queryParams.get("days").map(_.toInt).getOrElse(100)
             for {
-              _    <- ZIO.logInfo(s"Received chart request for ticker: $ticker for $days days")
-              svg  <- ChartServices.chartSvg(ticker, days)
+              chartService <- ZIO.service[ChartServices]
+              svg  <- chartService.chartSvg(ticker, days)
             } yield Response.text(svg).addHeader(Header.Custom("Content-Type", "image/svg+xml"))
         }.mapError(handleError)
       },

@@ -39,7 +39,7 @@ object Screener extends ZIOAppDefault  {
       results = sepaScreens.screen()
       _ = results.foreach(s => println(s.symbol + ","))
       wl = Watchlist(day = java.time.LocalDate.now(),
-        screenName = "SEPA", tickers = results.map(_.symbol))
+        screenName = "SEPA", tickers = results.map(_.symbol), stats = Seq())
       _ = MongoDataRepo.saveWatchlist(wl)
       _ = println(s"Finished in ${(java.lang.System.currentTimeMillis() - time) / 1000} seconds")
     } yield ()
