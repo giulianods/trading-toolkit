@@ -29,7 +29,11 @@ object TrendScreens {
                 "52WeekHigh" -> f"${stock.high52Week}%.2f",
                 "52WeekLow" -> f"${stock.low52Week}%.2f",
                 "IBD strength" -> f"${stockMarket.ibdRelativeStrength(stock.symbol)}%.2f",
-                "IBD rank" -> f"${stockMarket.ibdRelativeStrengthRanking(stock.symbol)}%.2f"
+                "IBD rank" -> f"${stockMarket.ibdRelativeStrengthRanking(stock.symbol)}%.2f",
+                "perf1q" -> f"${stock.perfQ1}%.2f",
+                "perf2q" -> f"${stock.perfQ2}%.2f",
+                "perf3q" -> f"${stock.perfQ3}%.2f",
+                "perf4q" -> f"${stock.perfQ4}%.2f"
               )
             ))
         }

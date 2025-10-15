@@ -37,7 +37,10 @@ export class AppComponent implements OnInit {
     'ma50': '50 Day MA',
     'ma150': '150 Day MA',
     'ma200': '200 Day MA',
-    'revenue': 'Revenue',
+    'perf1q': '1Q Performance',
+    'perf2q': '2Q Performance',
+    'perf3q': '3Q Performance',
+    'perf4q': '4Q Performance',
   };
 
   constructor(private http: HttpClient) {}
