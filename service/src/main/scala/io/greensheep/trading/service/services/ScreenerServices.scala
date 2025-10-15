@@ -31,6 +31,14 @@ object ScreenerServices {
     ))
   } yield StockMarket(stocks.map(s => s.symbol -> s).toMap)
 
+  def loadQutes(upTo: LocalDate) = {
+    LoadQuotes.map {
+      sm => sm.copy(stocks = sm.stocks.map {
+        case (k, v) => k -> v.copy(dailyAggregates = v.dailyAggregates.filter(_.t.isBefore(upTo)))
+      })
+    }
+  }
+
   def buildWatchlist(name: String)(stocks: Seq[(Stock, ScreenStats)]): ZIO[Any, Throwable, Watchlist] = ZIO.succeed {
     Watchlist(
       day = java.time.LocalDate.now(),
@@ -44,6 +52,7 @@ object ScreenerServices {
     val stockMarket = ZLayer.fromZIO(LoadQuotes)
     ZIO.collectAll(Seq(
       TrendScreens.SEPA.provideLayer(stockMarket) flatMap buildWatchlist("SEPA"),
+      TrendScreens.VolatilityContractionPattern.provideLayer(stockMarket) flatMap buildWatchlist("VCP"),
       TrendScreens.SevenPctUp.provideLayer(stockMarket) flatMap buildWatchlist("7_PCT_UP"),
       TrendScreens.SevenPctDown.provideLayer(stockMarket) flatMap buildWatchlist("7_PCT_DOWN")
     ))

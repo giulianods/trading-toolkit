@@ -46,7 +46,7 @@ export class AppComponent implements OnInit {
   constructor(private http: HttpClient) {}
 
   ngOnInit(): void {
-    this.http.get('/watchlists/SEPA', { responseType: 'json' }).subscribe(data => {
+    this.http.get('/watchlists/7_PCT_UP', { responseType: 'json' }).subscribe(data => {
       this.symbols = data['tickers'].slice(0, 100);
       
       // Extract and store stats data
