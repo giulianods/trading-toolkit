@@ -1,4 +1,12 @@
-import { Component, OnInit } from '@angular/core';
+import {
+  AfterViewInit,
+  Component,
+  ElementRef,
+  HostListener,
+  OnInit,
+  QueryList,
+  ViewChildren,
+} from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 
 interface StockDescription {
@@ -24,10 +32,23 @@ interface StockStats {
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements OnInit, AfterViewInit {
   symbols: string[] = [];
   descriptions: { [symbol: string]: StockDescription } = {};
   stats: { [ticker: string]: { [key: string]: string } } = {};
+
+  watchlists: { label: string; value: string }[] = [
+    { label: 'SEPA', value: 'SEPA' },
+    { label: '7% Up', value: '7_PCT_UP' },
+    { label: '7% Down', value: '7_PCT_DOWN' },
+    { label: 'VCP', value: 'VCP' }
+  ];
+
+  selectedWatchlist: string = this.watchlists[1].value;
+  focusedIndex = 0;
+
+  @ViewChildren('stockCard')
+  stockCards!: QueryList<ElementRef<HTMLDivElement>>;
   
   // Mapping of stat keys to display names and their order
   private statDisplayMapping: { [key: string]: string } = {
@@ -46,22 +67,47 @@ export class AppComponent implements OnInit {
   constructor(private http: HttpClient) {}
 
   ngOnInit(): void {
-    this.http.get('/watchlists/7_PCT_UP', { responseType: 'json' }).subscribe(data => {
+    this.loadWatchlist(this.selectedWatchlist);
+  }
+
+  ngAfterViewInit(): void {
+    this.stockCards.changes.subscribe(() => {
+      this.focusStock(this.focusedIndex);
+    });
+  }
+
+  loadWatchlist(watchlist: string): void {
+    this.selectedWatchlist = watchlist;
+    this.symbols = [];
+    this.descriptions = {};
+    this.stats = {};
+    this.focusedIndex = 0;
+
+    this.http.get(`/watchlists/${watchlist}`, { responseType: 'json' }).subscribe((data: any) => {
       this.symbols = data['tickers'].slice(0, 100);
-      
+
+      setTimeout(() => {
+        this.focusStock(this.focusedIndex);
+      });
+
       // Extract and store stats data
       if (data['stats']) {
         data['stats'].forEach((statItem: StockStats) => {
           this.stats[statItem.ticker] = statItem.stats;
         });
       }
-      
+
       this.symbols.forEach(s => {
         this.http.get<StockDescription>(`/description/${s}`).subscribe(desc => {
           this.descriptions[s] = desc;
         });
       });
     });
+  }
+
+  onWatchlistChange(event: Event): void {
+    const selectedWatchlist = (event.target as HTMLSelectElement).value;
+    this.loadWatchlist(selectedWatchlist);
   }
 
   chartUrl(symbol: string): string {
@@ -92,7 +138,82 @@ export class AppComponent implements OnInit {
         orderedStats.push({ key, value });
       }
     });
-    
+
     return orderedStats;
+  }
+
+  @HostListener('window:keydown', ['$event'])
+  handleKeydown(event: KeyboardEvent): void {
+    if (!this.symbols.length) {
+      return;
+    }
+
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.syncFocusedIndexWithViewport();
+
+      if (event.key === 'ArrowDown') {
+        this.focusNext();
+      } else {
+        this.focusPrevious();
+      }
+    }
+  }
+
+  private focusNext(): void {
+    const nextIndex = Math.min(this.focusedIndex + 1, this.symbols.length - 1);
+    this.focusStock(nextIndex);
+  }
+
+  private focusPrevious(): void {
+    const previousIndex = Math.max(this.focusedIndex - 1, 0);
+    this.focusStock(previousIndex);
+  }
+
+  private focusStock(index: number): void {
+    if (!this.symbols.length) {
+      return;
+    }
+
+    const boundedIndex = Math.min(Math.max(index, 0), this.symbols.length - 1);
+    this.focusedIndex = boundedIndex;
+
+    const card = this.stockCards?.toArray()[boundedIndex];
+    if (!card) {
+      return;
+    }
+
+    const element = card.nativeElement;
+    element.focus({ preventScroll: true });
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  private syncFocusedIndexWithViewport(): void {
+    if (!this.stockCards || !this.stockCards.length) {
+      return;
+    }
+
+    const cards = this.stockCards.toArray();
+    const viewportCenter = window.innerHeight / 2;
+
+    let closestIndex = this.focusedIndex;
+    let closestDistance = Number.POSITIVE_INFINITY;
+
+    cards.forEach((card, index) => {
+      const rect = card.nativeElement.getBoundingClientRect();
+      const cardCenter = rect.top + rect.height / 2;
+      const distance = Math.abs(cardCenter - viewportCenter);
+
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = index;
+      }
+    });
+
+    this.focusedIndex = closestIndex;
+  }
+
+  onCardFocus(index: number): void {
+    this.focusedIndex = index;
   }
 }
