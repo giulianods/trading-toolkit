@@ -36,6 +36,13 @@
   max-width: 100%;
   gap: 1rem;
   align-items: flex-start;
+  outline: none;
+}
+
+.stock.focused,
+.stock:focus {
+  box-shadow: 0 0 0 2px var(--primary-green);
+  border-radius: 4px;
 }
 .stock img {
   width: 500px;

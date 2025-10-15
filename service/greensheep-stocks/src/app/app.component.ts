@@ -1,4 +1,12 @@
-import { Component, OnInit } from '@angular/core';
+import {
+  AfterViewInit,
+  Component,
+  ElementRef,
+  HostListener,
+  OnInit,
+  QueryList,
+  ViewChildren,
+} from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 
 interface StockDescription {
@@ -24,7 +32,7 @@ interface StockStats {
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements OnInit, AfterViewInit {
   symbols: string[] = [];
   descriptions: { [symbol: string]: StockDescription } = {};
   stats: { [ticker: string]: { [key: string]: string } } = {};
@@ -37,6 +45,10 @@ export class AppComponent implements OnInit {
   ];
 
   selectedWatchlist: string = this.watchlists[1].value;
+  focusedIndex = 0;
+
+  @ViewChildren('stockCard')
+  stockCards!: QueryList<ElementRef<HTMLDivElement>>;
   
   // Mapping of stat keys to display names and their order
   private statDisplayMapping: { [key: string]: string } = {
@@ -58,14 +70,25 @@ export class AppComponent implements OnInit {
     this.loadWatchlist(this.selectedWatchlist);
   }
 
+  ngAfterViewInit(): void {
+    this.stockCards.changes.subscribe(() => {
+      this.focusStock(this.focusedIndex);
+    });
+  }
+
   loadWatchlist(watchlist: string): void {
     this.selectedWatchlist = watchlist;
     this.symbols = [];
     this.descriptions = {};
     this.stats = {};
+    this.focusedIndex = 0;
 
     this.http.get(`/watchlists/${watchlist}`, { responseType: 'json' }).subscribe((data: any) => {
       this.symbols = data['tickers'].slice(0, 100);
+
+      setTimeout(() => {
+        this.focusStock(this.focusedIndex);
+      });
 
       // Extract and store stats data
       if (data['stats']) {
@@ -115,7 +138,50 @@ export class AppComponent implements OnInit {
         orderedStats.push({ key, value });
       }
     });
-    
+
     return orderedStats;
+  }
+
+  @HostListener('window:keydown', ['$event'])
+  handleKeydown(event: KeyboardEvent): void {
+    if (!this.symbols.length) {
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.focusNext();
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.focusPrevious();
+    }
+  }
+
+  private focusNext(): void {
+    const nextIndex = Math.min(this.focusedIndex + 1, this.symbols.length - 1);
+    this.focusStock(nextIndex);
+  }
+
+  private focusPrevious(): void {
+    const previousIndex = Math.max(this.focusedIndex - 1, 0);
+    this.focusStock(previousIndex);
+  }
+
+  private focusStock(index: number): void {
+    if (!this.symbols.length) {
+      return;
+    }
+
+    const boundedIndex = Math.min(Math.max(index, 0), this.symbols.length - 1);
+    this.focusedIndex = boundedIndex;
+
+    const card = this.stockCards?.toArray()[boundedIndex];
+    if (!card) {
+      return;
+    }
+
+    const element = card.nativeElement;
+    element.focus({ preventScroll: true });
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 }
