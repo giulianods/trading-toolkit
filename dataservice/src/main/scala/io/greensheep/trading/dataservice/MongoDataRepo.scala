@@ -100,6 +100,14 @@ object MongoDataRepo {
     } yield su.get
   }
 
+  def clearQuotes(ticker: String): ZIO[MongoDatabase, Throwable, Unit] = {
+    for {
+      db <- ZIO.service[MongoDatabase]
+      coll = db.getCollection[DailyQuoteData]("daily-quotes")
+      _ <- coll.updateOne(filters.eq("_id", ticker), updates.set("quotes", Seq.empty)).map(_.wasAcknowledged())
+    } yield ()
+  }
+
   def updateDailyQuotes(ticker: String, quotes: Seq[Quote]): ZIO[MongoDatabase, Throwable, Unit] = {
     for {
       db <- ZIO.service[MongoDatabase]

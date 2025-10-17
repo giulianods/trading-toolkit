@@ -44,7 +44,7 @@ export class AppComponent implements OnInit, AfterViewInit {
     { label: 'VCP', value: 'VCP' }
   ];
 
-  selectedWatchlist: string = this.watchlists[1].value;
+  selectedWatchlist: string = this.watchlists[0].value;
   focusedIndex = 0;
 
   @ViewChildren('stockCard')

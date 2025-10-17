@@ -2,8 +2,10 @@ package io.greensheep.trading.service.services
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.providers.polygon.PolygonAsyncApi
+import io.greensheep.trading.core.utils.QuotesValidation
 import io.greensheep.trading.dataservice.{MongoDataRepo, MongoDbDataRepo, PolygonBridge, StockUniverse}
 import zio.*
+import zio.prelude.ZValidation
 import zio.stream.ZStream
 
 import scala.jdk.CollectionConverters.*
@@ -32,6 +34,16 @@ object QuotesServices {
       end = LocalDate.now().minusDays(1)
       _ <- if (start.isBefore(end)) QuotesServices.getDailySnapshotService(start, end) else ZIO.unit
       _ <- MongoDataRepo.saveStockUniverse(stockUniverse.copy(lastUpdateQuotes = end))
+    } yield ()
+  }
+
+  def sanityCheck(ticker: String): ZIO[MongoDatabase, String, Unit] = ZIO.logSpan("sanity-check") {
+    for {
+      quotes <- MongoDataRepo.getPriceData(ticker).mapError(_.getMessage)
+      validation <- QuotesValidation.validateAll(quotes) match {
+        case ZValidation.Failure(log, errors) => ZIO.fail(errors.mkString(", "))
+        case ZValidation.Success(log, value) => ZIO.succeed(())
+      }
     } yield ()
   }
 

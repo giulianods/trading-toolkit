@@ -3,7 +3,7 @@ package io.greensheep.trading.service.services
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.providers.polygon.PolygonAsyncApi
 import io.greensheep.trading.core.types.StockDescription
-import io.greensheep.trading.dataservice.{MongoDataRepo, StockUniverse}
+import io.greensheep.trading.dataservice.{MongoDataRepo, PolygonBridge, StockUniverse}
 import zio.ZIO
 
 import java.time.LocalDate
@@ -106,6 +106,43 @@ object InitializationService {
     } yield ()
   }
 
+  private def quotesSanityCheck: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Seq[(String, String)]] = {
+    for{
+      _ <- ZIO.logInfo("Performing quotes sanity check")
+      universe <- MongoDataRepo.getStockUniverse
+      results <- ZIO.foreachPar(universe.symbols)(ticker =>
+        QuotesServices.sanityCheck(ticker).either.map(res => (ticker, res))
+      )
+      errors = results.collect { case (t, Left(err)) => (t, err) }
+    } yield errors
+  }
+
+  private def resetQuotes(ticker: String): ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] = {
+    for{
+      _ <- ZIO.logInfo(s"Resetting quotes for $ticker")
+      _ <- MongoDataRepo.clearQuotes(ticker)
+      //Retrieve quotes from Polygon
+      remoteApi <- ZIO.service[PolygonAsyncApi]
+      allQuotes <- remoteApi.getAggregates(ticker, LocalDate.now().minusMonths(23))
+      quotes = allQuotes.map(PolygonBridge.aggregateToQuote)
+      //Save quotes to MongoDB
+      _ <- MongoDataRepo.updateDailyQuotes(ticker, quotes)
+      _ <- ZIO.logInfo(s"Reset quotes for $ticker completed, total quotes: ${quotes.size}")
+    } yield ()
+  }
+
+
+  private def repairQuotes: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] = {
+    for{
+      _ <- ZIO.logInfo("Repairing quote data")
+      faults <- quotesSanityCheck
+      _ <- ZIO.logInfo(s"Faulty tickers: ${faults.size}")
+      _ <- ZIO.foreachDiscard(faults)(fault => ZIO.logInfo(s"$fault"))
+      faultyTickers = faults.map(_._1)
+      _ <- ZIO.foreach(faultyTickers)(resetQuotes)
+    } yield ()
+  }
+
   private def rectifySplits: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] = {
     for{
       _ <- ZIO.logInfo("Rectifying split data")
@@ -119,6 +156,7 @@ object InitializationService {
   def initializeApp(): ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] =  {
     for {
       _ <- InitializeStockUniverse
+      _ <- repairQuotes
       //_ <- InitializeDescriptions
       //_ <- initializeQuotes()
       //_ <- rectifySplits
