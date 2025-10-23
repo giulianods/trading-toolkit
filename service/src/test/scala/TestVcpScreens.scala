@@ -47,9 +47,9 @@ object TestVcpScreens extends ZIOSpecDefault {
 
   override def spec: Spec[TestEnvironment, Any] = {
     val mongoLayer = MongoClient.live("mongodb://127.0.0.1:27017") >>> ZLayer.fromZIO(ZIO.serviceWith[MongoClient](_.getDatabase("polygon")))
-    val market = ScreenerServices.loadQutes(LocalDate.now().minusDays(50)).provideLayer(mongoLayer)
+    val market = ZLayer.fromZIO(ScreenerServices.LoadQuotes.provideLayer(mongoLayer))
     suite("VCP tests")(
       firstTest
-    ).provideLayer(ZLayer.fromZIO(market))
+    ).provideLayer(market)
   }
 }

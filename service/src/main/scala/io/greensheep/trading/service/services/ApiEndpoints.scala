@@ -1,13 +1,17 @@
-package io.greensheep.trading.api
+package io.greensheep.trading.service.services
+
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
+import io.greensheep.trading.api.ChartServices
 import io.greensheep.trading.core.types.{DailyQuoteData, Watchlist}
 import io.greensheep.trading.dataservice.MongoDataRepo
+import io.greensheep.trading.service.services.ScreenerServices
 import zio.*
 import zio.http.*
 import zio.json.EncoderOps
 
 import java.io.{PrintWriter, StringWriter}
 import java.lang
+import java.time.LocalDate
 object ApiEndpoints {
 
 
@@ -47,11 +51,26 @@ object ApiEndpoints {
       },
       (Method.GET / "watchlists" / string("name")) -> {
         Handler.fromFunctionZIO[(String, Request)]{
-          case (name, _) => {
-            for {
-              _ <- ZIO.logInfo(s"Received request for watchlist: $name")
-              watchlist <- MongoDataRepo.getWatchlistLatest(name)
-            } yield Response.json(watchlist.toJson)
+          case (name, req) => {
+            val upToDay = req.url.queryParams.get("day").getOrElse(LocalDate.now().toString)
+            req.url.queryParams.get("day") match {
+              case Some(upToDay) =>
+                for {
+                  day <- ZIO.attempt(LocalDate.parse(upToDay))
+                  _ <- ZIO.logInfo(s"Received request for watchlist: $name")
+                  watchlist <- MongoDataRepo.getWatchlist(name, day)
+                    .catchSome {
+                      case _: NoSuchElementException =>
+                        ScreenerServices.buildScreensForDate(day).map(_.find(_.screenName == name).get)
+                    }
+                } yield Response.json(watchlist.toJson)
+              case None =>
+                for {
+                  day <- ZIO.attempt(LocalDate.now())
+                  _ <- ZIO.logInfo(s"Received request for watchlist: $name")
+                  watchlist <- MongoDataRepo.getWatchlistLatest(name)
+                } yield Response.json(watchlist.toJson)
+            }
           }
         }.mapError(handleError)
       },

@@ -31,13 +31,7 @@ object ScreenerServices {
     ))
   } yield StockMarket(stocks.map(s => s.symbol -> s).toMap)
 
-  def loadQutes(upTo: LocalDate) = {
-    LoadQuotes.map {
-      sm => sm.copy(stocks = sm.stocks.map {
-        case (k, v) => k -> v.copy(dailyAggregates = v.dailyAggregates.filter(_.t.isBefore(upTo)))
-      })
-    }
-  }
+
 
   def buildWatchlist(name: String)(stocks: Seq[(Stock, ScreenStats)]): ZIO[Any, Throwable, Watchlist] = ZIO.succeed {
     Watchlist(
@@ -48,14 +42,33 @@ object ScreenerServices {
     )
   }
 
+  val Screens: ZIO[StockMarket, Throwable, Seq[Watchlist]] = {
+    ZIO.collectAll(Seq(
+      TrendScreens.SEPA.flatMap(buildWatchlist("SEPA")),
+      TrendScreens.VolatilityContractionPattern.flatMap(buildWatchlist("VCP")),
+      TrendScreens.SevenPctUp.flatMap(buildWatchlist("7_PCT_UP")),
+      TrendScreens.SevenPctDown.flatMap(buildWatchlist("7_PCT_DOWN"))
+    ))
+  }
+
   def getScreens: ZIO[MongoDatabase, Throwable, Seq[Watchlist]] = {
     val stockMarket = ZLayer.fromZIO(LoadQuotes)
-    ZIO.collectAll(Seq(
-      TrendScreens.SEPA.provideLayer(stockMarket) flatMap buildWatchlist("SEPA"),
-      TrendScreens.VolatilityContractionPattern.provideLayer(stockMarket) flatMap buildWatchlist("VCP"),
-      TrendScreens.SevenPctUp.provideLayer(stockMarket) flatMap buildWatchlist("7_PCT_UP"),
-      TrendScreens.SevenPctDown.provideLayer(stockMarket) flatMap buildWatchlist("7_PCT_DOWN")
-    ))
+    Screens.provideLayer(stockMarket)
+  }
+
+
+  def getScreensForDate(date: LocalDate): ZIO[MongoDatabase, Throwable, Seq[Watchlist]] = {
+    val stockMarket = ZLayer.fromZIO(LoadQuotes.map(_.historicalSnapshot(date)))
+    Screens.provideLayer(stockMarket)
+  }
+
+  def buildScreensForDate(date: LocalDate): ZIO[MongoDatabase, Throwable, Seq[Watchlist]] = {
+    for {
+      _ <- ZIO.logInfo(s"Building screens for date: $date")
+      watchlists <- getScreensForDate(date)
+      _ <- ZIO.foreachDiscard(watchlists)(MongoDataRepo.saveWatchlist)
+      _ <- ZIO.logInfo(s"Saved ${watchlists.size} watchlists for date: $date")
+    } yield watchlists
   }
 
 

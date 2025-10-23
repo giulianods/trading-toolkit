@@ -2,12 +2,12 @@ package io.greensheep.trading.service
 
 import io.github.zeal18.zio.mongodb.driver.MongoClient
 import io.greensheep.providers.polygon.PolygonAsyncApi
-import io.greensheep.trading.api.{ApiEndpoints, ChartServices}
+import io.greensheep.trading.api.ChartServices
 import io.greensheep.trading.core.services.{DataRepo, DataSource}
 import io.greensheep.trading.core.types.Quote
 import io.greensheep.trading.dataservice.{LocalFileDataRepo, MongoDataRepo, MongoDbDataRepo, PolygonDataSource}
 import io.greensheep.trading.service.app.{CronJobs, WebApp}
-import io.greensheep.trading.service.services.{InitializationService, QuotesServices}
+import io.greensheep.trading.service.services.{ApiEndpoints, InitializationService, QuotesServices}
 import zio.*
 import zio.http.{Client, Server, URL}
 import zio.http.Header.Authorization
@@ -49,6 +49,10 @@ object Main extends ZIOAppDefault {
 
     val chartServiceLayer = mongoLayer >>> ChartServices.buildLayer
 
+    val restPort = 7777
+
+    val restServer = Server.defaultWithPort(restPort)
+
     // MongoDataRepo.build("mongodb://127.0.0.1:27017", "polygon")
 
     val intitializer = InitializationService.initializeApp()
@@ -61,13 +65,13 @@ object Main extends ZIOAppDefault {
       api = ApiEndpoints.buildRestApi
       web = WebApp.app
       _ <- Server.install(api ++ web)
-      _ <- ZIO.logInfo(s"Rest api started on ${Server.Config.default.address}")
+      _ <- ZIO.logInfo(s"Rest api started on ${}")
       _ <- CronJobs.start
       _ <- ZIO.logInfo("Cron jobs started")
       _ <- ZIO.never
     } yield ()
 
-    val program = everything.provide(environment ++ mongoLayer ++ logging ++ Server.defaultWithPort(7777) ++ chartServiceLayer)
+    val program = everything.provide(environment ++ mongoLayer ++ logging ++ restServer ++ chartServiceLayer)
 
     program catchAll {
       th =>

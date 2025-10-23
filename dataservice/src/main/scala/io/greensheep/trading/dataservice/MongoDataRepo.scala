@@ -14,6 +14,8 @@ import org.bson.BsonWriter
 import org.bson.codecs.EncoderContext
 import org.bson.codecs.configuration.CodecRegistries
 
+import java.time.LocalDate
+
 
 
 
@@ -143,6 +145,18 @@ object MongoDataRepo {
       coll = db.getCollection[Watchlist]("watchlist")
       watchlistOpt <- coll.find(filters.eq("screenName", name)).sort(Sort.Desc("day")).runHead
       watchlist <- ZIO.fromOption(watchlistOpt).orElseFail(new NoSuchElementException(s"No watchlist found for name $name"))
+    } yield watchlist
+  }
+
+  def getWatchlist(name: String, day: LocalDate) : ZIO[MongoDatabase, Throwable, Watchlist] = {
+    for {
+      db <- ZIO.service[MongoDatabase]
+      coll = db.getCollection[Watchlist]("watchlist")
+      watchlistOpt <- coll.find(filters.and(
+        filters.eq("screenName", name),
+        filters.eq("day", day)
+      )).runHead
+      watchlist <- ZIO.fromOption(watchlistOpt).orElseFail(new NoSuchElementException(s"No watchlist found for name $name and day $day"))
     } yield watchlist
   }
 

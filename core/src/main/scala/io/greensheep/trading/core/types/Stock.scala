@@ -55,4 +55,8 @@ case class Stock(
   lazy val perfQ3: Double = currentPrice * 100 / dailyAggregates.takeRight(150).head.c
 
   lazy val perfQ4: Double = currentPrice * 100 / dailyAggregates.takeRight(200).head.c
+
+  def historicalSnapshot(upTo: java.time.LocalDate): Stock = {
+    copy(dailyAggregates = dailyAggregates.filter(d => d.t.isBefore(upTo) || d.t.isEqual(upTo)))
+  }
 }

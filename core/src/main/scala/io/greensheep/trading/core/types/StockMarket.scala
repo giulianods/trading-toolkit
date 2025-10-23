@@ -21,4 +21,13 @@ case class StockMarket(stocks: Map[String, Stock]) {
         s.symbol -> ibdStrength
     }
   }.toMap
+
+
+  def historicalSnapshot(upTo: java.time.LocalDate): StockMarket = {
+    StockMarket(
+      stocks.map {
+        case (k, v) => k -> v.historicalSnapshot(upTo)
+      }
+    )
+  }
 }
