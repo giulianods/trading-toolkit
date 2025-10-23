@@ -79,8 +79,9 @@ object ApiEndpoints {
           case (ticker, req) =>
             val days = req.url.queryParams.get("days").map(_.toInt).getOrElse(100)
             for {
+              highlightDay <- ZIO.foreach(req.url.queryParams.get("day"))(day => ZIO.attempt(LocalDate.parse(day)))
               chartService <- ZIO.service[ChartServices]
-              svg  <- chartService.chartSvg(ticker, days)
+              svg  <- chartService.chartSvg(ticker, days, highlightDay = highlightDay)
             } yield Response.text(svg).addHeader(Header.Custom("Content-Type", "image/svg+xml"))
         }.mapError(handleError)
       },

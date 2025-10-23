@@ -124,7 +124,13 @@ export class AppComponent implements OnInit, AfterViewInit {
   }
 
   chartUrl(symbol: string): string {
-    return `/chart/${symbol}?days=200`;
+    let url = `/chart/${symbol}?days=200`;
+
+    if (this.selectedDay && this.selectedDay !== this.todayString) {
+      url += `&day=${this.selectedDay}`;
+    }
+
+    return url;
   }
 
   getStatsArray(ticker: string): { key: string; value: string }[] {
