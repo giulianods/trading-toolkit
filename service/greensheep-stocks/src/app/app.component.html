@@ -5,6 +5,14 @@
       {{ watchlist.label }}
     </option>
   </select>
+  <label for="watchlist-date">Date:</label>
+  <input
+    id="watchlist-date"
+    type="date"
+    [value]="selectedDay"
+    [max]="todayString"
+    (change)="onDateChange($event)"
+  >
 </div>
 
 <div class="charts">

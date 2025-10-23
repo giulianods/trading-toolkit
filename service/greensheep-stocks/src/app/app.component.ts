@@ -45,6 +45,8 @@ export class AppComponent implements OnInit, AfterViewInit {
   ];
 
   selectedWatchlist: string = this.watchlists[0].value;
+  todayString: string;
+  selectedDay: string;
   focusedIndex = 0;
 
   @ViewChildren('stockCard')
@@ -64,7 +66,10 @@ export class AppComponent implements OnInit, AfterViewInit {
     'perf4q': '4Q Performance',
   };
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient) {
+    this.todayString = this.formatDate(new Date());
+    this.selectedDay = this.todayString;
+  }
 
   ngOnInit(): void {
     this.loadWatchlist(this.selectedWatchlist);
@@ -83,7 +88,9 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.stats = {};
     this.focusedIndex = 0;
 
-    this.http.get(`/watchlists/${watchlist}`, { responseType: 'json' }).subscribe((data: any) => {
+    const url = this.buildWatchlistUrl(watchlist);
+
+    this.http.get(url, { responseType: 'json' }).subscribe((data: any) => {
       this.symbols = data['tickers'].slice(0, 100);
 
       setTimeout(() => {
@@ -108,6 +115,12 @@ export class AppComponent implements OnInit, AfterViewInit {
   onWatchlistChange(event: Event): void {
     const selectedWatchlist = (event.target as HTMLSelectElement).value;
     this.loadWatchlist(selectedWatchlist);
+  }
+
+  onDateChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.selectedDay = input.value || this.todayString;
+    this.loadWatchlist(this.selectedWatchlist);
   }
 
   chartUrl(symbol: string): string {
@@ -211,6 +224,21 @@ export class AppComponent implements OnInit, AfterViewInit {
     });
 
     this.focusedIndex = closestIndex;
+  }
+
+  private buildWatchlistUrl(watchlist: string): string {
+    if (this.selectedDay && this.selectedDay !== this.todayString) {
+      return `/watchlists/${watchlist}?day=${this.selectedDay}`;
+    }
+
+    return `/watchlists/${watchlist}`;
+  }
+
+  private formatDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day = `${date.getDate()}`.padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   onCardFocus(index: number): void {
