@@ -42,12 +42,30 @@ object ScreenerServices {
     )
   }
 
+  def buildWatchlist(name: String, date: LocalDate)(stocks: Seq[(Stock, ScreenStats)]): ZIO[Any, Throwable, Watchlist] = ZIO.succeed {
+    Watchlist(
+      day = date,
+      screenName = name,
+      tickers = stocks.map(_._1.symbol),
+      stats = stocks.map(_._2)
+    )
+  }
+
   val Screens: ZIO[StockMarket, Throwable, Seq[Watchlist]] = {
     ZIO.collectAll(Seq(
       TrendScreens.SEPA.flatMap(buildWatchlist("SEPA")),
       TrendScreens.VolatilityContractionPattern.flatMap(buildWatchlist("VCP")),
       TrendScreens.SevenPctUp.flatMap(buildWatchlist("7_PCT_UP")),
       TrendScreens.SevenPctDown.flatMap(buildWatchlist("7_PCT_DOWN"))
+    ))
+  }
+
+  def buildScreens(date: LocalDate): ZIO[StockMarket, Throwable, Seq[Watchlist]] = {
+    ZIO.collectAll(Seq(
+      TrendScreens.SEPA.flatMap(buildWatchlist("SEPA",date)),
+      TrendScreens.VolatilityContractionPattern.flatMap(buildWatchlist("VCP",date)),
+      TrendScreens.SevenPctUp.flatMap(buildWatchlist("7_PCT_UP",date)),
+      TrendScreens.SevenPctDown.flatMap(buildWatchlist("7_PCT_DOWN",date))
     ))
   }
 
@@ -59,7 +77,7 @@ object ScreenerServices {
 
   def getScreensForDate(date: LocalDate): ZIO[MongoDatabase, Throwable, Seq[Watchlist]] = {
     val stockMarket = ZLayer.fromZIO(LoadQuotes.map(_.historicalSnapshot(date)))
-    Screens.provideLayer(stockMarket)
+    buildScreens(date).provideLayer(stockMarket)
   }
 
   def buildScreensForDate(date: LocalDate): ZIO[MongoDatabase, Throwable, Seq[Watchlist]] = {

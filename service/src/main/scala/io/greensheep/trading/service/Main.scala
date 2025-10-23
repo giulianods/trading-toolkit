@@ -53,6 +53,7 @@ object Main extends ZIOAppDefault {
 
     val restServer = Server.defaultWithPort(restPort)
 
+
     // MongoDataRepo.build("mongodb://127.0.0.1:27017", "polygon")
 
     val intitializer = InitializationService.initializeApp()
@@ -71,7 +72,7 @@ object Main extends ZIOAppDefault {
       _ <- ZIO.never
     } yield ()
 
-    val program = everything.provide(environment ++ mongoLayer ++ logging ++ restServer ++ chartServiceLayer)
+    val program = everything.provide(environment ++ mongoLayer ++ restServer ++ chartServiceLayer ++ logging)
 
     program catchAll {
       th =>

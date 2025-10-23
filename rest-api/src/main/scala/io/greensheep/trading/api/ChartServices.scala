@@ -5,7 +5,7 @@ import io.greensheep.trading.api.ChartServices.CacheKey
 import io.greensheep.trading.dataservice.MongoDataRepo
 import org.jfree.chart.JFreeChart
 import org.jfree.chart.axis.{DateAxis, NumberAxis}
-import org.jfree.chart.plot.{CombinedDomainXYPlot, XYPlot}
+import org.jfree.chart.plot.{CombinedDomainXYPlot, ValueMarker, XYPlot}
 import org.jfree.chart.renderer.xy.{CandlestickRenderer, XYBarRenderer, XYLineAndShapeRenderer}
 import org.jfree.data.time.{Day, TimeSeries, TimeSeriesCollection}
 import org.jfree.data.xy.DefaultHighLowDataset
@@ -13,20 +13,21 @@ import org.jfree.svg.SVGGraphics2D
 import zio.*
 import zio.cache.{Cache, Lookup}
 
+import java.awt.{BasicStroke, Color}
 import java.awt.geom.Rectangle2D
-import java.time.ZoneId
+import java.time.{LocalDate, ZoneId}
 import java.util.Date
 
 object ChartServices {
 
-  final case class CacheKey(ticker: String, days: Int, width: Int, height: Int)
+  final case class CacheKey(ticker: String, days: Int, width: Int, height: Int, highlightDay: Option[LocalDate])
 
   private val cacheTtl = 8.hours
   
   private lazy val chartCache: URIO[MongoDatabase, Cache[CacheKey, Throwable, String]] = Cache.make(
     capacity = 10000,
     timeToLive = cacheTtl,
-    lookup = Lookup(lookup = (key: CacheKey) => renderChart(key.ticker, key.days, key.width, key.height))
+    lookup = Lookup(lookup = (key: CacheKey) => renderChart(key.ticker, key.days, key.width, key.height, key.highlightDay))
   )
 
   def buildLayer: ZLayer[MongoDatabase, Nothing, ChartServices] =
@@ -36,7 +37,7 @@ object ChartServices {
       } yield new ChartServices(cache)
     }
 
-  private def renderChart(ticker: String, days: Int, width: Int, height: Int): ZIO[MongoDatabase, Throwable, String] =
+  private def renderChart(ticker: String, days: Int, width: Int, height: Int, highlightDay: Option[LocalDate]): ZIO[MongoDatabase, Throwable, String] =
     for {
       data <- MongoDataRepo.getPriceData(ticker)
       ordered = data.quotes.sortBy(_.day.toEpochDay).takeRight(days)
@@ -84,6 +85,23 @@ object ChartServices {
       _ = volumeR.setShadowVisible(false)
       volumePlot = new XYPlot(volumeData, null, volumeAxis, volumeR)
 
+      highlightMillis = highlightDay.flatMap { day =>
+        ordered.find(_.day == day).map { _ =>
+          day.atStartOfDay(zone).toInstant.toEpochMilli.toDouble
+        }
+      }
+      _ = highlightMillis.foreach { millis =>
+        val priceMarker = new ValueMarker(millis)
+        priceMarker.setPaint(Color.RED)
+        priceMarker.setStroke(new BasicStroke(1.5f))
+        pricePlot.addDomainMarker(priceMarker)
+
+        val volumeMarker = new ValueMarker(millis)
+        volumeMarker.setPaint(Color.RED)
+        volumeMarker.setStroke(new BasicStroke(1.5f))
+        volumePlot.addDomainMarker(volumeMarker)
+      }
+
       // Combine plots sharing the same date axis
       dateAxis = new DateAxis("Date")
       _ = dateAxis.setTimeline(SegmentedTimeline.newMondayThroughFridayTimeline())
@@ -109,8 +127,8 @@ class ChartServices(cache: Cache[CacheKey, Throwable, String]) {
    * @param height height of the resulting svg in pixels
    * @return svg representation of the chart
    */
-  def chartSvg(ticker: String, days: Int, width: Int = 800, height: Int = 400): ZIO[MongoDatabase, Throwable, String] = {
-    val key = CacheKey(ticker, days, width, height)
+  def chartSvg(ticker: String, days: Int, width: Int = 800, height: Int = 400, highlightDay: Option[LocalDate] = None): ZIO[MongoDatabase, Throwable, String] = {
+    val key = CacheKey(ticker, days, width, height, highlightDay)
     cache.get(key)
   }
 }
