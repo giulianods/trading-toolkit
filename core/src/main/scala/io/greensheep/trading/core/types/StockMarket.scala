@@ -27,7 +27,7 @@ case class StockMarket(stocks: Map[String, Stock]) {
     StockMarket(
       stocks.map {
         case (k, v) => k -> v.historicalSnapshot(upTo)
-      }
+      } filter(_._2.dailyAggregates.nonEmpty)
     )
   }
 }

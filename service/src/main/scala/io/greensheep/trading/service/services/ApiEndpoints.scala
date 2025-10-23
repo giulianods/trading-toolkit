@@ -61,7 +61,7 @@ object ApiEndpoints {
                   watchlist <- MongoDataRepo.getWatchlist(name, day)
                     .catchSome {
                       case _: NoSuchElementException =>
-                        ScreenerServices.buildScreensForDate(day).map(_.find(_.screenName == name).get)
+                        ScreenerServices.buildScreensForDate(day).flatMap(_ => MongoDataRepo.getWatchlist(name, day))
                     }
                 } yield Response.json(watchlist.toJson)
               case None =>
