@@ -3,6 +3,36 @@
   --green-tint: rgba(0, 255, 0, 0.1);
 }
 
+.tab-bar {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.tab-button {
+  background-color: transparent;
+  border: 1px solid var(--primary-green);
+  border-radius: 4px;
+  color: var(--primary-green);
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 0.5rem 1rem;
+  text-transform: uppercase;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.tab-button:hover,
+.tab-button:focus {
+  outline: none;
+  background-color: var(--green-tint);
+}
+
+.tab-button.active {
+  background-color: var(--primary-green);
+  color: #000;
+}
+
 .controls {
   display: flex;
   align-items: center;
@@ -126,4 +156,52 @@
   background-color: rgba(0, 0, 0, 0.5);
   color: #fff;
   text-align: right;
+}
+
+.breadth-indicators {
+  display: flex;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.breadth-table-wrapper {
+  width: 100%;
+  max-width: 1200px;
+  overflow-x: auto;
+  background-color: rgba(0, 0, 0, 0.3);
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 1rem;
+}
+
+.breadth-table-wrapper table {
+  width: 100%;
+  border-collapse: collapse;
+  color: #fff;
+  font-size: 0.85rem;
+}
+
+.breadth-table-wrapper th,
+.breadth-table-wrapper td {
+  border: 1px solid #444;
+  padding: 0.5rem;
+  text-align: right;
+}
+
+.breadth-table-wrapper th:first-child,
+.breadth-table-wrapper td:first-child {
+  text-align: left;
+  font-weight: bold;
+}
+
+.breadth-table-wrapper thead {
+  background-color: var(--green-tint);
+  color: var(--primary-green);
+}
+
+.empty-state {
+  margin-top: 1rem;
+  text-align: center;
+  color: #ccc;
+  font-size: 0.9rem;
 }

@@ -27,15 +27,44 @@ interface StockStats {
   stats: { [key: string]: string };
 }
 
+interface BreadthIndicator {
+  date: string;
+  day_4pct_up: number;
+  day_4pct_down: number;
+  qt_25pct_up: number;
+  qt_25pct_down: number;
+  monthly_25pct_up: number;
+  monthly_25pct_down: number;
+  monthly_50pct_up: number;
+  monthly_50pct_down: number;
+  bull_34_13: number;
+  bear_34_13: number;
+}
+
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
 export class AppComponent implements OnInit, AfterViewInit {
+  selectedTab: 'charts' | 'breadth' = 'charts';
   symbols: string[] = [];
   descriptions: { [symbol: string]: StockDescription } = {};
   stats: { [ticker: string]: { [key: string]: string } } = {};
+  breadthIndicators: BreadthIndicator[] = [];
+  breadthIndicatorColumns: { key: keyof BreadthIndicator; label: string }[] = [
+    { key: 'date', label: 'Date' },
+    { key: 'day_4pct_up', label: 'Day +4%' },
+    { key: 'day_4pct_down', label: 'Day -4%' },
+    { key: 'qt_25pct_up', label: 'Quarter +25%' },
+    { key: 'qt_25pct_down', label: 'Quarter -25%' },
+    { key: 'monthly_25pct_up', label: 'Month +25%' },
+    { key: 'monthly_25pct_down', label: 'Month -25%' },
+    { key: 'monthly_50pct_up', label: 'Month +50%' },
+    { key: 'monthly_50pct_down', label: 'Month -50%' },
+    { key: 'bull_34_13', label: 'Bull 34/13' },
+    { key: 'bear_34_13', label: 'Bear 34/13' }
+  ];
 
   watchlists: { label: string; value: string }[] = [
     { label: 'SEPA', value: 'SEPA' },
@@ -81,6 +110,14 @@ export class AppComponent implements OnInit, AfterViewInit {
     });
   }
 
+  selectTab(tab: 'charts' | 'breadth'): void {
+    this.selectedTab = tab;
+
+    if (tab === 'breadth' && !this.breadthIndicators.length) {
+      this.loadBreadthIndicators();
+    }
+  }
+
   loadWatchlist(watchlist: string): void {
     this.selectedWatchlist = watchlist;
     this.symbols = [];
@@ -115,6 +152,16 @@ export class AppComponent implements OnInit, AfterViewInit {
   onWatchlistChange(event: Event): void {
     const selectedWatchlist = (event.target as HTMLSelectElement).value;
     this.loadWatchlist(selectedWatchlist);
+  }
+
+  loadBreadthIndicators(): void {
+    this.http
+      .get<BreadthIndicator[]>('/breadth/indicators')
+      .subscribe((data: BreadthIndicator[]) => {
+        this.breadthIndicators = [...data].sort((a, b) =>
+          a.date < b.date ? 1 : a.date > b.date ? -1 : 0
+        );
+      });
   }
 
   onDateChange(event: Event): void {

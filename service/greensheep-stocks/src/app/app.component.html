@@ -1,44 +1,88 @@
-<div class="controls">
-  <label for="watchlist-select">Watchlist:</label>
-  <select id="watchlist-select" [value]="selectedWatchlist" (change)="onWatchlistChange($event)">
-    <option *ngFor="let watchlist of watchlists" [value]="watchlist.value">
-      {{ watchlist.label }}
-    </option>
-  </select>
-  <label for="watchlist-date">Date:</label>
-  <input
-    id="watchlist-date"
-    type="date"
-    [value]="selectedDay"
-    [max]="todayString"
-    (change)="onDateChange($event)"
+<div class="tab-bar">
+  <button
+    class="tab-button"
+    [class.active]="selectedTab === 'charts'"
+    (click)="selectTab('charts')"
   >
+    Stock Charts
+  </button>
+  <button
+    class="tab-button"
+    [class.active]="selectedTab === 'breadth'"
+    (click)="selectTab('breadth')"
+  >
+    Market Breadth
+  </button>
 </div>
 
-<div class="charts">
-  <div
-    class="stock"
-    *ngFor="let s of symbols; let i = index"
-    [class.focused]="focusedIndex === i"
-    tabindex="0"
-    (focus)="onCardFocus(i)"
-    #stockCard
-  >
-    <div class="description" *ngIf="descriptions[s]">
-      <h2>[{{ s }}] {{ descriptions[s].companyName }}</h2>
-      <p class="sic">{{ descriptions[s].sicDescription }}</p>
-      <p>{{ descriptions[s].description }}</p>
+<div *ngIf="selectedTab === 'charts'">
+  <div class="controls">
+    <label for="watchlist-select">Watchlist:</label>
+    <select id="watchlist-select" [value]="selectedWatchlist" (change)="onWatchlistChange($event)">
+      <option *ngFor="let watchlist of watchlists" [value]="watchlist.value">
+        {{ watchlist.label }}
+      </option>
+    </select>
+    <label for="watchlist-date">Date:</label>
+    <input
+      id="watchlist-date"
+      type="date"
+      [value]="selectedDay"
+      [max]="todayString"
+      (change)="onDateChange($event)"
+    >
+  </div>
+
+  <div class="charts">
+    <div
+      class="stock"
+      *ngFor="let s of symbols; let i = index"
+      [class.focused]="focusedIndex === i"
+      tabindex="0"
+      (focus)="onCardFocus(i)"
+      #stockCard
+    >
+      <div class="description" *ngIf="descriptions[s]">
+        <h2>[{{ s }}] {{ descriptions[s].companyName }}</h2>
+        <p class="sic">{{ descriptions[s].sicDescription }}</p>
+        <p>{{ descriptions[s].description }}</p>
+      </div>
+      <img [src]="chartUrl(s)" [alt]="s">
+      <div class="stats-table" *ngIf="stats[s]">
+        <table>
+          <tbody>
+            <tr *ngFor="let stat of getStatsArray(s)">
+              <td class="stat-key">{{ stat.key }}</td>
+              <td class="stat-value">{{ stat.value }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
-    <img [src]="chartUrl(s)" [alt]="s">
-    <div class="stats-table" *ngIf="stats[s]">
-      <table>
-        <tbody>
-          <tr *ngFor="let stat of getStatsArray(s)">
-            <td class="stat-key">{{ stat.key }}</td>
-            <td class="stat-value">{{ stat.value }}</td>
-          </tr>
-        </tbody>
-      </table>
+  </div>
+</div>
+
+<div
+  *ngIf="selectedTab === 'breadth'"
+  class="breadth-indicators"
+>
+  <div class="breadth-table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th *ngFor="let column of breadthIndicatorColumns">{{ column.label }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let indicator of breadthIndicators">
+          <td *ngFor="let column of breadthIndicatorColumns">
+            {{ indicator[column.key] }}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="empty-state" *ngIf="!breadthIndicators.length">
+      Breadth indicator history will appear here once it loads.
     </div>
   </div>
 </div>
