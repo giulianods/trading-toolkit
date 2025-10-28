@@ -71,7 +71,12 @@ export class AppComponent implements OnInit, AfterViewInit {
       tooltip:
         'up to 300 normal selling pressure\n500 to 1000 very high selling pressure\n1000 plus extreme selling pressure\nBear  markets rallies typically start after such extreme 1000 plus selling days.\nSo a 1000 plus days after a 5 to 10 days of selling pressure is short term bullish.'
     },
-    { key: 'ten_day_ratio', label: '10 Day Ratio' },
+    {
+      key: 'ten_day_ratio',
+      label: '10 Day Ratio',
+      tooltip:
+        'When market is in bearish phase first time ratio is  2 plus signals start of a bull move.\nBull markets start with a bullish thrust.\nBear markets often end with a bearish thrust.\nRatio below .50 signals start of a bearish move after a bull move has been in progress.\n2 plus readings are good for swing trading on long side.\n.5 or less readings are good for swing trading on short side.'
+    },
     { key: 'qt_25pct_up', label: 'Quarter +25%' },
     { key: 'qt_25pct_down', label: 'Quarter -25%' },
     { key: 'monthly_25pct_up', label: 'Month +25%' },
