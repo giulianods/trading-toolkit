@@ -173,20 +173,20 @@
   background-color: rgba(0, 0, 0, 0.3);
   border: 1px solid #333;
   border-radius: 6px;
-  padding: 1rem;
+  padding: 0.75rem;
 }
 
 .breadth-table-wrapper table {
   width: 100%;
   border-collapse: collapse;
   color: #fff;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
 }
 
 .breadth-table-wrapper th,
 .breadth-table-wrapper td {
   border: 1px solid #444;
-  padding: 0.5rem;
+  padding: 0.35rem 0.4rem;
   text-align: right;
 }
 
