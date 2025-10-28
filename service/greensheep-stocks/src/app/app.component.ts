@@ -267,6 +267,32 @@ export class AppComponent implements OnInit, AfterViewInit {
       case 'day_4pct_down':
         classes['breadth-negative'] = value > 250;
         break;
+      case 'qt_25pct_up':
+      case 'qt_25pct_down': {
+        const up = indicator.qt_25pct_up;
+        const down = indicator.qt_25pct_down;
+
+        if (typeof up === 'number' && typeof down === 'number') {
+          const isBullish = up > down;
+          classes['breadth-positive'] = isBullish;
+          classes['breadth-negative'] = !isBullish;
+        }
+
+        break;
+      }
+      case 'monthly_25pct_up':
+      case 'monthly_25pct_down': {
+        const up = indicator.monthly_25pct_up;
+        const down = indicator.monthly_25pct_down;
+
+        if (typeof up === 'number' && typeof down === 'number') {
+          const isBullish = up > down;
+          classes['breadth-positive'] = isBullish;
+          classes['breadth-negative'] = !isBullish;
+        }
+
+        break;
+      }
       default:
         break;
     }
