@@ -293,6 +293,19 @@ export class AppComponent implements OnInit, AfterViewInit {
 
         break;
       }
+      case 'bull_34_13':
+      case 'bear_34_13': {
+        const bull = indicator.bull_34_13;
+        const bear = indicator.bear_34_13;
+
+        if (typeof bull === 'number' && typeof bear === 'number') {
+          const isBullish = bull > bear;
+          classes['breadth-positive'] = isBullish;
+          classes['breadth-negative'] = !isBullish;
+        }
+
+        break;
+      }
       default:
         break;
     }
