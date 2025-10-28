@@ -195,6 +195,34 @@ export class AppComponent implements OnInit, AfterViewInit {
     return value;
   }
 
+  getBreadthCellClasses(
+    indicator: BreadthIndicator,
+    key: keyof BreadthIndicator
+  ): { [klass: string]: boolean } {
+    const value = indicator[key];
+    const classes: { [klass: string]: boolean } = {};
+
+    if (typeof value !== 'number') {
+      return classes;
+    }
+
+    switch (key) {
+      case 'ten_day_ratio':
+        classes['breadth-positive'] = value > 2;
+        break;
+      case 'day_4pct_up':
+        classes['breadth-positive'] = value > 250;
+        break;
+      case 'day_4pct_down':
+        classes['breadth-negative'] = value > 250;
+        break;
+      default:
+        break;
+    }
+
+    return classes;
+  }
+
   onDateChange(event: Event): void {
     const input = event.target as HTMLInputElement;
     this.selectedDay = input.value || this.todayString;

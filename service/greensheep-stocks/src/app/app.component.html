@@ -75,7 +75,10 @@
       </thead>
       <tbody>
         <tr *ngFor="let indicator of breadthIndicators">
-          <td *ngFor="let column of breadthIndicatorColumns">
+          <td
+            *ngFor="let column of breadthIndicatorColumns"
+            [ngClass]="getBreadthCellClasses(indicator, column.key)"
+          >
             {{ formatBreadthIndicatorValue(indicator, column.key) }}
           </td>
         </tr>

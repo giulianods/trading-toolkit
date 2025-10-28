@@ -1,6 +1,8 @@
 :root {
   --primary-green: #0f0;
+  --primary-red: #f66;
   --green-tint: rgba(0, 255, 0, 0.1);
+  --red-tint: rgba(255, 64, 64, 0.15);
 }
 
 .tab-bar {
@@ -197,6 +199,18 @@
 .breadth-table-wrapper thead {
   background-color: var(--green-tint);
   color: var(--primary-green);
+}
+
+.breadth-table-wrapper td.breadth-positive {
+  background-color: var(--green-tint);
+  color: var(--primary-green);
+  font-weight: 600;
+}
+
+.breadth-table-wrapper td.breadth-negative {
+  background-color: var(--red-tint);
+  color: var(--primary-red);
+  font-weight: 600;
 }
 
 .empty-state {
