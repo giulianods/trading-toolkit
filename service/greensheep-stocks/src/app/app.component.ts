@@ -79,6 +79,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   todayString: string;
   selectedDay: string;
   focusedIndex = 0;
+  hasUserNavigated = false;
 
   @ViewChildren('stockCard')
   stockCards!: QueryList<ElementRef<HTMLDivElement>>;
@@ -108,7 +109,10 @@ export class AppComponent implements OnInit, AfterViewInit {
 
   ngAfterViewInit(): void {
     this.stockCards.changes.subscribe(() => {
-      this.focusStock(this.focusedIndex);
+      this.focusStock(this.focusedIndex, {
+        allowFocus: this.hasUserNavigated,
+        allowScroll: this.hasUserNavigated
+      });
     });
   }
 
@@ -126,15 +130,12 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.descriptions = {};
     this.stats = {};
     this.focusedIndex = 0;
+    this.hasUserNavigated = false;
 
     const url = this.buildWatchlistUrl(watchlist);
 
     this.http.get(url, { responseType: 'json' }).subscribe((data: any) => {
       this.symbols = data['tickers'].slice(0, 100);
-
-      setTimeout(() => {
-        this.focusStock(this.focusedIndex);
-      });
 
       // Extract and store stats data
       if (data['stats']) {
@@ -275,6 +276,7 @@ export class AppComponent implements OnInit, AfterViewInit {
 
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
+      this.hasUserNavigated = true;
       this.syncFocusedIndexWithViewport();
 
       if (event.key === 'ArrowDown') {
@@ -295,7 +297,10 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.focusStock(previousIndex);
   }
 
-  private focusStock(index: number): void {
+  private focusStock(
+    index: number,
+    options: { allowFocus?: boolean; allowScroll?: boolean } = {}
+  ): void {
     if (!this.symbols.length) {
       return;
     }
@@ -309,8 +314,16 @@ export class AppComponent implements OnInit, AfterViewInit {
     }
 
     const element = card.nativeElement;
-    element.focus({ preventScroll: true });
-    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const shouldFocus = options.allowFocus ?? true;
+    const shouldScroll = options.allowScroll ?? true;
+
+    if (shouldFocus) {
+      element.focus({ preventScroll: !shouldScroll });
+    }
+
+    if (shouldScroll) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   }
 
   private syncFocusedIndexWithViewport(): void {
@@ -354,6 +367,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   }
 
   onCardFocus(index: number): void {
+    this.hasUserNavigated = true;
     this.focusedIndex = index;
   }
 }
