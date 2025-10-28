@@ -83,7 +83,12 @@ export class AppComponent implements OnInit, AfterViewInit {
       tooltip:
         'This is a primary indicator\nMarket is in bullish phase if 25% plus quarter>25% down quarter.\nMarket is in bearish phase if 25% plus quarter<25% down quarter.\nNumbers below 200 are considered extreme.\nWhen 25% plus quarter number  goes below 200 it is extremely bullish. It indicates extreme bearishness.\nRallies which start from readings below 200 are extremely powerful. (I make my IRA/Roth IRA buys on such days)\nEnd of day readings of below 200 on 25% plus quarter are rare, most of the time 200 readings are reached intra day for few hours or minutes and market rebounds.\nSo when  readings drop to below 500 be on watch out for a reversal of the bearish trend.'
     },
-    { key: 'qt_25pct_down', label: 'Quarter -25%' },
+    {
+      key: 'qt_25pct_down',
+      label: 'Quarter -25%',
+      tooltip:
+        'This is a primary indicator\n\nMarket is in bullish phase till 25% plus quarter>25% down quarter.\nMarket is in bearish phase till 25% plus quarter<25% down quarter.\nWhen this number goes below 200 it is bearish. It indicates extreme bullishness.\nReadings below 200 are considered extreme readings.\nUnlike end of bear market in bull market, markets do not turn immediately after such high readings.\nThere is a delay of 2 to 6 weeks before real selling might start and a top is formed after readings reach extreme levels '
+    },
     { key: 'monthly_25pct_up', label: 'Month +25%' },
     { key: 'monthly_25pct_down', label: 'Month -25%' },
     { key: 'monthly_50pct_up', label: 'Month +50%' },
