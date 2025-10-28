@@ -65,7 +65,12 @@ export class AppComponent implements OnInit, AfterViewInit {
       tooltip:
         'up to 300 normal buying pressure\n300 to 500 high buying pressure money flowing in to market\n500 to1000 very high buying pressure (normally seen at beginning of a bullish turn from bearish phase)\n1000 plus extreme buying pressure\n300 plus day are common in bear markets.\nAt beginning of a bull move you will see a cluster of 3 to 5 big buying days of 300 plus.\nMost turns in major trend start with 1000 plus buying day.'
     },
-    { key: 'day_4pct_down', label: 'Day -4%' },
+    {
+      key: 'day_4pct_down',
+      label: 'Day -4%',
+      tooltip:
+        'up to 300 normal selling pressure\n500 to 1000 very high selling pressure\n1000 plus extreme selling pressure\nBear  markets rallies typically start after such extreme 1000 plus selling days.\nSo a 1000 plus days after a 5 to 10 days of selling pressure is short term bullish.'
+    },
     { key: 'ten_day_ratio', label: '10 Day Ratio' },
     { key: 'qt_25pct_up', label: 'Quarter +25%' },
     { key: 'qt_25pct_down', label: 'Quarter -25%' },
