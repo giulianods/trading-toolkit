@@ -229,6 +229,7 @@ export class AppComponent implements OnInit, AfterViewInit {
     switch (key) {
       case 'ten_day_ratio':
         classes['breadth-positive'] = value > 2;
+        classes['breadth-negative'] = value < 0.5;
         break;
       case 'day_4pct_up':
         classes['breadth-positive'] = value > 250;
