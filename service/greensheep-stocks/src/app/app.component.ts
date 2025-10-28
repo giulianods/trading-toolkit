@@ -77,7 +77,12 @@ export class AppComponent implements OnInit, AfterViewInit {
       tooltip:
         'When market is in bearish phase first time ratio is  2 plus signals start of a bull move.\nBull markets start with a bullish thrust.\nBear markets often end with a bearish thrust.\nRatio below .50 signals start of a bearish move after a bull move has been in progress.\n2 plus readings are good for swing trading on long side.\n.5 or less readings are good for swing trading on short side.'
     },
-    { key: 'qt_25pct_up', label: 'Quarter +25%' },
+    {
+      key: 'qt_25pct_up',
+      label: 'Quarter +25%',
+      tooltip:
+        'This is a primary indicator\nMarket is in bullish phase if 25% plus quarter>25% down quarter.\nMarket is in bearish phase if 25% plus quarter<25% down quarter.\nNumbers below 200 are considered extreme.\nWhen 25% plus quarter number  goes below 200 it is extremely bullish. It indicates extreme bearishness.\nRallies which start from readings below 200 are extremely powerful. (I make my IRA/Roth IRA buys on such days)\nEnd of day readings of below 200 on 25% plus quarter are rare, most of the time 200 readings are reached intra day for few hours or minutes and market rebounds.\nSo when  readings drop to below 500 be on watch out for a reversal of the bearish trend.'
+    },
     { key: 'qt_25pct_down', label: 'Quarter -25%' },
     { key: 'monthly_25pct_up', label: 'Month +25%' },
     { key: 'monthly_25pct_down', label: 'Month -25%' },
