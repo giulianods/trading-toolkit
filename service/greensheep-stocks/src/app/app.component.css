@@ -1,8 +1,8 @@
-:root {
-  --primary-green: #0f0;
-  --primary-red: #f66;
-  --green-tint: rgba(0, 255, 0, 0.1);
-  --red-tint: rgba(255, 64, 64, 0.15);
+:host {
+  --primary-green: #24c06f;
+  --primary-red: #ff5f5f;
+  --green-tint: rgba(36, 192, 111, 0.16);
+  --red-tint: rgba(255, 95, 95, 0.18);
 }
 
 .tab-bar {
@@ -14,9 +14,9 @@
 
 .tab-button {
   background-color: transparent;
-  border: 1px solid var(--primary-green);
+  border: 1px solid var(--primary-green, #24c06f);
   border-radius: 4px;
-  color: var(--primary-green);
+  color: var(--primary-green, #24c06f);
   cursor: pointer;
   font-size: 0.95rem;
   padding: 0.5rem 1rem;
@@ -27,11 +27,11 @@
 .tab-button:hover,
 .tab-button:focus {
   outline: none;
-  background-color: var(--green-tint);
+  background-color: var(--green-tint, rgba(36, 192, 111, 0.16));
 }
 
 .tab-button.active {
-  background-color: var(--primary-green);
+  background-color: var(--primary-green, #24c06f);
   color: #000;
 }
 
@@ -41,14 +41,14 @@
   justify-content: center;
   gap: 0.5rem;
   padding: 1rem;
-  color: var(--primary-green);
+  color: var(--primary-green, #24c06f);
   font-size: 0.9rem;
 }
 
 .controls select {
   background-color: rgba(0, 0, 0, 0.7);
   color: #fff;
-  border: 1px solid var(--primary-green);
+  border: 1px solid var(--primary-green, #24c06f);
   border-radius: 4px;
   padding: 0.25rem 0.5rem;
 }
@@ -56,7 +56,7 @@
 .controls input[type='date'] {
   background-color: rgba(0, 0, 0, 0.7);
   color: #fff;
-  border: 1px solid var(--primary-green);
+  border: 1px solid var(--primary-green, #24c06f);
   border-radius: 4px;
   padding: 0.25rem 0.5rem;
 }
@@ -85,13 +85,13 @@
 
 .stock.focused,
 .stock:focus {
-  box-shadow: 0 0 0 2px var(--primary-green);
+  box-shadow: 0 0 0 2px var(--primary-green, #24c06f);
   border-radius: 4px;
 }
 .stock img {
   width: 500px;
   height: 250px;
-  border: 1px solid var(--primary-green);
+  border: 1px solid var(--primary-green, #24c06f);
   object-fit: fill;
   flex-shrink: 0;
 }
@@ -109,7 +109,7 @@
 .description h2 {
   font-size: 0.6rem;
   margin: 0 0 0.3rem;
-  color: var(--primary-green);
+  color: var(--primary-green, #24c06f);
 }
 
 .description p {
@@ -132,7 +132,7 @@
 .stats-table h3 {
   font-size: 0.6rem;
   margin: 0 0 0.4rem;
-  color: var(--primary-green);
+  color: var(--primary-green, #24c06f);
   text-align: center;
 }
 
@@ -148,8 +148,8 @@
 }
 
 .stat-key {
-  background-color: var(--green-tint);
-  color: var(--primary-green);
+  background-color: var(--green-tint, rgba(36, 192, 111, 0.16));
+  color: var(--primary-green, #24c06f);
   font-weight: bold;
   width: 50%;
 }
@@ -197,19 +197,19 @@
 }
 
 .breadth-table-wrapper thead {
-  background-color: var(--green-tint);
-  color: var(--primary-green);
+  background-color: var(--green-tint, rgba(36, 192, 111, 0.16));
+  color: var(--primary-green, #24c06f);
 }
 
 .breadth-table-wrapper td.breadth-positive {
-  background-color: var(--green-tint);
-  color: var(--primary-green);
+  background-color: var(--green-tint, rgba(36, 192, 111, 0.16));
+  color: var(--primary-green, #24c06f);
   font-weight: 600;
 }
 
 .breadth-table-wrapper td.breadth-negative {
-  background-color: var(--red-tint);
-  color: var(--primary-red);
+  background-color: var(--red-tint, rgba(255, 95, 95, 0.18));
+  color: var(--primary-red, #ff5f5f);
   font-weight: 600;
 }
 
