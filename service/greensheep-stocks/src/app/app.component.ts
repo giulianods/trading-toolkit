@@ -91,8 +91,18 @@ export class AppComponent implements OnInit, AfterViewInit {
     },
     { key: 'monthly_25pct_up', label: 'Month +25%' },
     { key: 'monthly_25pct_down', label: 'Month -25%' },
-    { key: 'monthly_50pct_up', label: 'Month +50%' },
-    { key: 'monthly_50pct_down', label: 'Month -50%' },
+    {
+      key: 'monthly_50pct_up',
+      label: 'Month +50%',
+      tooltip:
+        'This is a secondary indicator.\nThis indicator tells you intermediate term extreme bullish phases and likely pullback/correction points\nReadings on 50% plus month above 20 are bearish.\nThey indicate high bullishness and tend to lead to correction.\nMarket resumes its bullish move once such high readings drop below 10.\nReadings of below 3 are bullish on 50% plus month.\nThey indicate extreme bearishness.\n50% down month indicator tells you intermediate term extreme bearish phases and likely counter trend rally  points during bear market.\n50% down month readings above 20 indicate high bearishness and tend to lead to reflex rallies.'
+    },
+    {
+      key: 'monthly_50pct_down',
+      label: 'Month -50%',
+      tooltip:
+        'This is a secondary indicator.\nThis indicator tells you intermediate term extreme bullish phases and likely pullback/correction points\nReadings on 50% plus month above 20 are bearish.\nThey indicate high bullishness and tend to lead to correction.\nMarket resumes its bullish move once such high readings drop below 10.\nReadings of below 3 are bullish on 50% plus month.\nThey indicate extreme bearishness.\n50% down month indicator tells you intermediate term extreme bearish phases and likely counter trend rally  points during bear market.\n50% down month readings above 20 indicate high bearishness and tend to lead to reflex rallies.'
+    },
     { key: 'bull_34_13', label: 'Bull 34/13' },
     { key: 'bear_34_13', label: 'Bear 34/13' }
   ];
