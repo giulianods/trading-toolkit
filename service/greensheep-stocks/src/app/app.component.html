@@ -70,7 +70,12 @@
     <table>
       <thead>
         <tr>
-          <th *ngFor="let column of breadthIndicatorColumns">{{ column.label }}</th>
+          <th
+            *ngFor="let column of breadthIndicatorColumns"
+            [attr.title]="column.tooltip || null"
+          >
+            {{ column.label }}
+          </th>
         </tr>
       </thead>
       <tbody>

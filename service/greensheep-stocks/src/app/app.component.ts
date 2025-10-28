@@ -53,9 +53,18 @@ export class AppComponent implements OnInit, AfterViewInit {
   descriptions: { [symbol: string]: StockDescription } = {};
   stats: { [ticker: string]: { [key: string]: string } } = {};
   breadthIndicators: BreadthIndicator[] = [];
-  breadthIndicatorColumns: { key: keyof BreadthIndicator; label: string }[] = [
+  breadthIndicatorColumns: {
+    key: keyof BreadthIndicator;
+    label: string;
+    tooltip?: string;
+  }[] = [
     { key: 'date', label: 'Date' },
-    { key: 'day_4pct_up', label: 'Day +4%' },
+    {
+      key: 'day_4pct_up',
+      label: 'Day +4%',
+      tooltip:
+        'up to 300 normal buying pressure\n300 to 500 high buying pressure money flowing in to market\n500 to1000 very high buying pressure (normally seen at beginning of a bullish turn from bearish phase)\n1000 plus extreme buying pressure\n300 plus day are common in bear markets.\nAt beginning of a bull move you will see a cluster of 3 to 5 big buying days of 300 plus.\nMost turns in major trend start with 1000 plus buying day.'
+    },
     { key: 'day_4pct_down', label: 'Day -4%' },
     { key: 'ten_day_ratio', label: '10 Day Ratio' },
     { key: 'qt_25pct_up', label: 'Quarter +25%' },
