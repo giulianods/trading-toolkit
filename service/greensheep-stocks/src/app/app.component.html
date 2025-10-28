@@ -76,7 +76,7 @@
       <tbody>
         <tr *ngFor="let indicator of breadthIndicators">
           <td *ngFor="let column of breadthIndicatorColumns">
-            {{ indicator[column.key] }}
+            {{ formatBreadthIndicatorValue(indicator, column.key) }}
           </td>
         </tr>
       </tbody>

@@ -39,6 +39,7 @@ interface BreadthIndicator {
   monthly_50pct_down: number;
   bull_34_13: number;
   bear_34_13: number;
+  ten_day_ratio?: number | null;
 }
 
 @Component({
@@ -56,6 +57,7 @@ export class AppComponent implements OnInit, AfterViewInit {
     { key: 'date', label: 'Date' },
     { key: 'day_4pct_up', label: 'Day +4%' },
     { key: 'day_4pct_down', label: 'Day -4%' },
+    { key: 'ten_day_ratio', label: '10 Day Ratio' },
     { key: 'qt_25pct_up', label: 'Quarter +25%' },
     { key: 'qt_25pct_down', label: 'Quarter -25%' },
     { key: 'monthly_25pct_up', label: 'Month +25%' },
@@ -158,10 +160,39 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.http
       .get<BreadthIndicator[]>('/breadth/indicators')
       .subscribe((data: BreadthIndicator[]) => {
-        this.breadthIndicators = [...data].sort((a, b) =>
+        const sortedIndicators = [...data].sort((a, b) =>
           a.date < b.date ? 1 : a.date > b.date ? -1 : 0
         );
+
+        this.breadthIndicators = sortedIndicators.map((indicator, index, array) => {
+          const window = array.slice(index, index + 10);
+          const totalUp = window.reduce((sum, item) => sum + (item.day_4pct_up ?? 0), 0);
+          const totalDown = window.reduce((sum, item) => sum + (item.day_4pct_down ?? 0), 0);
+          const tenDayRatio = totalDown === 0 ? null : Number((totalUp / totalDown).toFixed(2));
+
+          return {
+            ...indicator,
+            ten_day_ratio: tenDayRatio
+          };
+        });
       });
+  }
+
+  formatBreadthIndicatorValue(
+    indicator: BreadthIndicator,
+    key: keyof BreadthIndicator
+  ): string {
+    const value = indicator[key];
+
+    if (value === null || value === undefined) {
+      return '—';
+    }
+
+    if (typeof value === 'number') {
+      return value.toString();
+    }
+
+    return value;
   }
 
   onDateChange(event: Event): void {
