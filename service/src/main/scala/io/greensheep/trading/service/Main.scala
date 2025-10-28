@@ -23,10 +23,11 @@ object Main extends ZIOAppDefault {
 
   val toRetrieve = datesBetween(LocalDate.of(2024 ,4 ,1), LocalDate.now().minusDays(1))
 
-
-
   // Configure the logger to use the custom format
   private val logger: ZLayer[Any, Nothing, Unit] = SLF4J.slf4j
+
+  // Override the default runtime to ensure logging configuration is applied globally
+  override val bootstrap: ZLayer[ZIOAppArgs, Any, Any] = Runtime.removeDefaultLoggers ++ logger
 
 
   override def run: ZIO[Environment & ZIOAppArgs & Scope, Any, Any] = {
@@ -42,8 +43,6 @@ object Main extends ZIOAppDefault {
     val polygonLayer = ZLayer.fromZIO(PolygonAsyncApi.build())
 
     val environment = clientLayer >>> polygonLayer
-
-    val logging = Runtime.removeDefaultLoggers ++ logger
 
     val mongoLayer = MongoClient.live("mongodb://127.0.0.1:27017") >>> ZLayer.fromZIO(ZIO.serviceWith[MongoClient](_.getDatabase("polygon")))
 
@@ -66,13 +65,13 @@ object Main extends ZIOAppDefault {
       api = ApiEndpoints.buildRestApi
       web = WebApp.app
       _ <- Server.install(api ++ web)
-      _ <- ZIO.logInfo(s"Rest api started on ${}")
+      _ <- ZIO.logInfo(s"Rest api started on port $restPort")
       _ <- CronJobs.start
       _ <- ZIO.logInfo("Cron jobs started")
       _ <- ZIO.never
     } yield ()
 
-    val program = everything.provide(environment ++ mongoLayer ++ restServer ++ chartServiceLayer ++ logging)
+    val program = everything.provide(environment ++ mongoLayer ++ restServer ++ chartServiceLayer)
 
     program catchAll {
       th =>
