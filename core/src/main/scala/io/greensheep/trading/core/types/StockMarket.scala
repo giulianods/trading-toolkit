@@ -1,5 +1,7 @@
 package io.greensheep.trading.core.types
 
+import java.time.LocalDate
+
 case class StockMarket(stocks: Map[String, Stock]) {
 
 
@@ -21,6 +23,8 @@ case class StockMarket(stocks: Map[String, Stock]) {
         s.symbol -> ibdStrength
     }
   }.toMap
+
+  def currentDate: LocalDate = stocks.values.head.dailyAggregates.last.t
 
 
   def historicalSnapshot(upTo: java.time.LocalDate): StockMarket = {

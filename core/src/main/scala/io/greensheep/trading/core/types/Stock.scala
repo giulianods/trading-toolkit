@@ -56,6 +56,25 @@ case class Stock(
 
   lazy val perfQ4: Double = currentPrice * 100 / dailyAggregates.takeRight(200).head.c
 
+  def pctChange(days: Int): Double = {
+    val lastPrice = dailyAggregates.takeRight(days).last.c
+    val firstPrice = dailyAggregates.takeRight(days + 1).head.c
+    100 * (lastPrice - firstPrice) / firstPrice
+  }
+
+  def minClose(days: Int): Double = {
+    dailyAggregates.takeRight(days).map(_.c).min
+  }
+
+  def maxClose(days: Int): Double = {
+    dailyAggregates.takeRight(days).map(_.c).max
+  }
+
+  def avgVolume(days: Int): Double = {
+    val volumes = dailyAggregates.takeRight(days).map(_.v)
+    volumes.sum / volumes.length
+  }
+
   def historicalSnapshot(upTo: java.time.LocalDate): Stock = {
     copy(dailyAggregates = dailyAggregates.filter(d => d.t.isBefore(upTo) || d.t.isEqual(upTo)))
   }

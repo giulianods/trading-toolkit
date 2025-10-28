@@ -156,10 +156,10 @@ object InitializationService {
   def initializeApp(): ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] =  {
     for {
       _ <- InitializeStockUniverse
-      //_ <- InitializeDescriptions
-      //_ <- initializeQuotes()
+      _ <- InitializeDescriptions
+      _ <- initializeQuotes()
       //_ <- rectifySplits
-      //_ <- repairQuotes
+      _ <- repairQuotes
       _ <- ScreenerServices.ScreenerTask
     } yield ()
   }

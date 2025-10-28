@@ -12,6 +12,7 @@ import zio.json.EncoderOps
 import java.io.{PrintWriter, StringWriter}
 import java.lang
 import java.time.LocalDate
+import io.greensheep.trading.core.screens.BreadthIndicators
 object ApiEndpoints {
 
 
@@ -57,7 +58,6 @@ object ApiEndpoints {
               case Some(upToDay) =>
                 for {
                   day <- ZIO.attempt(LocalDate.parse(upToDay))
-                  _ <- ZIO.logInfo(s"Received request for watchlist: $name")
                   watchlist <- MongoDataRepo.getWatchlist(name, day)
                     .catchSome {
                       case _: NoSuchElementException =>
@@ -65,11 +65,7 @@ object ApiEndpoints {
                     }
                 } yield Response.json(watchlist.toJson)
               case None =>
-                for {
-                  day <- ZIO.attempt(LocalDate.now())
-                  _ <- ZIO.logInfo(s"Received request for watchlist: $name")
-                  watchlist <- MongoDataRepo.getWatchlistLatest(name)
-                } yield Response.json(watchlist.toJson)
+                MongoDataRepo.getWatchlistLatest(name).map(_.toJson).map(Response.json)
             }
           }
         }.mapError(handleError)
@@ -95,6 +91,17 @@ object ApiEndpoints {
           }
         }.mapError(handleError)
       },
+      (Method.GET / "breadth" / "indicators") -> {
+        Handler.fromFunctionZIO[Request]{
+          case req => {
+            val noDays = req.url.queryParams.get("days").map(_.toInt).getOrElse(100)
+            for {
+              stockMarket <- ScreenerServices.LoadQuotes
+              indicators <- ZIO.succeed(BreadthIndicators.buildHistory(stockMarket, noDays))
+            } yield Response.json(indicators.toJson)
+          }
+        }.mapError(handleError)
+      }
     ).toHttpApp
   }
 
