@@ -14,5 +14,9 @@
   "/description": {
     "target": "http://localhost:7777",
     "secure": false
+  },
+  "/breadth": {
+    "target": "http://localhost:7777",
+    "secure": false
   }
 }
