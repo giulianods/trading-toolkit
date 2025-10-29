@@ -82,6 +82,44 @@ object TrendScreens {
     }
   }
 
+  val New52WeekHigh: ZIO[StockMarket, Throwable, Seq[(Stock, ScreenStats)]] = {
+    ZIO.service[StockMarket].map(stockMarket => stockMarket.stocks.values.toSeq filter {
+      stock => stock.high52Week > stock.dailyAggregates.map(_.h).max
+    } sortBy (s => s.perfQ4)
+    ) map {
+      stocks =>
+        stocks.map { stock =>
+          (stock, ScreenStats(
+            ticker = stock.symbol,
+            stats = Map(
+              "high52Week" -> f"${stock.high52Week}%.2f",
+              "annualPerf" -> f"${stock.perfQ4}%.2f",
+              "low52Week" -> f"${stock.low52Week}%.2f"
+            )
+          ))
+        }
+    }
+  }
+
+  val New52WeekLow: ZIO[StockMarket, Throwable, Seq[(Stock, ScreenStats)]] = {
+    ZIO.service[StockMarket].map(stockMarket => stockMarket.stocks.values.toSeq filter {
+      stock => stock.low52Week < stock.dailyAggregates.map(_.l).min
+    } sortBy (s => s.perfQ4)
+    ) map {
+      stocks =>
+        stocks.map { stock =>
+          (stock, ScreenStats(
+            ticker = stock.symbol,
+            stats = Map(
+              "low52Week" -> f"${stock.low52Week}%.2f",
+              "annualPerf" -> f"${stock.perfQ4}%.2f",
+              "high52Week" -> f"${stock.high52Week}%.2f"
+            )
+          ))
+        }
+    }
+  }
+
   def buildVcpScreen(params: VCPParams) : ZIO[StockMarket, Throwable, Seq[(Stock, ScreenStats)]] = {
     ZIO.service[StockMarket].map(stockMarket => stockMarket.stocks.values.toSeq.map(s => (s, VCPDetector.detect(s.dailyAggregates, params)))
       .filter(x => x._2.isDefined).map(kv => (kv._1, kv._2.get)).sortBy(_._2.score) map { case (stock, vcpHit) =>

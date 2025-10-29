@@ -56,7 +56,9 @@ object ScreenerServices {
       TrendScreens.SEPA.flatMap(buildWatchlist("SEPA")),
       TrendScreens.VolatilityContractionPattern.flatMap(buildWatchlist("VCP")),
       TrendScreens.SevenPctUp.flatMap(buildWatchlist("7_PCT_UP")),
-      TrendScreens.SevenPctDown.flatMap(buildWatchlist("7_PCT_DOWN"))
+      TrendScreens.SevenPctDown.flatMap(buildWatchlist("7_PCT_DOWN")),
+      TrendScreens.New52WeekHigh.flatMap(buildWatchlist("NEW_52_WEEK_HIGH")),
+      TrendScreens.New52WeekLow.flatMap(buildWatchlist("NEW_52_WEEK_LOW")),
     ))
   }
 
@@ -65,7 +67,9 @@ object ScreenerServices {
       TrendScreens.SEPA.flatMap(buildWatchlist("SEPA",date)),
       TrendScreens.VolatilityContractionPattern.flatMap(buildWatchlist("VCP",date)),
       TrendScreens.SevenPctUp.flatMap(buildWatchlist("7_PCT_UP",date)),
-      TrendScreens.SevenPctDown.flatMap(buildWatchlist("7_PCT_DOWN",date))
+      TrendScreens.SevenPctDown.flatMap(buildWatchlist("7_PCT_DOWN",date)),
+      TrendScreens.New52WeekHigh.flatMap(buildWatchlist("NEW_52_WEEK_HIGH",date)),
+      TrendScreens.New52WeekLow.flatMap(buildWatchlist("NEW_52_WEEK_LOW",date)),
     ))
   }
 
