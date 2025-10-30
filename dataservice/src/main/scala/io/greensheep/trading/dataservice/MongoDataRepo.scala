@@ -4,6 +4,7 @@ import io.github.zeal18.zio.mongodb.driver.model.{ReplaceOptions, UpdateOptions}
 import io.github.zeal18.zio.mongodb.driver.sorts.Sort
 import io.github.zeal18.zio.mongodb.driver.updates.{Update, addEachToSet}
 import io.github.zeal18.zio.mongodb.driver.{MongoClient, MongoClientSettings, MongoDatabase, filters, updates}
+import io.greensheep.trading.core.screens.{BreadthIndicators => MarketBreadth}
 import io.greensheep.trading.core.types.{DailyQuoteData, Quote, ScreenStats, Stock, StockDescription, StockUniverse, Watchlist}
 import zio.*
 import zio.stream.ZStream
@@ -75,6 +76,12 @@ object MongoDataRepo {
 
       override def getWatchlistsBetween(start: LocalDate, end: LocalDate): ZIO[Any, Throwable, Seq[Watchlist]] =
         MongoDataRepo.getWatchlistsBetween(start, end).provideLayer(mongoLayer)
+
+      override def saveMarketBreadth(indicator: MarketBreadth): ZIO[Any, Throwable, Unit] =
+        MongoDataRepo.saveMarketBreadth(indicator).provideLayer(mongoLayer)
+
+      override def hasMarketBreadthForDate(day: LocalDate): ZIO[Any, Throwable, Boolean] =
+        MongoDataRepo.hasMarketBreadthForDate(day).provideLayer(mongoLayer)
     }
   }
 
@@ -167,6 +174,28 @@ object MongoDataRepo {
     } yield watchlists
   }
 
+  def saveMarketBreadth(indicator: MarketBreadth): ZIO[MongoDatabase, Throwable, Unit] = {
+    for {
+      db <- ZIO.service[MongoDatabase]
+      coll = db.getCollection[MarketBreadth]("market-breadth")
+      _ <- coll
+        .replaceOne(
+          filters.eq("date", indicator.date),
+          indicator,
+          ReplaceOptions(upsert = true)
+        )
+        .map(_.wasAcknowledged())
+    } yield ()
+  }
+
+  def hasMarketBreadthForDate(day: LocalDate): ZIO[MongoDatabase, Throwable, Boolean] = {
+    for {
+      db <- ZIO.service[MongoDatabase]
+      coll = db.getCollection[MarketBreadth]("market-breadth")
+      count <- coll.countDocuments(filters.eq("date", day)).map(_.toInt)
+    } yield count > 0
+  }
+
   def getWatchlistLatest(name: String) : ZIO[MongoDatabase, Throwable, Watchlist] = {
     for {
       db <- ZIO.service[MongoDatabase]
@@ -237,4 +266,8 @@ trait MongoDataRepo {
   def hasWatchlistsForDate(day: LocalDate): ZIO[Any, Throwable, Boolean]
 
   def getWatchlistsBetween(start: LocalDate, end: LocalDate): ZIO[Any, Throwable, Seq[Watchlist]]
+
+  def saveMarketBreadth(indicator: MarketBreadth): ZIO[Any, Throwable, Unit]
+
+  def hasMarketBreadthForDate(day: LocalDate): ZIO[Any, Throwable, Boolean]
 }
