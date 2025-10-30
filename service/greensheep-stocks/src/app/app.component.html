@@ -133,9 +133,19 @@
   <div class="history-chart-wrapper" *ngIf="!watchlistHistoryError">
     <div
       *ngIf="watchlistHistoryData.length; else emptyHistory"
-      class="history-chart-container"
+      class="history-chart-list"
     >
-      <canvas #historyChart aria-label="Watchlist history bar chart"></canvas>
+      <div
+        class="history-chart-container"
+        *ngFor="let chart of historyChartGroups"
+      >
+        <h3 class="history-chart-title">{{ chart.title }}</h3>
+        <canvas
+          #historyChartCanvas
+          [attr.data-chart-id]="chart.id"
+          [attr.aria-label]="chart.title + ' bar chart'"
+        ></canvas>
+      </div>
     </div>
     <ng-template #emptyHistory>
       <div class="empty-state">No watchlist history found for the selected dates.</div>

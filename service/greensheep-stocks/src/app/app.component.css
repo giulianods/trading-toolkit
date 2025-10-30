@@ -114,11 +114,25 @@
   overflow: hidden;
 }
 
+.history-chart-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
 .history-chart-container {
   position: relative;
   width: 100%;
   min-height: 260px;
   height: clamp(300px, 50vh, 420px);
+}
+
+.history-chart-title {
+  margin: 0 0 0.5rem;
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: center;
 }
 
 .history-chart-wrapper canvas {

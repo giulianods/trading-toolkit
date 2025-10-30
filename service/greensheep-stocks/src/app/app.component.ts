@@ -5,7 +5,6 @@ import {
   HostListener,
   OnInit,
   QueryList,
-  ViewChild,
   ViewChildren
 } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
@@ -52,6 +51,17 @@ interface WatchlistHistorySummary {
 interface WatchlistHistoryEntry {
   day: string;
   watchlists: WatchlistHistorySummary[];
+}
+
+interface WatchlistChartGroup {
+  id: string;
+  title: string;
+  datasets: {
+    watchlist: string;
+    label: string;
+    backgroundColor: string;
+    borderColor: string;
+  }[];
 }
 
 @Component({
@@ -148,36 +158,67 @@ export class AppComponent implements OnInit, AfterViewInit {
   historyStartDate: string;
   historyEndDate: string;
   watchlistHistoryData: WatchlistHistoryEntry[] = [];
-  historyWatchlistNames: string[] = [];
   watchlistHistoryLoading = false;
   watchlistHistoryError: string | null = null;
 
-  private historyChart: Chart | null = null;
-  private historyChartRef: ElementRef<HTMLCanvasElement> | null = null;
-  private watchlistColorMap = new Map<string, { background: string; border: string }>();
-  private watchlistColorPalette: { background: string; border: string }[] = [
-    { background: 'rgba(36, 192, 111, 0.6)', border: 'rgba(36, 192, 111, 1)' },
-    { background: 'rgba(54, 162, 235, 0.6)', border: 'rgba(54, 162, 235, 1)' },
-    { background: 'rgba(255, 99, 132, 0.6)', border: 'rgba(255, 99, 132, 1)' },
-    { background: 'rgba(255, 205, 86, 0.6)', border: 'rgba(255, 205, 86, 1)' },
-    { background: 'rgba(153, 102, 255, 0.6)', border: 'rgba(153, 102, 255, 1)' },
-    { background: 'rgba(75, 192, 192, 0.6)', border: 'rgba(75, 192, 192, 1)' },
-    { background: 'rgba(255, 159, 64, 0.6)', border: 'rgba(255, 159, 64, 1)' }
+  historyChartGroups: WatchlistChartGroup[] = [
+    {
+      id: 'sevenPct',
+      title: '7% Movers',
+      datasets: [
+        {
+          watchlist: '7_PCT_UP',
+          label: '7% Up',
+          backgroundColor: 'rgba(36, 192, 111, 0.6)',
+          borderColor: 'rgba(36, 192, 111, 1)'
+        },
+        {
+          watchlist: '7_PCT_DOWN',
+          label: '7% Down',
+          backgroundColor: 'rgba(255, 99, 132, 0.6)',
+          borderColor: 'rgba(255, 99, 132, 1)'
+        }
+      ]
+    },
+    {
+      id: 'fiftyTwoWeek',
+      title: '52 Week High vs Low',
+      datasets: [
+        {
+          watchlist: 'NEW_52_WEEK_HIGH',
+          label: '52 Week High',
+          backgroundColor: 'rgba(36, 192, 111, 0.6)',
+          borderColor: 'rgba(36, 192, 111, 1)'
+        },
+        {
+          watchlist: 'NEW_52_WEEK_LOW',
+          label: '52 Week Low',
+          backgroundColor: 'rgba(255, 99, 132, 0.6)',
+          borderColor: 'rgba(255, 99, 132, 1)'
+        }
+      ]
+    },
+    {
+      id: 'sepa',
+      title: 'SEPA Watchlist',
+      datasets: [
+        {
+          watchlist: 'SEPA',
+          label: 'SEPA',
+          backgroundColor: 'rgba(54, 162, 235, 0.6)',
+          borderColor: 'rgba(54, 162, 235, 1)'
+        }
+      ]
+    }
   ];
 
-  @ViewChild('historyChart')
-  set historyChartCanvas(value: ElementRef<HTMLCanvasElement> | undefined) {
-    this.historyChartRef = value ?? null;
-
-    if (value) {
-      this.renderHistoryChart();
-    } else {
-      this.destroyHistoryChart();
-    }
-  }
+  @ViewChildren('historyChartCanvas')
+  historyChartCanvases!: QueryList<ElementRef<HTMLCanvasElement>>;
 
   @ViewChildren('stockCard')
   stockCards!: QueryList<ElementRef<HTMLDivElement>>;
+
+  private historyCharts = new Map<string, Chart>();
   
   // Mapping of stat keys to display names and their order
   private statDisplayMapping: { [key: string]: string } = {
@@ -212,6 +253,15 @@ export class AppComponent implements OnInit, AfterViewInit {
         allowScroll: this.hasUserNavigated
       });
     });
+
+    this.historyChartCanvases.changes.subscribe(list => {
+      if (!list.length) {
+        this.destroyHistoryCharts();
+        return;
+      }
+
+      this.renderHistoryCharts();
+    });
   }
 
   selectTab(tab: 'charts' | 'breadth' | 'history'): void {
@@ -225,7 +275,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       if (!this.watchlistHistoryData.length && !this.watchlistHistoryLoading) {
         this.loadWatchlistHistory();
       } else {
-        setTimeout(() => this.renderHistoryChart());
+        setTimeout(() => this.renderHistoryCharts());
       }
     }
   }
@@ -277,8 +327,7 @@ export class AppComponent implements OnInit, AfterViewInit {
 
     this.watchlistHistoryLoading = true;
     this.watchlistHistoryData = [];
-    this.historyWatchlistNames = [];
-    this.destroyHistoryChart();
+    this.destroyHistoryCharts();
 
     this.http
       .get<WatchlistHistoryEntry[]>(
@@ -289,22 +338,15 @@ export class AppComponent implements OnInit, AfterViewInit {
           const sortedData = [...data].sort((a, b) => (a.day > b.day ? 1 : a.day < b.day ? -1 : 0));
           const filteredData = sortedData.filter(entry => !this.isWeekend(entry.day));
           const finalData = filteredData.length ? filteredData : sortedData;
-          const watchlistNames = new Set<string>();
-          finalData.forEach(entry =>
-            entry.watchlists.forEach(summary => watchlistNames.add(summary.name))
-          );
-
-          this.historyWatchlistNames = Array.from(watchlistNames).sort();
           this.watchlistHistoryData = finalData;
 
-          setTimeout(() => this.renderHistoryChart());
+          setTimeout(() => this.renderHistoryCharts());
         },
         error: () => {
           this.watchlistHistoryError = 'Unable to load watchlist history. Please try again later.';
           this.watchlistHistoryData = [];
-          this.historyWatchlistNames = [];
           this.watchlistHistoryLoading = false;
-          this.destroyHistoryChart();
+          this.destroyHistoryCharts();
         },
         complete: () => {
           this.watchlistHistoryLoading = false;
@@ -335,25 +377,9 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.loadWatchlist(selectedWatchlist);
   }
 
-  private destroyHistoryChart(): void {
-    if (this.historyChart) {
-      this.historyChart.destroy();
-      this.historyChart = null;
-    }
-  }
-
-  private getColorForWatchlist(name: string, index: number): {
-    background: string;
-    border: string;
-  } {
-    if (this.watchlistColorMap.has(name)) {
-      return this.watchlistColorMap.get(name)!;
-    }
-
-    const paletteIndex = index % this.watchlistColorPalette.length;
-    const color = this.watchlistColorPalette[paletteIndex];
-    this.watchlistColorMap.set(name, color);
-    return color;
+  private destroyHistoryCharts(): void {
+    this.historyCharts.forEach(chart => chart.destroy());
+    this.historyCharts.clear();
   }
 
   private isWeekend(dateString: string): boolean {
@@ -367,111 +393,119 @@ export class AppComponent implements OnInit, AfterViewInit {
     return day === 0 || day === 6;
   }
 
-  private renderHistoryChart(): void {
-    if (
-      !this.historyChartRef ||
-      !this.watchlistHistoryData.length ||
-      !this.historyWatchlistNames.length
-    ) {
-      return;
-    }
-
-    const canvas = this.historyChartRef.nativeElement;
-    const context = canvas.getContext('2d');
-
-    if (!context) {
+  private renderHistoryCharts(): void {
+    if (!this.watchlistHistoryData.length || !this.historyChartCanvases?.length) {
       return;
     }
 
     const labels = this.watchlistHistoryData.map(entry => entry.day);
+    this.historyChartCanvases.forEach(canvasRef => {
+      const canvas = canvasRef.nativeElement;
+      const chartId = canvas.dataset['chartId'];
+      if (!chartId) {
+        return;
+      }
 
-    const datasets = this.historyWatchlistNames.map((name, index) => {
-      const { background, border } = this.getColorForWatchlist(name, index);
-      return {
-        label: name,
+      const config = this.historyChartGroups.find(group => group.id === chartId);
+      if (!config) {
+        return;
+      }
+
+      const context = canvas.getContext('2d');
+      if (!context) {
+        return;
+      }
+
+      const datasets = config.datasets.map(dataset => ({
+        label: dataset.label,
         data: this.watchlistHistoryData.map(entry => {
-          const summary = entry.watchlists.find(w => w.name === name);
+          const summary = entry.watchlists.find(w => w.name === dataset.watchlist);
           return summary ? summary.symbolCount : 0;
         }),
-        backgroundColor: background,
-        borderColor: border,
+        backgroundColor: dataset.backgroundColor,
+        borderColor: dataset.borderColor,
         borderWidth: 1,
         maxBarThickness: 32
-      };
-    });
+      }));
 
-    this.destroyHistoryChart();
+      const existingChart = this.historyCharts.get(chartId);
+      if (existingChart) {
+        existingChart.destroy();
+      }
 
-    this.historyChart = new Chart(context, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        layout: {
-          padding: {
-            top: 10,
-            right: 14,
-            bottom: 10,
-            left: 14
-          }
+      const chart = new Chart(context, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets
         },
-        scales: {
-          x: {
-            stacked: false,
-            ticks: {
-              color: '#ffffff',
-              maxRotation: 30,
-              minRotation: 0,
-              autoSkip: true,
-              autoSkipPadding: 12,
-              font: {
-                size: 10
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: {
+            padding: {
+              top: 10,
+              right: 14,
+              bottom: 10,
+              left: 14
+            }
+          },
+          scales: {
+            x: {
+              stacked: false,
+              ticks: {
+                color: '#ffffff',
+                maxRotation: 30,
+                minRotation: 0,
+                autoSkip: true,
+                autoSkipPadding: 12,
+                font: {
+                  size: 10
+                }
+              },
+              grid: {
+                color: 'rgba(255, 255, 255, 0.08)'
+              },
+              title: {
+                display: true,
+                text: 'Date',
+                color: '#ffffff'
               }
             },
-            grid: {
-              color: 'rgba(255, 255, 255, 0.08)'
-            },
-            title: {
-              display: true,
-              text: 'Date',
-              color: '#ffffff'
+            y: {
+              beginAtZero: true,
+              ticks: {
+                color: '#ffffff',
+                precision: 0
+              },
+              grid: {
+                color: 'rgba(255, 255, 255, 0.08)'
+              },
+              title: {
+                display: true,
+                text: 'Symbols',
+                color: '#ffffff'
+              }
             }
           },
-          y: {
-            beginAtZero: true,
-            ticks: {
-              color: '#ffffff',
-              precision: 0
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: {
+                color: '#ffffff',
+                padding: 12,
+                boxWidth: 16
+              }
             },
-            grid: {
-              color: 'rgba(255, 255, 255, 0.08)'
-            },
-            title: {
-              display: true,
-              text: 'Symbols',
-              color: '#ffffff'
+            tooltip: {
+              mode: 'index',
+              intersect: false
             }
-          }
-        },
-        plugins: {
-          legend: {
-            position: 'top',
-            labels: {
-              color: '#ffffff',
-              padding: 12,
-              boxWidth: 16
-            }
-          },
-          tooltip: {
-            mode: 'index',
-            intersect: false
           }
         }
-      }
+      });
+
+      this.historyCharts.set(chartId, chart);
     });
   }
 
