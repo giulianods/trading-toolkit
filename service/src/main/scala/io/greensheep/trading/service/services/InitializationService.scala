@@ -115,13 +115,20 @@ object InitializationService {
     for {
       _ <- ZIO.logInfo(s"Initializing default watchlists from $start to $end")
       _ <- ZIO.foreachDiscard(dates)(date =>
-        ScreenerServices
-          .buildScreensForDate(date)
-          .tapBoth(
-            err => ZIO.logError(s"Failed to build watchlists for date $date: ${err.getMessage}"),
-            _ => ZIO.logInfo(s"Saved watchlists for date $date")
-          )
-          .unit
+        for {
+          alreadyExists <- MongoDataRepo.hasWatchlistsForDate(date)
+          _ <- if (alreadyExists) {
+            ZIO.logInfo(s"Watchlists already exist for date $date, skipping initialization")
+          } else {
+            ScreenerServices
+              .buildScreensForDate(date)
+              .tapBoth(
+                err => ZIO.logError(s"Failed to build watchlists for date $date: ${err.getMessage}"),
+                _ => ZIO.logInfo(s"Saved watchlists for date $date")
+              )
+              .unit
+          }
+        } yield ()
       )
     } yield ()
   }

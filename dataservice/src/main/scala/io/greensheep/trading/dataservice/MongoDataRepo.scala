@@ -69,6 +69,9 @@ object MongoDataRepo {
 
       override def getWatchlistLatest(name: String): ZIO[Any, Throwable, Watchlist] =
         MongoDataRepo.getWatchlistLatest(name).provideLayer(mongoLayer)
+
+      override def hasWatchlistsForDate(day: LocalDate): ZIO[Any, Throwable, Boolean] =
+        MongoDataRepo.hasWatchlistsForDate(day).provideLayer(mongoLayer)
     }
   }
 
@@ -139,6 +142,14 @@ object MongoDataRepo {
     } yield ()
   }
 
+  def hasWatchlistsForDate(day: LocalDate): ZIO[MongoDatabase, Throwable, Boolean] = {
+    for {
+      db <- ZIO.service[MongoDatabase]
+      coll = db.getCollection[Watchlist]("watchlist")
+      count <- coll.countDocuments(filters.eq("day", day)).map(_.toInt)
+    } yield count > 0
+  }
+
   def getWatchlistLatest(name: String) : ZIO[MongoDatabase, Throwable, Watchlist] = {
     for {
       db <- ZIO.service[MongoDatabase]
@@ -205,4 +216,6 @@ trait MongoDataRepo {
   def saveWatchlist(wl: Watchlist): ZIO[Any, Throwable, Unit]
 
   def getWatchlistLatest(name: String): ZIO[Any, Throwable, Watchlist]
+
+  def hasWatchlistsForDate(day: LocalDate): ZIO[Any, Throwable, Boolean]
 }
