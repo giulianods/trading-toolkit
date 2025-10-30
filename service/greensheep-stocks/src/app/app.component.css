@@ -106,8 +106,7 @@
 }
 
 .history-chart-wrapper {
-  width: 100%;
-  max-width: 1000px;
+  width: min(100%, 900px);
   background-color: rgba(0, 0, 0, 0.3);
   border: 1px solid #333;
   border-radius: 6px;
@@ -118,12 +117,24 @@
 .history-chart-container {
   position: relative;
   width: 100%;
-  min-height: 360px;
+  min-height: 220px;
+  height: clamp(220px, 45vh, 320px);
 }
 
 .history-chart-wrapper canvas {
   width: 100% !important;
   height: 100% !important;
+  max-height: 320px !important;
+}
+
+@media (max-width: 768px) {
+  .history-chart-wrapper {
+    padding: 0.5rem;
+  }
+
+  .history-chart-container {
+    height: clamp(200px, 55vh, 280px);
+  }
 }
 
 .charts {

@@ -382,7 +382,8 @@ export class AppComponent implements OnInit, AfterViewInit {
         }),
         backgroundColor: background,
         borderColor: border,
-        borderWidth: 1
+        borderWidth: 1,
+        maxBarThickness: 32
       };
     });
 
@@ -397,11 +398,23 @@ export class AppComponent implements OnInit, AfterViewInit {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        layout: {
+          padding: {
+            top: 10,
+            right: 14,
+            bottom: 10,
+            left: 14
+          }
+        },
         scales: {
           x: {
             stacked: false,
             ticks: {
-              color: '#ffffff'
+              color: '#ffffff',
+              maxRotation: 45,
+              minRotation: 0,
+              autoSkip: true,
+              autoSkipPadding: 8
             },
             grid: {
               color: 'rgba(255, 255, 255, 0.08)'
@@ -430,9 +443,11 @@ export class AppComponent implements OnInit, AfterViewInit {
         },
         plugins: {
           legend: {
-            position: 'bottom',
+            position: 'top',
             labels: {
-              color: '#ffffff'
+              color: '#ffffff',
+              padding: 12,
+              boxWidth: 16
             }
           },
           tooltip: {
