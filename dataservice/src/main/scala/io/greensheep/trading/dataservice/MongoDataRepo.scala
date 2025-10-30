@@ -82,6 +82,12 @@ object MongoDataRepo {
 
       override def hasMarketBreadthForDate(day: LocalDate): ZIO[Any, Throwable, Boolean] =
         MongoDataRepo.hasMarketBreadthForDate(day).provideLayer(mongoLayer)
+
+      override def getMarketBreadthBetween(start: LocalDate, end: LocalDate): ZIO[Any, Throwable, Seq[MarketBreadth]] =
+        MongoDataRepo.getMarketBreadthBetween(start, end).provideLayer(mongoLayer)
+
+      override def getMarketBreadthLatest(limit: Int): ZIO[Any, Throwable, Seq[MarketBreadth]] =
+        MongoDataRepo.getMarketBreadthLatest(limit).provideLayer(mongoLayer)
     }
   }
 
@@ -196,6 +202,32 @@ object MongoDataRepo {
     } yield count > 0
   }
 
+  def getMarketBreadthBetween(start: LocalDate, end: LocalDate): ZIO[MongoDatabase, Throwable, Seq[MarketBreadth]] = {
+    for {
+      db <- ZIO.service[MongoDatabase]
+      coll = db.getCollection[MarketBreadth]("market-breadth")
+      publisher = coll
+        .find(filters.and(
+          filters.gte("date", start),
+          filters.lte("date", end)
+        ))
+        .sort(Sort.Asc("date"))
+      breadth <- publisher.run.toZIOStream().runCollect.map(_.toSeq)
+    } yield breadth
+  }
+
+  def getMarketBreadthLatest(limit: Int): ZIO[MongoDatabase, Throwable, Seq[MarketBreadth]] = {
+    for {
+      db <- ZIO.service[MongoDatabase]
+      coll = db.getCollection[MarketBreadth]("market-breadth")
+      publisher = coll
+        .find()
+        .sort(Sort.Desc("date"))
+        .limit(limit)
+      breadth <- publisher.run.toZIOStream().runCollect.map(_.toSeq.reverse)
+    } yield breadth
+  }
+
   def getWatchlistLatest(name: String) : ZIO[MongoDatabase, Throwable, Watchlist] = {
     for {
       db <- ZIO.service[MongoDatabase]
@@ -270,4 +302,8 @@ trait MongoDataRepo {
   def saveMarketBreadth(indicator: MarketBreadth): ZIO[Any, Throwable, Unit]
 
   def hasMarketBreadthForDate(day: LocalDate): ZIO[Any, Throwable, Boolean]
+
+  def getMarketBreadthBetween(start: LocalDate, end: LocalDate): ZIO[Any, Throwable, Seq[MarketBreadth]]
+
+  def getMarketBreadthLatest(limit: Int): ZIO[Any, Throwable, Seq[MarketBreadth]]
 }

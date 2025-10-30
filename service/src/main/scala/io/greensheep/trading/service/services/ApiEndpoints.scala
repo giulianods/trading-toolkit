@@ -12,7 +12,7 @@ import zio.json.EncoderOps
 import java.io.{PrintWriter, StringWriter}
 import java.lang
 import java.time.LocalDate
-import io.greensheep.trading.core.screens.BreadthIndicators
+import scala.util.Try
 object ApiEndpoints {
 
 
@@ -123,13 +123,38 @@ object ApiEndpoints {
         }.mapError(handleError)
       },
       (Method.GET / "breadth" / "indicators") -> {
-        Handler.fromFunctionZIO[Request]{
-          case req => {
-            val noDays = req.url.queryParams.get("days").map(_.toInt).getOrElse(100)
-            for {
-              stockMarket <- ScreenerServices.LoadQuotes
-              indicators <- ZIO.succeed(BreadthIndicators.buildHistory(stockMarket, noDays))
-            } yield Response.json(indicators.toJson)
+        Handler.fromFunctionZIO[Request] { req =>
+          val response = (req.url.queryParams.get("start"), req.url.queryParams.get("end")) match {
+            case (Some(startParam), Some(endParam)) =>
+              for {
+                startDate <- ZIO
+                  .attempt(LocalDate.parse(startParam))
+                  .mapError(_ => new IllegalArgumentException(s"Invalid start date: $startParam"))
+                endDate <- ZIO
+                  .attempt(LocalDate.parse(endParam))
+                  .mapError(_ => new IllegalArgumentException(s"Invalid end date: $endParam"))
+                _ <- ZIO
+                  .fail(new IllegalArgumentException("start must be on or before end"))
+                  .when(endDate.isBefore(startDate))
+                indicators <- MongoDataRepo.getMarketBreadthBetween(startDate, endDate)
+                sorted = indicators.sortBy(_.date)
+              } yield Response.json(sorted.toJson)
+            case _ =>
+              val days = req.url.queryParams
+                .get("days")
+                .flatMap(value => Try(value.toInt).toOption)
+                .getOrElse(100)
+              for {
+                _ <- ZIO
+                  .fail(new IllegalArgumentException("days must be greater than 0"))
+                  .when(days <= 0)
+                indicators <- MongoDataRepo.getMarketBreadthLatest(days)
+                sorted = indicators.sortBy(_.date)
+              } yield Response.json(sorted.toJson)
+          }
+
+          response.catchSome { case e: IllegalArgumentException =>
+            ZIO.succeed(Response.text(e.getMessage).status(Status.BadRequest))
           }
         }.mapError(handleError)
       }
