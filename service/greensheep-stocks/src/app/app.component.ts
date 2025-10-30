@@ -287,13 +287,15 @@ export class AppComponent implements OnInit, AfterViewInit {
       .subscribe({
         next: data => {
           const sortedData = [...data].sort((a, b) => (a.day > b.day ? 1 : a.day < b.day ? -1 : 0));
+          const filteredData = sortedData.filter(entry => !this.isWeekend(entry.day));
+          const finalData = filteredData.length ? filteredData : sortedData;
           const watchlistNames = new Set<string>();
-          sortedData.forEach(entry =>
+          finalData.forEach(entry =>
             entry.watchlists.forEach(summary => watchlistNames.add(summary.name))
           );
 
           this.historyWatchlistNames = Array.from(watchlistNames).sort();
-          this.watchlistHistoryData = sortedData;
+          this.watchlistHistoryData = finalData;
 
           setTimeout(() => this.renderHistoryChart());
         },
@@ -354,6 +356,17 @@ export class AppComponent implements OnInit, AfterViewInit {
     return color;
   }
 
+  private isWeekend(dateString: string): boolean {
+    const parsed = new Date(`${dateString}T00:00:00Z`);
+
+    if (Number.isNaN(parsed.getTime())) {
+      return false;
+    }
+
+    const day = parsed.getUTCDay();
+    return day === 0 || day === 6;
+  }
+
   private renderHistoryChart(): void {
     if (
       !this.historyChartRef ||
@@ -411,10 +424,13 @@ export class AppComponent implements OnInit, AfterViewInit {
             stacked: false,
             ticks: {
               color: '#ffffff',
-              maxRotation: 45,
+              maxRotation: 30,
               minRotation: 0,
               autoSkip: true,
-              autoSkipPadding: 8
+              autoSkipPadding: 12,
+              font: {
+                size: 10
+              }
             },
             grid: {
               color: 'rgba(255, 255, 255, 0.08)'

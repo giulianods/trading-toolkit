@@ -117,14 +117,14 @@
 .history-chart-container {
   position: relative;
   width: 100%;
-  min-height: 220px;
-  height: clamp(220px, 45vh, 320px);
+  min-height: 260px;
+  height: clamp(300px, 50vh, 420px);
 }
 
 .history-chart-wrapper canvas {
   width: 100% !important;
   height: 100% !important;
-  max-height: 320px !important;
+  max-height: 420px !important;
 }
 
 @media (max-width: 768px) {
@@ -133,7 +133,8 @@
   }
 
   .history-chart-container {
-    height: clamp(200px, 55vh, 280px);
+    min-height: 240px;
+    height: clamp(260px, 60vh, 360px);
   }
 }
 
