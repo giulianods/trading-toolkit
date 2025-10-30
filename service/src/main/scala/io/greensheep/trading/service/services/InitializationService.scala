@@ -8,6 +8,7 @@ import zio.ZIO
 
 import java.time.LocalDate
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+import scala.jdk.CollectionConverters.*
 
 object InitializationService {
 
@@ -106,6 +107,25 @@ object InitializationService {
     } yield ()
   }
 
+  private def initializeHistoricalWatchlists(): ZIO[MongoDatabase, Throwable, Unit] = {
+    val end = LocalDate.now()
+    val start = end.minusMonths(3)
+    val dates = start.datesUntil(end.plusDays(1)).iterator().asScala.toSeq
+
+    for {
+      _ <- ZIO.logInfo(s"Initializing default watchlists from $start to $end")
+      _ <- ZIO.foreachDiscard(dates)(date =>
+        ScreenerServices
+          .buildScreensForDate(date)
+          .tapBoth(
+            err => ZIO.logError(s"Failed to build watchlists for date $date: ${err.getMessage}"),
+            _ => ZIO.logInfo(s"Saved watchlists for date $date")
+          )
+          .unit
+      )
+    } yield ()
+  }
+
   private def quotesSanityCheck: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Seq[(String, String)]] = {
     for{
       _ <- ZIO.logInfo("Performing quotes sanity check")
@@ -160,6 +180,7 @@ object InitializationService {
       _ <- initializeQuotes()
       //_ <- rectifySplits
       _ <- repairQuotes
+      _ <- initializeHistoricalWatchlists()
       _ <- ScreenerServices.ScreenerTask
     } yield ()
   }
