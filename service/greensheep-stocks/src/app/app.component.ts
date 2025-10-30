@@ -5,7 +5,7 @@ import {
   HostListener,
   OnInit,
   QueryList,
-  ViewChildren,
+  ViewChildren
 } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 
@@ -42,13 +42,28 @@ interface BreadthIndicator {
   ten_day_ratio?: number | null;
 }
 
+interface WatchlistHistorySummary {
+  name: string;
+  symbolCount: number;
+}
+
+interface WatchlistHistoryEntry {
+  day: string;
+  watchlists: WatchlistHistorySummary[];
+}
+
+interface WatchlistHistoryRow {
+  day: string;
+  counts: { [watchlist: string]: number | null };
+}
+
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
 export class AppComponent implements OnInit, AfterViewInit {
-  selectedTab: 'charts' | 'breadth' = 'charts';
+  selectedTab: 'charts' | 'breadth' | 'history' = 'charts';
   symbols: string[] = [];
   descriptions: { [symbol: string]: StockDescription } = {};
   stats: { [ticker: string]: { [key: string]: string } } = {};
@@ -133,6 +148,13 @@ export class AppComponent implements OnInit, AfterViewInit {
   focusedIndex = 0;
   hasUserNavigated = false;
 
+  historyStartDate: string;
+  historyEndDate: string;
+  watchlistHistoryRows: WatchlistHistoryRow[] = [];
+  watchlistHistoryColumns: string[] = [];
+  watchlistHistoryLoading = false;
+  watchlistHistoryError: string | null = null;
+
   @ViewChildren('stockCard')
   stockCards!: QueryList<ElementRef<HTMLDivElement>>;
   
@@ -153,6 +175,9 @@ export class AppComponent implements OnInit, AfterViewInit {
   constructor(private http: HttpClient) {
     this.todayString = this.formatDate(new Date());
     this.selectedDay = this.todayString;
+    this.historyEndDate = this.todayString;
+    const thirtyDaysAgo = this.addDays(new Date(), -29);
+    this.historyStartDate = this.formatDate(thirtyDaysAgo);
   }
 
   ngOnInit(): void {
@@ -168,11 +193,15 @@ export class AppComponent implements OnInit, AfterViewInit {
     });
   }
 
-  selectTab(tab: 'charts' | 'breadth'): void {
+  selectTab(tab: 'charts' | 'breadth' | 'history'): void {
     this.selectedTab = tab;
 
     if (tab === 'breadth' && !this.breadthIndicators.length) {
       this.loadBreadthIndicators();
+    }
+
+    if (tab === 'history' && !this.watchlistHistoryRows.length && !this.watchlistHistoryLoading) {
+      this.loadWatchlistHistory();
     }
   }
 
@@ -202,6 +231,87 @@ export class AppComponent implements OnInit, AfterViewInit {
         });
       });
     });
+  }
+
+  loadWatchlistHistory(): void {
+    if (this.watchlistHistoryLoading) {
+      return;
+    }
+
+    this.watchlistHistoryError = null;
+
+    if (!this.historyStartDate || !this.historyEndDate) {
+      this.watchlistHistoryError = 'Please select both a start and end date.';
+      return;
+    }
+
+    if (this.historyStartDate > this.historyEndDate) {
+      this.watchlistHistoryError = 'Start date must be on or before the end date.';
+      return;
+    }
+
+    this.watchlistHistoryLoading = true;
+
+    this.http
+      .get<WatchlistHistoryEntry[]>(
+        `/watchlists/history?start=${this.historyStartDate}&end=${this.historyEndDate}`
+      )
+      .subscribe({
+        next: data => {
+          const watchlistNames = new Set<string>();
+          data.forEach(entry =>
+            entry.watchlists.forEach(summary => watchlistNames.add(summary.name))
+          );
+
+          const sortedNames = Array.from(watchlistNames).sort();
+          this.watchlistHistoryColumns = sortedNames;
+
+          this.watchlistHistoryRows = data.map(entry => {
+            const counts: { [watchlist: string]: number | null } = {};
+            sortedNames.forEach(name => {
+              const summary = entry.watchlists.find(w => w.name === name);
+              counts[name] = summary ? summary.symbolCount : null;
+            });
+
+            return { day: entry.day, counts };
+          });
+        },
+        error: () => {
+          this.watchlistHistoryError = 'Unable to load watchlist history. Please try again later.';
+          this.watchlistHistoryColumns = [];
+          this.watchlistHistoryRows = [];
+          this.watchlistHistoryLoading = false;
+        },
+        complete: () => {
+          this.watchlistHistoryLoading = false;
+        }
+      });
+  }
+
+  formatHistoryCount(value: number | null | undefined): string {
+    if (value === null || value === undefined) {
+      return '—';
+    }
+
+    return value.toString();
+  }
+
+  onHistoryStartChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.historyStartDate = input.value || this.historyStartDate;
+
+    if (this.historyStartDate > this.historyEndDate) {
+      this.historyEndDate = this.historyStartDate;
+    }
+  }
+
+  onHistoryEndChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.historyEndDate = input.value || this.historyEndDate;
+
+    if (this.historyEndDate < this.historyStartDate) {
+      this.historyStartDate = this.historyEndDate;
+    }
   }
 
   onWatchlistChange(event: Event): void {
@@ -449,6 +559,12 @@ export class AppComponent implements OnInit, AfterViewInit {
     }
 
     return `/watchlists/${watchlist}`;
+  }
+
+  private addDays(date: Date, offset: number): Date {
+    const copy = new Date(date);
+    copy.setDate(copy.getDate() + offset);
+    return copy;
   }
 
   private formatDate(date: Date): string {
