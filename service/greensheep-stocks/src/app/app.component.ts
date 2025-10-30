@@ -5,9 +5,11 @@ import {
   HostListener,
   OnInit,
   QueryList,
+  ViewChild,
   ViewChildren
 } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import Chart from 'chart.js/auto';
 
 interface StockDescription {
   symbol: string;
@@ -50,11 +52,6 @@ interface WatchlistHistorySummary {
 interface WatchlistHistoryEntry {
   day: string;
   watchlists: WatchlistHistorySummary[];
-}
-
-interface WatchlistHistoryRow {
-  day: string;
-  counts: { [watchlist: string]: number | null };
 }
 
 @Component({
@@ -150,10 +147,34 @@ export class AppComponent implements OnInit, AfterViewInit {
 
   historyStartDate: string;
   historyEndDate: string;
-  watchlistHistoryRows: WatchlistHistoryRow[] = [];
-  watchlistHistoryColumns: string[] = [];
+  watchlistHistoryData: WatchlistHistoryEntry[] = [];
+  historyWatchlistNames: string[] = [];
   watchlistHistoryLoading = false;
   watchlistHistoryError: string | null = null;
+
+  private historyChart: Chart | null = null;
+  private historyChartRef: ElementRef<HTMLCanvasElement> | null = null;
+  private watchlistColorMap = new Map<string, { background: string; border: string }>();
+  private watchlistColorPalette: { background: string; border: string }[] = [
+    { background: 'rgba(36, 192, 111, 0.6)', border: 'rgba(36, 192, 111, 1)' },
+    { background: 'rgba(54, 162, 235, 0.6)', border: 'rgba(54, 162, 235, 1)' },
+    { background: 'rgba(255, 99, 132, 0.6)', border: 'rgba(255, 99, 132, 1)' },
+    { background: 'rgba(255, 205, 86, 0.6)', border: 'rgba(255, 205, 86, 1)' },
+    { background: 'rgba(153, 102, 255, 0.6)', border: 'rgba(153, 102, 255, 1)' },
+    { background: 'rgba(75, 192, 192, 0.6)', border: 'rgba(75, 192, 192, 1)' },
+    { background: 'rgba(255, 159, 64, 0.6)', border: 'rgba(255, 159, 64, 1)' }
+  ];
+
+  @ViewChild('historyChart')
+  set historyChartCanvas(value: ElementRef<HTMLCanvasElement> | undefined) {
+    this.historyChartRef = value ?? null;
+
+    if (value) {
+      this.renderHistoryChart();
+    } else {
+      this.destroyHistoryChart();
+    }
+  }
 
   @ViewChildren('stockCard')
   stockCards!: QueryList<ElementRef<HTMLDivElement>>;
@@ -200,8 +221,12 @@ export class AppComponent implements OnInit, AfterViewInit {
       this.loadBreadthIndicators();
     }
 
-    if (tab === 'history' && !this.watchlistHistoryRows.length && !this.watchlistHistoryLoading) {
-      this.loadWatchlistHistory();
+    if (tab === 'history') {
+      if (!this.watchlistHistoryData.length && !this.watchlistHistoryLoading) {
+        this.loadWatchlistHistory();
+      } else {
+        setTimeout(() => this.renderHistoryChart());
+      }
     }
   }
 
@@ -251,6 +276,9 @@ export class AppComponent implements OnInit, AfterViewInit {
     }
 
     this.watchlistHistoryLoading = true;
+    this.watchlistHistoryData = [];
+    this.historyWatchlistNames = [];
+    this.destroyHistoryChart();
 
     this.http
       .get<WatchlistHistoryEntry[]>(
@@ -258,42 +286,28 @@ export class AppComponent implements OnInit, AfterViewInit {
       )
       .subscribe({
         next: data => {
+          const sortedData = [...data].sort((a, b) => (a.day > b.day ? 1 : a.day < b.day ? -1 : 0));
           const watchlistNames = new Set<string>();
-          data.forEach(entry =>
+          sortedData.forEach(entry =>
             entry.watchlists.forEach(summary => watchlistNames.add(summary.name))
           );
 
-          const sortedNames = Array.from(watchlistNames).sort();
-          this.watchlistHistoryColumns = sortedNames;
+          this.historyWatchlistNames = Array.from(watchlistNames).sort();
+          this.watchlistHistoryData = sortedData;
 
-          this.watchlistHistoryRows = data.map(entry => {
-            const counts: { [watchlist: string]: number | null } = {};
-            sortedNames.forEach(name => {
-              const summary = entry.watchlists.find(w => w.name === name);
-              counts[name] = summary ? summary.symbolCount : null;
-            });
-
-            return { day: entry.day, counts };
-          });
+          setTimeout(() => this.renderHistoryChart());
         },
         error: () => {
           this.watchlistHistoryError = 'Unable to load watchlist history. Please try again later.';
-          this.watchlistHistoryColumns = [];
-          this.watchlistHistoryRows = [];
+          this.watchlistHistoryData = [];
+          this.historyWatchlistNames = [];
           this.watchlistHistoryLoading = false;
+          this.destroyHistoryChart();
         },
         complete: () => {
           this.watchlistHistoryLoading = false;
         }
       });
-  }
-
-  formatHistoryCount(value: number | null | undefined): string {
-    if (value === null || value === undefined) {
-      return '—';
-    }
-
-    return value.toString();
   }
 
   onHistoryStartChange(event: Event): void {
@@ -317,6 +331,117 @@ export class AppComponent implements OnInit, AfterViewInit {
   onWatchlistChange(event: Event): void {
     const selectedWatchlist = (event.target as HTMLSelectElement).value;
     this.loadWatchlist(selectedWatchlist);
+  }
+
+  private destroyHistoryChart(): void {
+    if (this.historyChart) {
+      this.historyChart.destroy();
+      this.historyChart = null;
+    }
+  }
+
+  private getColorForWatchlist(name: string, index: number): {
+    background: string;
+    border: string;
+  } {
+    if (this.watchlistColorMap.has(name)) {
+      return this.watchlistColorMap.get(name)!;
+    }
+
+    const paletteIndex = index % this.watchlistColorPalette.length;
+    const color = this.watchlistColorPalette[paletteIndex];
+    this.watchlistColorMap.set(name, color);
+    return color;
+  }
+
+  private renderHistoryChart(): void {
+    if (
+      !this.historyChartRef ||
+      !this.watchlistHistoryData.length ||
+      !this.historyWatchlistNames.length
+    ) {
+      return;
+    }
+
+    const canvas = this.historyChartRef.nativeElement;
+    const context = canvas.getContext('2d');
+
+    if (!context) {
+      return;
+    }
+
+    const labels = this.watchlistHistoryData.map(entry => entry.day);
+
+    const datasets = this.historyWatchlistNames.map((name, index) => {
+      const { background, border } = this.getColorForWatchlist(name, index);
+      return {
+        label: name,
+        data: this.watchlistHistoryData.map(entry => {
+          const summary = entry.watchlists.find(w => w.name === name);
+          return summary ? summary.symbolCount : 0;
+        }),
+        backgroundColor: background,
+        borderColor: border,
+        borderWidth: 1
+      };
+    });
+
+    this.destroyHistoryChart();
+
+    this.historyChart = new Chart(context, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            stacked: false,
+            ticks: {
+              color: '#ffffff'
+            },
+            grid: {
+              color: 'rgba(255, 255, 255, 0.08)'
+            },
+            title: {
+              display: true,
+              text: 'Date',
+              color: '#ffffff'
+            }
+          },
+          y: {
+            beginAtZero: true,
+            ticks: {
+              color: '#ffffff',
+              precision: 0
+            },
+            grid: {
+              color: 'rgba(255, 255, 255, 0.08)'
+            },
+            title: {
+              display: true,
+              text: 'Symbols',
+              color: '#ffffff'
+            }
+          }
+        },
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: {
+              color: '#ffffff'
+            }
+          },
+          tooltip: {
+            mode: 'index',
+            intersect: false
+          }
+        }
+      }
+    });
   }
 
   loadBreadthIndicators(): void {
