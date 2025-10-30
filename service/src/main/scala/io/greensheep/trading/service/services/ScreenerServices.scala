@@ -59,6 +59,7 @@ object ScreenerServices {
       TrendScreens.SevenPctDown.flatMap(buildWatchlist("7_PCT_DOWN")),
       TrendScreens.New52WeekHigh.flatMap(buildWatchlist("NEW_52_WEEK_HIGH")),
       TrendScreens.New52WeekLow.flatMap(buildWatchlist("NEW_52_WEEK_LOW")),
+      TrendScreens.NewIPOs.flatMap(buildWatchlist("NEW_IPOS")),
     ))
   }
 
@@ -70,6 +71,7 @@ object ScreenerServices {
       TrendScreens.SevenPctDown.flatMap(buildWatchlist("7_PCT_DOWN",date)),
       TrendScreens.New52WeekHigh.flatMap(buildWatchlist("NEW_52_WEEK_HIGH",date)),
       TrendScreens.New52WeekLow.flatMap(buildWatchlist("NEW_52_WEEK_LOW",date)),
+      TrendScreens.NewIPOs.flatMap(buildWatchlist("NEW_IPOS",date)),
     ))
   }
 
