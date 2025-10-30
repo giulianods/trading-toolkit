@@ -2,12 +2,14 @@ package io.greensheep.trading.service.services
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.providers.polygon.PolygonAsyncApi
+import io.greensheep.trading.core.screens.{BreadthIndicators => MarketBreadth}
 import io.greensheep.trading.core.types.StockDescription
 import io.greensheep.trading.dataservice.{MongoDataRepo, PolygonBridge, StockUniverse}
 import zio.ZIO
 
 import java.time.LocalDate
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+import scala.jdk.CollectionConverters.*
 
 object InitializationService {
 
@@ -106,6 +108,63 @@ object InitializationService {
     } yield ()
   }
 
+  private def initializeHistoricalWatchlists(): ZIO[MongoDatabase, Throwable, Unit] = {
+    val end = LocalDate.now()
+    val start = end.minusMonths(3)
+    val dates = start.datesUntil(end.plusDays(1)).iterator().asScala.toSeq
+
+    for {
+      _ <- ZIO.logInfo(s"Initializing default watchlists from $start to $end")
+      _ <- ZIO.foreachDiscard(dates)(date =>
+        for {
+          alreadyExists <- MongoDataRepo.hasWatchlistsForDate(date)
+          _ <- if (alreadyExists) {
+            ZIO.logInfo(s"Watchlists already exist for date $date, skipping initialization")
+          } else {
+            ScreenerServices
+              .buildScreensForDate(date)
+              .tapBoth(
+                err => ZIO.logError(s"Failed to build watchlists for date $date: ${err.getMessage}"),
+                _ => ZIO.logInfo(s"Saved watchlists for date $date")
+              )
+              .unit
+          }
+        } yield ()
+      )
+    } yield ()
+  }
+
+  private def initializeMarketBreadthHistory(): ZIO[MongoDatabase, Throwable, Unit] = {
+    val end = LocalDate.now()
+    val start = end.minusMonths(3)
+    val dates = start.datesUntil(end.plusDays(1)).iterator().asScala.toSeq
+
+    for {
+      _ <- ZIO.logInfo(s"Initializing market breadth indicators from $start to $end")
+      stockMarket <- ScreenerServices.LoadQuotes
+      _ <- ZIO.foreachDiscard(dates)(date =>
+        for {
+          alreadyExists <- MongoDataRepo.hasMarketBreadthForDate(date)
+          _ <- if (alreadyExists) {
+            ZIO.logInfo(s"Market breadth indicators already exist for date $date, skipping initialization")
+          } else {
+            val snapshot = stockMarket.historicalSnapshot(date)
+            snapshot.stocks.get("AAPL") match {
+              case Some(_) =>
+                val indicators = MarketBreadth.fromStockMarket(snapshot)
+                MongoDataRepo
+                  .saveMarketBreadth(indicators)
+                  .tapError(err => ZIO.logError(s"Failed to save market breadth indicators for date $date: ${err.getMessage}"))
+                  .flatMap(_ => ZIO.logInfo(s"Saved market breadth indicators for date $date"))
+              case None =>
+                ZIO.logWarning(s"Skipping market breadth initialization for date $date because benchmark data is missing")
+            }
+          }
+        } yield ()
+      )
+    } yield ()
+  }
+
   private def quotesSanityCheck: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Seq[(String, String)]] = {
     for{
       _ <- ZIO.logInfo("Performing quotes sanity check")
@@ -160,6 +219,8 @@ object InitializationService {
       _ <- initializeQuotes()
       //_ <- rectifySplits
       _ <- repairQuotes
+      _ <- initializeHistoricalWatchlists()
+      _ <- initializeMarketBreadthHistory()
       _ <- ScreenerServices.ScreenerTask
     } yield ()
   }

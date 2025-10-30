@@ -5,9 +5,10 @@ import {
   HostListener,
   OnInit,
   QueryList,
-  ViewChildren,
+  ViewChildren
 } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import Chart from 'chart.js/auto';
 
 interface StockDescription {
   symbol: string;
@@ -42,13 +43,34 @@ interface BreadthIndicator {
   ten_day_ratio?: number | null;
 }
 
+interface WatchlistHistorySummary {
+  name: string;
+  symbolCount: number;
+}
+
+interface WatchlistHistoryEntry {
+  day: string;
+  watchlists: WatchlistHistorySummary[];
+}
+
+interface WatchlistChartGroup {
+  id: string;
+  title: string;
+  datasets: {
+    watchlist: string;
+    label: string;
+    backgroundColor: string;
+    borderColor: string;
+  }[];
+}
+
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
 export class AppComponent implements OnInit, AfterViewInit {
-  selectedTab: 'charts' | 'breadth' = 'charts';
+  selectedTab: 'charts' | 'breadth' | 'history' = 'charts';
   symbols: string[] = [];
   descriptions: { [symbol: string]: StockDescription } = {};
   stats: { [ticker: string]: { [key: string]: string } } = {};
@@ -133,8 +155,70 @@ export class AppComponent implements OnInit, AfterViewInit {
   focusedIndex = 0;
   hasUserNavigated = false;
 
+  historyStartDate: string;
+  historyEndDate: string;
+  watchlistHistoryData: WatchlistHistoryEntry[] = [];
+  watchlistHistoryLoading = false;
+  watchlistHistoryError: string | null = null;
+
+  historyChartGroups: WatchlistChartGroup[] = [
+    {
+      id: 'sevenPct',
+      title: '7% Movers',
+      datasets: [
+        {
+          watchlist: '7_PCT_UP',
+          label: '7% Up',
+          backgroundColor: 'rgba(36, 192, 111, 0.6)',
+          borderColor: 'rgba(36, 192, 111, 1)'
+        },
+        {
+          watchlist: '7_PCT_DOWN',
+          label: '7% Down',
+          backgroundColor: 'rgba(255, 99, 132, 0.6)',
+          borderColor: 'rgba(255, 99, 132, 1)'
+        }
+      ]
+    },
+    {
+      id: 'fiftyTwoWeek',
+      title: '52 Week High vs Low',
+      datasets: [
+        {
+          watchlist: 'NEW_52_WEEK_HIGH',
+          label: '52 Week High',
+          backgroundColor: 'rgba(36, 192, 111, 0.6)',
+          borderColor: 'rgba(36, 192, 111, 1)'
+        },
+        {
+          watchlist: 'NEW_52_WEEK_LOW',
+          label: '52 Week Low',
+          backgroundColor: 'rgba(255, 99, 132, 0.6)',
+          borderColor: 'rgba(255, 99, 132, 1)'
+        }
+      ]
+    },
+    {
+      id: 'sepa',
+      title: 'SEPA Watchlist',
+      datasets: [
+        {
+          watchlist: 'SEPA',
+          label: 'SEPA',
+          backgroundColor: 'rgba(54, 162, 235, 0.6)',
+          borderColor: 'rgba(54, 162, 235, 1)'
+        }
+      ]
+    }
+  ];
+
+  @ViewChildren('historyChartCanvas')
+  historyChartCanvases!: QueryList<ElementRef<HTMLCanvasElement>>;
+
   @ViewChildren('stockCard')
   stockCards!: QueryList<ElementRef<HTMLDivElement>>;
+
+  private historyCharts = new Map<string, Chart>();
   
   // Mapping of stat keys to display names and their order
   private statDisplayMapping: { [key: string]: string } = {
@@ -153,6 +237,9 @@ export class AppComponent implements OnInit, AfterViewInit {
   constructor(private http: HttpClient) {
     this.todayString = this.formatDate(new Date());
     this.selectedDay = this.todayString;
+    this.historyEndDate = this.todayString;
+    const thirtyDaysAgo = this.addDays(new Date(), -29);
+    this.historyStartDate = this.formatDate(thirtyDaysAgo);
   }
 
   ngOnInit(): void {
@@ -166,13 +253,30 @@ export class AppComponent implements OnInit, AfterViewInit {
         allowScroll: this.hasUserNavigated
       });
     });
+
+    this.historyChartCanvases.changes.subscribe(list => {
+      if (!list.length) {
+        this.destroyHistoryCharts();
+        return;
+      }
+
+      this.renderHistoryCharts();
+    });
   }
 
-  selectTab(tab: 'charts' | 'breadth'): void {
+  selectTab(tab: 'charts' | 'breadth' | 'history'): void {
     this.selectedTab = tab;
 
     if (tab === 'breadth' && !this.breadthIndicators.length) {
       this.loadBreadthIndicators();
+    }
+
+    if (tab === 'history') {
+      if (!this.watchlistHistoryData.length && !this.watchlistHistoryLoading) {
+        this.loadWatchlistHistory();
+      } else {
+        setTimeout(() => this.renderHistoryCharts());
+      }
     }
   }
 
@@ -204,9 +308,205 @@ export class AppComponent implements OnInit, AfterViewInit {
     });
   }
 
+  loadWatchlistHistory(): void {
+    if (this.watchlistHistoryLoading) {
+      return;
+    }
+
+    this.watchlistHistoryError = null;
+
+    if (!this.historyStartDate || !this.historyEndDate) {
+      this.watchlistHistoryError = 'Please select both a start and end date.';
+      return;
+    }
+
+    if (this.historyStartDate > this.historyEndDate) {
+      this.watchlistHistoryError = 'Start date must be on or before the end date.';
+      return;
+    }
+
+    this.watchlistHistoryLoading = true;
+    this.watchlistHistoryData = [];
+    this.destroyHistoryCharts();
+
+    this.http
+      .get<WatchlistHistoryEntry[]>(
+        `/watchlists/history?start=${this.historyStartDate}&end=${this.historyEndDate}`
+      )
+      .subscribe({
+        next: data => {
+          const sortedData = [...data].sort((a, b) => (a.day > b.day ? 1 : a.day < b.day ? -1 : 0));
+          const filteredData = sortedData.filter(entry => !this.isWeekend(entry.day));
+          const finalData = filteredData.length ? filteredData : sortedData;
+          this.watchlistHistoryData = finalData;
+
+          setTimeout(() => this.renderHistoryCharts());
+        },
+        error: () => {
+          this.watchlistHistoryError = 'Unable to load watchlist history. Please try again later.';
+          this.watchlistHistoryData = [];
+          this.watchlistHistoryLoading = false;
+          this.destroyHistoryCharts();
+        },
+        complete: () => {
+          this.watchlistHistoryLoading = false;
+        }
+      });
+  }
+
+  onHistoryStartChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.historyStartDate = input.value || this.historyStartDate;
+
+    if (this.historyStartDate > this.historyEndDate) {
+      this.historyEndDate = this.historyStartDate;
+    }
+  }
+
+  onHistoryEndChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.historyEndDate = input.value || this.historyEndDate;
+
+    if (this.historyEndDate < this.historyStartDate) {
+      this.historyStartDate = this.historyEndDate;
+    }
+  }
+
   onWatchlistChange(event: Event): void {
     const selectedWatchlist = (event.target as HTMLSelectElement).value;
     this.loadWatchlist(selectedWatchlist);
+  }
+
+  private destroyHistoryCharts(): void {
+    this.historyCharts.forEach(chart => chart.destroy());
+    this.historyCharts.clear();
+  }
+
+  private isWeekend(dateString: string): boolean {
+    const parsed = new Date(`${dateString}T00:00:00Z`);
+
+    if (Number.isNaN(parsed.getTime())) {
+      return false;
+    }
+
+    const day = parsed.getUTCDay();
+    return day === 0 || day === 6;
+  }
+
+  private renderHistoryCharts(): void {
+    if (!this.watchlistHistoryData.length || !this.historyChartCanvases?.length) {
+      return;
+    }
+
+    const labels = this.watchlistHistoryData.map(entry => entry.day);
+    this.historyChartCanvases.forEach(canvasRef => {
+      const canvas = canvasRef.nativeElement;
+      const chartId = canvas.dataset['chartId'];
+      if (!chartId) {
+        return;
+      }
+
+      const config = this.historyChartGroups.find(group => group.id === chartId);
+      if (!config) {
+        return;
+      }
+
+      const context = canvas.getContext('2d');
+      if (!context) {
+        return;
+      }
+
+      const datasets = config.datasets.map(dataset => ({
+        label: dataset.label,
+        data: this.watchlistHistoryData.map(entry => {
+          const summary = entry.watchlists.find(w => w.name === dataset.watchlist);
+          return summary ? summary.symbolCount : 0;
+        }),
+        backgroundColor: dataset.backgroundColor,
+        borderColor: dataset.borderColor,
+        borderWidth: 1,
+        maxBarThickness: 32
+      }));
+
+      const existingChart = this.historyCharts.get(chartId);
+      if (existingChart) {
+        existingChart.destroy();
+      }
+
+      const chart = new Chart(context, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: {
+            padding: {
+              top: 10,
+              right: 14,
+              bottom: 10,
+              left: 14
+            }
+          },
+          scales: {
+            x: {
+              stacked: false,
+              ticks: {
+                color: '#ffffff',
+                maxRotation: 30,
+                minRotation: 0,
+                autoSkip: true,
+                autoSkipPadding: 12,
+                font: {
+                  size: 10
+                }
+              },
+              grid: {
+                color: 'rgba(255, 255, 255, 0.08)'
+              },
+              title: {
+                display: true,
+                text: 'Date',
+                color: '#ffffff'
+              }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: {
+                color: '#ffffff',
+                precision: 0
+              },
+              grid: {
+                color: 'rgba(255, 255, 255, 0.08)'
+              },
+              title: {
+                display: true,
+                text: 'Symbols',
+                color: '#ffffff'
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: {
+                color: '#ffffff',
+                padding: 12,
+                boxWidth: 16
+              }
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false
+            }
+          }
+        }
+      });
+
+      this.historyCharts.set(chartId, chart);
+    });
   }
 
   loadBreadthIndicators(): void {
@@ -449,6 +749,12 @@ export class AppComponent implements OnInit, AfterViewInit {
     }
 
     return `/watchlists/${watchlist}`;
+  }
+
+  private addDays(date: Date, offset: number): Date {
+    const copy = new Date(date);
+    copy.setDate(copy.getDate() + offset);
+    return copy;
   }
 
   private formatDate(date: Date): string {

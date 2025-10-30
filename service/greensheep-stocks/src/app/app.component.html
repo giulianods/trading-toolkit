@@ -13,6 +13,13 @@
   >
     Market Breadth
   </button>
+  <button
+    class="tab-button"
+    [class.active]="selectedTab === 'history'"
+    (click)="selectTab('history')"
+  >
+    Watchlist History
+  </button>
 </div>
 
 <div *ngIf="selectedTab === 'charts'">
@@ -92,5 +99,56 @@
     <div class="empty-state" *ngIf="!breadthIndicators.length">
       Breadth indicator history will appear here once it loads.
     </div>
+  </div>
+</div>
+
+<div *ngIf="selectedTab === 'history'" class="watchlist-history">
+  <div class="controls history-controls">
+    <label for="history-start">Start Date:</label>
+    <input
+      id="history-start"
+      type="date"
+      [value]="historyStartDate"
+      [max]="historyEndDate"
+      (change)="onHistoryStartChange($event)"
+    >
+    <label for="history-end">End Date:</label>
+    <input
+      id="history-end"
+      type="date"
+      [value]="historyEndDate"
+      [max]="todayString"
+      [min]="historyStartDate"
+      (change)="onHistoryEndChange($event)"
+    >
+    <button class="history-refresh" (click)="loadWatchlistHistory()" [disabled]="watchlistHistoryLoading">
+      {{ watchlistHistoryLoading ? 'Loading…' : 'Refresh' }}
+    </button>
+  </div>
+
+  <div class="history-feedback" *ngIf="watchlistHistoryError">
+    {{ watchlistHistoryError }}
+  </div>
+
+  <div class="history-chart-wrapper" *ngIf="!watchlistHistoryError">
+    <div
+      *ngIf="watchlistHistoryData.length; else emptyHistory"
+      class="history-chart-list"
+    >
+      <div
+        class="history-chart-container"
+        *ngFor="let chart of historyChartGroups"
+      >
+        <h3 class="history-chart-title">{{ chart.title }}</h3>
+        <canvas
+          #historyChartCanvas
+          [attr.data-chart-id]="chart.id"
+          [attr.aria-label]="chart.title + ' bar chart'"
+        ></canvas>
+      </div>
+    </div>
+    <ng-template #emptyHistory>
+      <div class="empty-state">No watchlist history found for the selected dates.</div>
+    </ng-template>
   </div>
 </div>
