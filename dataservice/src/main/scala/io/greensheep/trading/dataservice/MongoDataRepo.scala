@@ -4,7 +4,7 @@ import io.github.zeal18.zio.mongodb.driver.model.{ReplaceOptions, UpdateOptions}
 import io.github.zeal18.zio.mongodb.driver.sorts.Sort
 import io.github.zeal18.zio.mongodb.driver.updates.{Update, addEachToSet}
 import io.github.zeal18.zio.mongodb.driver.{MongoClient, MongoClientSettings, MongoDatabase, filters, updates}
-import io.greensheep.trading.core.types.{DailyQuoteData, Quote, ScreenStats, Stock, StockDescription, Watchlist}
+import io.greensheep.trading.core.types.{DailyQuoteData, Quote, ScreenStats, Stock, StockDescription, StockUniverse, Watchlist}
 import zio.*
 import zio.stream.ZStream
 import zio.interop.reactivestreams.*
@@ -72,6 +72,9 @@ object MongoDataRepo {
 
       override def hasWatchlistsForDate(day: LocalDate): ZIO[Any, Throwable, Boolean] =
         MongoDataRepo.hasWatchlistsForDate(day).provideLayer(mongoLayer)
+
+      override def getWatchlistsBetween(start: LocalDate, end: LocalDate): ZIO[Any, Throwable, Seq[Watchlist]] =
+        MongoDataRepo.getWatchlistsBetween(start, end).provideLayer(mongoLayer)
     }
   }
 
@@ -150,6 +153,20 @@ object MongoDataRepo {
     } yield count > 0
   }
 
+  def getWatchlistsBetween(start: LocalDate, end: LocalDate): ZIO[MongoDatabase, Throwable, Seq[Watchlist]] = {
+    for {
+      db <- ZIO.service[MongoDatabase]
+      coll = db.getCollection[Watchlist]("watchlist")
+      publisher = coll
+        .find(filters.and(
+          filters.gte("day", start),
+          filters.lte("day", end)
+        ))
+        .sort(Sort.Asc("day"))
+      watchlists <- publisher.run.toZIOStream().runCollect.map(_.toSeq)
+    } yield watchlists
+  }
+
   def getWatchlistLatest(name: String) : ZIO[MongoDatabase, Throwable, Watchlist] = {
     for {
       db <- ZIO.service[MongoDatabase]
@@ -218,4 +235,6 @@ trait MongoDataRepo {
   def getWatchlistLatest(name: String): ZIO[Any, Throwable, Watchlist]
 
   def hasWatchlistsForDate(day: LocalDate): ZIO[Any, Throwable, Boolean]
+
+  def getWatchlistsBetween(start: LocalDate, end: LocalDate): ZIO[Any, Throwable, Seq[Watchlist]]
 }

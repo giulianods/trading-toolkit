@@ -2,7 +2,7 @@ package io.greensheep.trading.service.services
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.trading.api.ChartServices
-import io.greensheep.trading.core.types.{DailyQuoteData, Watchlist}
+import io.greensheep.trading.core.types.{DailyQuoteData, Watchlist, WatchlistHistoryEntry, WatchlistSummary}
 import io.greensheep.trading.dataservice.MongoDataRepo
 import io.greensheep.trading.service.services.ScreenerServices
 import zio.*
@@ -49,6 +49,37 @@ object ApiEndpoints {
             }
           }.mapError(handleError)
         }
+      },
+      (Method.GET / "watchlists" / "history") -> {
+        Handler.fromFunctionZIO[Request] { req =>
+          val result = for {
+            startParam <- ZIO.fromOption(req.url.queryParams.get("start"))
+              .orElseFail(new IllegalArgumentException("Missing required query parameter: start"))
+            endParam <- ZIO.fromOption(req.url.queryParams.get("end"))
+              .orElseFail(new IllegalArgumentException("Missing required query parameter: end"))
+            startDate <- ZIO.attempt(LocalDate.parse(startParam))
+              .mapError(_ => new IllegalArgumentException(s"Invalid start date: $startParam"))
+            endDate <- ZIO.attempt(LocalDate.parse(endParam))
+              .mapError(_ => new IllegalArgumentException(s"Invalid end date: $endParam"))
+            _ <- ZIO.fail(new IllegalArgumentException("start must be on or before end"))
+              .when(endDate.isBefore(startDate))
+            watchlists <- MongoDataRepo.getWatchlistsBetween(startDate, endDate)
+            history = watchlists
+              .groupBy(_.day)
+              .toSeq
+              .sortBy(_._1)
+              .map { case (day, lists) =>
+                val summaries = lists
+                  .sortBy(_.screenName)
+                  .map(wl => WatchlistSummary(wl.screenName, wl.tickers.size))
+                WatchlistHistoryEntry(day, summaries)
+              }
+          } yield Response.json(history.toJson)
+
+          result.catchSome { case e: IllegalArgumentException =>
+            ZIO.succeed(Response.text(e.getMessage).status(Status.BadRequest))
+          }
+        }.mapError(handleError)
       },
       (Method.GET / "watchlists" / string("name")) -> {
         Handler.fromFunctionZIO[(String, Request)]{
