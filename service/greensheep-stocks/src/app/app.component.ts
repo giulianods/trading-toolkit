@@ -121,7 +121,9 @@ export class AppComponent implements OnInit, AfterViewInit {
     { label: 'SEPA', value: 'SEPA' },
     { label: '7% Up', value: '7_PCT_UP' },
     { label: '7% Down', value: '7_PCT_DOWN' },
-    { label: 'VCP', value: 'VCP' }
+    { label: 'VCP', value: 'VCP' },
+    { label: '52 Week High', value: 'NEW_52_WEEK_HIGH' },
+    { label: '52 Week Low', value: 'NEW_52_WEEK_LOW' }
   ];
 
   selectedWatchlist: string = this.watchlists[0].value;
