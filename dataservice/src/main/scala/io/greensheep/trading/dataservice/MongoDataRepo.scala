@@ -5,7 +5,7 @@ import io.github.zeal18.zio.mongodb.driver.sorts.Sort
 import io.github.zeal18.zio.mongodb.driver.updates.{Update, addEachToSet}
 import io.github.zeal18.zio.mongodb.driver.{MongoClient, MongoClientSettings, MongoDatabase, filters, updates}
 import io.greensheep.trading.core.screens.{BreadthIndicators => MarketBreadth}
-import io.greensheep.trading.core.types.{DailyQuoteData, Quote, ScreenStats, Stock, StockDescription, StockUniverse, Watchlist}
+import io.greensheep.trading.core.types.{DailyQuoteData, Quote, ScreenStats, Stock, StockDescription, Watchlist}
 import zio.*
 import zio.stream.ZStream
 import zio.interop.reactivestreams.*
