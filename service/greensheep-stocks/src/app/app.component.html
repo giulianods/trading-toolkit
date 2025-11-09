@@ -53,6 +53,14 @@
         <h2>[{{ s }}] {{ descriptions[s].companyName }}</h2>
         <p class="sic">{{ descriptions[s].sicDescription }}</p>
         <p>{{ descriptions[s].description }}</p>
+        <div class="financial-chart" *ngIf="financials[s]?.length">
+          <canvas
+            #financialChartCanvas
+            [attr.data-symbol]="s"
+            aria-label="Annual financials bar chart"
+            role="img"
+          ></canvas>
+        </div>
       </div>
       <img [src]="chartUrl(s)" [alt]="s">
       <div class="stats-table" *ngIf="stats[s]">

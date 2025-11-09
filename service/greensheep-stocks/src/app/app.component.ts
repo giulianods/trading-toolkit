@@ -3,6 +3,7 @@ import {
   Component,
   ElementRef,
   HostListener,
+  OnDestroy,
   OnInit,
   QueryList,
   ViewChildren
@@ -64,16 +65,31 @@ interface WatchlistChartGroup {
   }[];
 }
 
+interface AnnualFinancialData {
+  year: number;
+  revenuePerShare: number;
+  basicEarningsPerShare: number;
+  operatingMargin: number;
+  netIncomeMargin: number;
+}
+
+interface StockFinancials {
+  ticker: string;
+  annual: AnnualFinancialData[];
+  quarterly: unknown[];
+}
+
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
-export class AppComponent implements OnInit, AfterViewInit {
+export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
   selectedTab: 'charts' | 'breadth' | 'history' = 'charts';
   symbols: string[] = [];
   descriptions: { [symbol: string]: StockDescription } = {};
   stats: { [ticker: string]: { [key: string]: string } } = {};
+  financials: { [ticker: string]: AnnualFinancialData[] } = {};
   breadthIndicators: BreadthIndicator[] = [];
   breadthIndicatorColumns: {
     key: keyof BreadthIndicator;
@@ -218,7 +234,11 @@ export class AppComponent implements OnInit, AfterViewInit {
   @ViewChildren('stockCard')
   stockCards!: QueryList<ElementRef<HTMLDivElement>>;
 
+  @ViewChildren('financialChartCanvas')
+  financialChartCanvases!: QueryList<ElementRef<HTMLCanvasElement>>;
+
   private historyCharts = new Map<string, Chart>();
+  private financialCharts = new Map<string, Chart>();
   
   // Mapping of stat keys to display names and their order
   private statDisplayMapping: { [key: string]: string } = {
@@ -262,6 +282,10 @@ export class AppComponent implements OnInit, AfterViewInit {
 
       this.renderHistoryCharts();
     });
+
+    this.financialChartCanvases.changes.subscribe(() => {
+      this.renderFinancialCharts();
+    });
   }
 
   selectTab(tab: 'charts' | 'breadth' | 'history'): void {
@@ -285,8 +309,10 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.symbols = [];
     this.descriptions = {};
     this.stats = {};
+    this.financials = {};
     this.focusedIndex = 0;
     this.hasUserNavigated = false;
+    this.destroyFinancialCharts();
 
     const url = this.buildWatchlistUrl(watchlist);
 
@@ -305,6 +331,8 @@ export class AppComponent implements OnInit, AfterViewInit {
           this.descriptions[s] = desc;
         });
       });
+
+      this.loadFinancialsForSymbols(this.symbols);
     });
   }
 
@@ -507,6 +535,211 @@ export class AppComponent implements OnInit, AfterViewInit {
 
       this.historyCharts.set(chartId, chart);
     });
+  }
+
+  private loadFinancialsForSymbols(symbols: string[]): void {
+    this.destroyFinancialCharts();
+
+    const uniqueSymbols = Array.from(new Set(symbols)).filter(Boolean);
+    if (!uniqueSymbols.length) {
+      this.financials = {};
+      return;
+    }
+
+    const encodedSymbols = uniqueSymbols.map(symbol => encodeURIComponent(symbol)).join(',');
+    this.http
+      .get<Record<string, StockFinancials>>(`/financials?tickers=${encodedSymbols}`)
+      .subscribe({
+        next: response => {
+          const nextFinancials: { [ticker: string]: AnnualFinancialData[] } = {};
+
+          Object.entries(response).forEach(([ticker, data]) => {
+            if (!data?.annual?.length) {
+              nextFinancials[ticker] = [];
+              return;
+            }
+
+            const trimmed = [...data.annual]
+              .sort((a, b) => b.year - a.year)
+              .slice(0, 5)
+              .sort((a, b) => a.year - b.year);
+
+            nextFinancials[ticker] = trimmed;
+          });
+
+          uniqueSymbols.forEach(symbol => {
+            if (!nextFinancials[symbol]) {
+              nextFinancials[symbol] = [];
+            }
+          });
+
+          this.financials = nextFinancials;
+
+          setTimeout(() => this.renderFinancialCharts());
+        },
+        error: () => {
+          this.financials = {};
+          this.destroyFinancialCharts();
+        }
+      });
+  }
+
+  private renderFinancialCharts(): void {
+    if (!this.financialChartCanvases?.length) {
+      return;
+    }
+
+    this.financialChartCanvases.forEach(canvasRef => {
+      const canvas = canvasRef.nativeElement;
+      const symbol = canvas.dataset['symbol'];
+      if (!symbol) {
+        return;
+      }
+
+      const data = this.financials[symbol];
+      const existing = this.financialCharts.get(symbol);
+
+      if (!data?.length) {
+        if (existing) {
+          existing.destroy();
+          this.financialCharts.delete(symbol);
+        }
+        return;
+      }
+
+      const context = canvas.getContext('2d');
+      if (!context) {
+        return;
+      }
+
+      if (existing) {
+        existing.destroy();
+      }
+
+      const labels = data.map(entry => entry.year.toString());
+      const chart = new Chart(context, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Revenue per Share ($)',
+              data: data.map(entry => entry.revenuePerShare ?? null),
+              backgroundColor: 'rgba(54, 162, 235, 0.6)',
+              borderColor: 'rgba(54, 162, 235, 1)',
+              borderWidth: 1,
+              maxBarThickness: 26,
+              yAxisID: 'yDollar'
+            },
+            {
+              label: 'Basic EPS ($)',
+              data: data.map(entry => entry.basicEarningsPerShare ?? null),
+              backgroundColor: 'rgba(75, 192, 192, 0.6)',
+              borderColor: 'rgba(75, 192, 192, 1)',
+              borderWidth: 1,
+              maxBarThickness: 26,
+              yAxisID: 'yDollar'
+            },
+            {
+              label: 'Operating Margin (%)',
+              data: data.map(entry =>
+                entry.operatingMargin !== undefined && entry.operatingMargin !== null
+                  ? entry.operatingMargin * 100
+                  : null
+              ),
+              backgroundColor: 'rgba(255, 159, 64, 0.6)',
+              borderColor: 'rgba(255, 159, 64, 1)',
+              borderWidth: 1,
+              maxBarThickness: 26,
+              yAxisID: 'yPercent'
+            },
+            {
+              label: 'Net Income Margin (%)',
+              data: data.map(entry =>
+                entry.netIncomeMargin !== undefined && entry.netIncomeMargin !== null
+                  ? entry.netIncomeMargin * 100
+                  : null
+              ),
+              backgroundColor: 'rgba(255, 99, 132, 0.6)',
+              borderColor: 'rgba(255, 99, 132, 1)',
+              borderWidth: 1,
+              maxBarThickness: 26,
+              yAxisID: 'yPercent'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: {
+            padding: {
+              top: 6,
+              right: 10,
+              bottom: 6,
+              left: 10
+            }
+          },
+          scales: {
+            x: {
+              ticks: {
+                color: '#ffffff',
+                font: {
+                  size: 9
+                }
+              },
+              grid: {
+                color: 'rgba(255, 255, 255, 0.08)'
+              }
+            },
+            yDollar: {
+              position: 'left',
+              beginAtZero: true,
+              ticks: {
+                color: '#ffffff',
+                callback: value => `$${value}`
+              },
+              grid: {
+                color: 'rgba(255, 255, 255, 0.08)'
+              }
+            },
+            yPercent: {
+              position: 'right',
+              beginAtZero: true,
+              ticks: {
+                color: '#ffffff',
+                callback: value => `${value}%`
+              },
+              grid: {
+                drawOnChartArea: false,
+                color: 'rgba(255, 255, 255, 0.12)'
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: {
+                color: '#ffffff',
+                font: {
+                  size: 9
+                }
+              }
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false
+            }
+          }
+        }
+      });
+
+      this.financialCharts.set(symbol, chart);
+    });
+  }
+
+  private destroyFinancialCharts(): void {
+    this.financialCharts.forEach(chart => chart.destroy());
+    this.financialCharts.clear();
   }
 
   loadBreadthIndicators(): void {
@@ -767,5 +1000,10 @@ export class AppComponent implements OnInit, AfterViewInit {
   onCardFocus(index: number): void {
     this.hasUserNavigated = true;
     this.focusedIndex = index;
+  }
+
+  ngOnDestroy(): void {
+    this.destroyHistoryCharts();
+    this.destroyFinancialCharts();
   }
 }
