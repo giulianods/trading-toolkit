@@ -13,6 +13,7 @@ import java.io.{PrintWriter, StringWriter}
 import java.lang
 import java.time.LocalDate
 import scala.util.Try
+
 object ApiEndpoints {
 
 
@@ -24,7 +25,35 @@ object ApiEndpoints {
     (Response.text(stackTrace).status(Status.InternalServerError))
   }
 
-  def buildRestApi: HttpApp[MongoDatabase & ChartServices] = {
+  def financialsRoutes(mongoRepo: ZLayer[Any, Throwable, MongoDatabase]): Routes[Any, Response] = {
+    Routes(
+      (Method.GET / "financials") -> {
+        Handler.fromFunctionZIO[Request] { req =>
+          val result = for {
+            tickersParam <- ZIO.fromOption(req.url.queryParams.get("tickers"))
+              .orElseFail(new IllegalArgumentException("Missing required query parameter: tickers"))
+            tickers = tickersParam.split(",").map(_.trim).filter(_.nonEmpty).toSeq
+            _ <- ZIO.fail(new IllegalArgumentException("At least one ticker is required"))
+              .when(tickers.isEmpty)
+            financialsMap <- ZIO.foreach(tickers) { ticker =>
+              MongoDataRepo.getFinancials(ticker)
+                .map(financials => Some(ticker -> financials))
+                .catchSome {
+                  case _: NoSuchElementException =>
+                    ZIO.logDebug(s"No financials found for ticker: $ticker").as(None)
+                }
+            }.map(_.flatten.toMap)
+          } yield Response.json(financialsMap.toJson)
+
+          result.catchSome { case e: IllegalArgumentException =>
+            ZIO.succeed(Response.text(e.getMessage).status(Status.BadRequest))
+          }.provideLayer(mongoRepo)
+        }.mapError(handleError)
+      }
+    )
+  }
+
+  val OtherRoutes: Routes[MongoDatabase & ChartServices, Response] = {
     Routes(
       // This line works fine
       (Method.GET / "quotes" / string("ticker")) -> {
@@ -158,8 +187,7 @@ object ApiEndpoints {
           }
         }.mapError(handleError)
       }
-    ).toHttpApp
+    )
   }
-
 
 }

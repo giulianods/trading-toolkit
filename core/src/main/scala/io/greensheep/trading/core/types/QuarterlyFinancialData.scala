@@ -6,22 +6,19 @@ object QuarterlyFinancialData {
 
 }
 case class QuarterlyFinancialData(
-                                 quarter: String,
+                                 quarter: Int,
                                  year: Int,
-                                 revenues: Double,
+                                 revenuePerShare: Double,
                                  basicEarningsPerShare: Double,
-                                 dilutedEarningsPerShare: Double,
-                                 netCashFlow: Double,
-                                 netCashFlowFromOperatingActivities: Double,
-                                 netCashFlowFromInvestingActivities: Double,
-                                 netCashFlowFromFinancingActivities: Double
+                                 netIncomeMargin: Double,
+                                 operatingMargin: Double
                              ) {
 
-  lazy val uuid: String = year.toString + "-" + quarter
+  lazy val uuid: String = year.toString + "-" + quarter.toString
 
 
   override def toString: String = {
-    s"$year | $quarter | $revenues | $dilutedEarningsPerShare"
+    s"$year | $quarter"
   }
 
 }

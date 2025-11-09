@@ -9,22 +9,18 @@ object AnnualFinancialData {
 }
 
 case class AnnualFinancialData(
-                                ticker: String,
                                 year: Int,
-                                revenues: Double,
+                                revenuePerShare: Double,
                                 basicEarningsPerShare: Double,
-                                dilutedEarningsPerShare: Double,
-                                netCashFlow: Double,
-                                netCashFlowFromOperatingActivities: Double,
-                                netCashFlowFromInvestingActivities: Double,
-                                netCashFlowFromFinancingActivities: Double
+                                operatingMargin: Double,
+                                netIncomeMargin: Double,
                               ) {
 
   lazy val uuid: String = year.toString
 
 
   override def toString: String = {
-    s"$year | $revenues | $dilutedEarningsPerShare"
+    s"$year"
   }
 
 }

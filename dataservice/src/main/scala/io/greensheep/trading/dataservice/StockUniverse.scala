@@ -21,6 +21,7 @@ object StockUniverse {
           name = obj.get("name").flatMap(_.as[String].toOption).getOrElse(""),
           dataSource = obj.get("dataSource").flatMap(_.as[String].toOption).getOrElse(""),
           lastUpdateQuotes = obj.get("lastUpdateQuotes").flatMap(_.as[LocalDate].toOption).getOrElse(LocalDate.of(1970,1,1)),
+          lastUpdateFinancials = obj.get("lastUpdateFinancials").flatMap(_.as[LocalDate].toOption).getOrElse(LocalDate.of(1970,1,1)),
           timeZone = obj.get("timeZone").flatMap(_.as[String].toOption).getOrElse("UTC"),
           symbols = obj.get("symbols").flatMap(_.as[Seq[String]].toOption).getOrElse(Seq.empty),
           lastUpdateSplits = obj.get("lastUpdateSplits").flatMap(_.as[LocalDate].toOption).getOrElse(LocalDate.of(1970,1,1))
@@ -35,6 +36,7 @@ case class StockUniverse(
                         name: String,
                         dataSource: String,
                         lastUpdateQuotes: LocalDate,
+                        lastUpdateFinancials: LocalDate,
                         timeZone: String,
                         symbols: Seq[String],
                         lastUpdateSplits: LocalDate = LocalDate.of(1970,1,1)

@@ -22,5 +22,9 @@
   "/breadth": {
     "target": "http://localhost:7777",
     "secure": false
+  },
+  "/financials": {
+    "target": "http://localhost:7777",
+    "secure": false
   }
 }

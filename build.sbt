@@ -42,7 +42,8 @@ val logbackLib = Seq(
 )
 
 val dataSourceLibraries = Seq(
-  "io.greensheep" %% "polygon-client-zio" % "0.1.0-SNAPSHOT"
+  "io.greensheep" %% "polygon-client-zio" % "0.1.0-SNAPSHOT",
+  "io.finnhub" %% "finnhub-client-zio" % "0.1.0-SNAPSHOT"
 )
 
 val zioTestFramework = new TestFramework("zio.test.sbt.ZTestFramework")

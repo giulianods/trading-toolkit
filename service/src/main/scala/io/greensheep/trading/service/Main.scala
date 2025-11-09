@@ -16,6 +16,8 @@ import zio.logging.backend.SLF4J
 
 import scala.jdk.CollectionConverters.*
 import java.time.LocalDate
+import io.finnhub.client.FinnhubClient
+import io.greensheep.trading.service.services.FiancialsServices
 
 object Main extends ZIOAppDefault {
 
@@ -32,46 +34,62 @@ object Main extends ZIOAppDefault {
 
   override def run: ZIO[Environment & ZIOAppArgs & Scope, Any, Any] = {
 
-    val apiKey = java.lang.System.getenv("POLYGON_API_KEY")
+    val polygonApiKey = java.lang.System.getenv("POLYGON_API_KEY")
+    val finnhubApiKey = java.lang.System.getenv("FINNHUB_API_KEY")
 
-    val clientLayer = Client.default.map(_.update(
+    val polygonClientLayer = Client.default.map(_.update(
       client =>
-        client.addHeader(Authorization.Bearer(apiKey))
+        client.addHeader(Authorization.Bearer(polygonApiKey))
           .url(URL.decode("https://api.polygon.io").toOption.get)
     ))
 
+    val finnhubClientLayer = Client.default.map(_.update(
+      client =>
+        client.addHeader("X-Finnhub-Token", finnhubApiKey)
+    ))
+
     val polygonLayer = ZLayer.fromZIO(PolygonAsyncApi.build())
+    val environment = polygonClientLayer >>> polygonLayer
 
-    val environment = clientLayer >>> polygonLayer
+    val finnhubLayer = ZLayer.succeed(new FinnhubClient(finnhubClientLayer))
 
-    val mongoLayer = MongoClient.live("mongodb://127.0.0.1:27017") >>> ZLayer.fromZIO(ZIO.serviceWith[MongoClient](_.getDatabase("polygon")))
+    val mongoClient = MongoClient.live("mongodb://127.0.0.1:27017")
 
-    val chartServiceLayer = mongoLayer >>> ChartServices.buildLayer
+    val polygonMongoLayer = mongoClient >>> ZLayer.fromZIO(ZIO.serviceWith[MongoClient](_.getDatabase("polygon")))
+    val finnhubMongoLayer = mongoClient >>> ZLayer.fromZIO(ZIO.serviceWith[MongoClient](_.getDatabase("finnhub")))
+
+    
+    val initFinancials = FiancialsServices.updateFinancials().provide(finnhubLayer ++ finnhubMongoLayer)
+
+    val chartServiceLayer = polygonMongoLayer >>> ChartServices.buildLayer
 
     val restPort = 7777
 
     val restServer = Server.defaultWithPort(restPort)
 
 
-    // MongoDataRepo.build("mongodb://127.0.0.1:27017", "polygon")
-
     val intitializer = InitializationService.initializeApp()
+
+    val allRoutes =  ApiEndpoints.OtherRoutes
+    val finRoutes = ApiEndpoints.financialsRoutes(finnhubMongoLayer)
+   
 
     val everything = for {
       _ <- ZIO.logInfo("Starting initialization")
-      _ <- intitializer
-      _ <- ZIO.logInfo("Initialization completed")
+      //_ <- intitializer
+      //_ <- ZIO.logInfo("Initialization completed")
+      _ <- initFinancials
       _ <- ZIO.logInfo("Starting rest api")
-      api = ApiEndpoints.buildRestApi
+      allApi = (finRoutes ++ allRoutes).toHttpApp
       web = WebApp.app
-      _ <- Server.install(api ++ web)
+      _ <- Server.install(allApi ++ web)
       _ <- ZIO.logInfo(s"Rest api started on port $restPort")
       _ <- CronJobs.start
       _ <- ZIO.logInfo("Cron jobs started")
       _ <- ZIO.never
     } yield ()
 
-    val program = everything.provide(environment ++ mongoLayer ++ restServer ++ chartServiceLayer)
+    val program = everything.provide(environment ++ polygonMongoLayer ++ restServer ++ chartServiceLayer)
 
     program catchAll {
       th =>

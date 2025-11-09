@@ -10,6 +10,8 @@ import zio.ZIO
 import java.time.LocalDate
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 import scala.jdk.CollectionConverters.*
+import io.finnhub.client.FinnhubClient
+import io.greensheep.trading.dataservice.FinnhubBridge
 
 object InitializationService {
 
@@ -27,6 +29,7 @@ object InitializationService {
             name = "stock-universe",
             dataSource = "polygon",
             lastUpdateQuotes = LocalDate.now().minusMonths(23),
+            lastUpdateFinancials = LocalDate.of(1970,1,1),
             timeZone = "America/New_York",
             symbols = usCommonStocks)
           _ <- MongoDataRepo.saveStockUniverse(stockUniverse)
@@ -76,6 +79,17 @@ object InitializationService {
   }
 
 
+  private def initializeFinancials(): ZIO[MongoDatabase & FinnhubClient, Throwable, Unit] = ZIO.logSpan("initialize-financials") {
+    for{
+      _ <- ZIO.logInfo("Initializing financials")
+      universe <- MongoDataRepo.getStockUniverse
+      remoteApi <- ZIO.service[FinnhubClient]
+      _ <- ZIO.foreach(universe.symbols)(ticker => remoteApi.basicFinancials(ticker)
+        .map(financials => MongoDataRepo.updateFinancials(ticker, FinnhubBridge.translateAnnualFinancials(financials), FinnhubBridge.translateQuarterlyFinancials(financials))))  
+    } yield ()
+  }
+
+
   private def initializeQuotes(): ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] = ZIO.logSpan("initialize-quotes") {
     for {
       _ <- ZIO.logInfo("Initializing quotes")
@@ -91,6 +105,7 @@ object InitializationService {
             name = "stock-universe",
             dataSource = "polygon",
             lastUpdateQuotes = end,
+            lastUpdateFinancials = LocalDate.of(1970,1,1),
             timeZone = "America/New_York",
             symbols = usCommonStocks)
           _ <- MongoDataRepo.saveStockUniverse(stockUniverse)
@@ -215,13 +230,13 @@ object InitializationService {
   def initializeApp(): ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] =  {
     for {
       _ <- InitializeStockUniverse
-      _ <- InitializeDescriptions
+      //_ <- InitializeDescriptions
       _ <- initializeQuotes()
       //_ <- rectifySplits
-      _ <- repairQuotes
-      _ <- initializeHistoricalWatchlists()
-      _ <- initializeMarketBreadthHistory()
-      _ <- ScreenerServices.ScreenerTask
+      //_ <- repairQuotes
+      //_ <- initializeHistoricalWatchlists()
+      //_ <- initializeMarketBreadthHistory()
+      //_ <- ScreenerServices.ScreenerTask
     } yield ()
   }
 

@@ -51,8 +51,7 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
   private val mongoClient = MongoClients.create(url)
   val database: MongoDatabase = mongoClient.getDatabase(databaseName)
   val quotesCollection: MongoCollection[Document] = getCollection("daily-quotes", databaseName).get
-
-
+  val financialsCollection: MongoCollection[Document] = getCollection("financials", databaseName).get
 
 
 
@@ -139,6 +138,53 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
       "n" -> agg.numberOfShares,
       "vw" -> agg.wwap
     ).asJava
+  }
+
+  def updateFinancials(symbol: String, annual: Seq[AnnualFinancialData], quarterly: Seq[QuarterlyFinancialData]): Unit = {  
+    def annualToDocument(annual: AnnualFinancialData) = {
+      new Document(
+        Map(
+          "year" -> annual.year,
+          "revenuePerShare" -> annual.revenuePerShare,
+          "basicEarningsPerShare" -> annual.basicEarningsPerShare,
+          "operatingMargin" -> annual.operatingMargin,
+          "netIncomeMargin" -> annual.netIncomeMargin
+        ).asJava)
+    }
+
+    def quarterlyToDocument(quarterly: QuarterlyFinancialData) = {
+      new Document(
+        Map(
+          "year" -> quarterly.year,
+          "quarter" -> quarterly.quarter,
+          "revenuePerShare" -> quarterly.revenuePerShare,
+          "basicEarningsPerShare" -> quarterly.basicEarningsPerShare,
+          "operatingMargin" -> quarterly.operatingMargin,
+          "netIncomeMargin" -> quarterly.netIncomeMargin
+        ).asJava)
+    }
+
+    val filter = Filters.eq("_id", symbol)
+    val symbolUpdate = Updates.set("symbol", symbol)
+    Option(financialsCollection.find(filter).first()) match {
+      case Some(document) =>
+        val annuals = document.getList("annual", classOf[Document], List.empty[Document].asJava).asScala
+        val quarterlys = document.getList("quarterly", classOf[Document], List.empty[Document].asJava).asScala
+        val annualsMap = annuals.map(doc => doc.get("year").toString.toInt -> doc).toMap
+        val quarterlysMap = quarterlys.map(doc => doc.get("year").toString.toInt -> doc).toMap
+        val newAnnual = annual.filter(a => !annualsMap.contains(a.year))
+        val newQuarterly = quarterly.filter(q => !quarterlysMap.contains(q.year * 10 + q.quarter))
+        val updates1 = Updates.set("annual", newAnnual.map(annualToDocument).asJava)
+        val updates2 = Updates.set("quarterly", newQuarterly.map(quarterlyToDocument).asJava)        
+        val updates = Updates.combine(symbolUpdate, updates1, updates2)
+        financialsCollection.updateOne(filter, updates1, new UpdateOptions().upsert(true))
+      case None =>
+        val updates1 = Updates.set("annual", annual.map(annualToDocument).asJava)
+        val updates2 = Updates.set("quarterly", quarterly.map(quarterlyToDocument).asJava)
+        val updates = Updates.combine(symbolUpdate, updates1, updates2)
+        val options = new UpdateOptions().upsert(true)
+        financialsCollection.updateOne(filter,updates, options)
+    }
   }
 
 
@@ -327,45 +373,10 @@ class MongoDbDataRepo(url: String, databaseName: String) extends DataRepo{
   }
 
 
-  def getFinancialsQuarterly(ticker: String): Seq[QuarterlyFinancialData] = {
-    val collection = getFinancialsCollection(ticker)
-    val entries = collection.find()
-    val qdata = entries.asScala map { doc =>
-      QuarterlyFinancialData(
-        quarter = doc.get("quarter").asInstanceOf[String],
-        year = doc.get("year").asInstanceOf[Decimal128].intValue(),
-        revenues = doc.get("revenues").asInstanceOf[Decimal128].doubleValue(),
-        basicEarningsPerShare = doc.get("basicEarningsPerShare").asInstanceOf[Decimal128].doubleValue(),
-        dilutedEarningsPerShare = doc.get("dilutedEarningsPerShare").asInstanceOf[Decimal128].doubleValue(),
-        netCashFlow = doc.get("netCashFlow").asInstanceOf[Decimal128].doubleValue(),
-        netCashFlowFromOperatingActivities = doc.get("netCashFlowFromOperatingActivities").asInstanceOf[Decimal128].doubleValue(),
-        netCashFlowFromInvestingActivities = doc.get("netCashFlowFromInvestingActivities").asInstanceOf[Decimal128].doubleValue(),
-        netCashFlowFromFinancingActivities = doc.get("netCashFlowFromFinancingActivities").asInstanceOf[Decimal128].doubleValue()
-      )
-    }
-    qdata.toSeq.sortBy(_.uuid)
-  }
 
 
-  def getFinancialsYearly(ticker: String): Seq[AnnualFinancialData] = {
-    val collection = getCollection("annual-financials", "polygon").get
-    val filter = Filters.regex("_id", s"$ticker-.*")
-    val entries = collection.find(filter)
-    val qdata = entries.asScala map { doc =>
-      AnnualFinancialData(
-        ticker = ticker,
-        year = doc.get("year").asInstanceOf[Decimal128].intValue(),
-        revenues = doc.get("revenues").asInstanceOf[Decimal128].doubleValue(),
-        basicEarningsPerShare = doc.get("basicEarningsPerShare").asInstanceOf[Decimal128].doubleValue(),
-        dilutedEarningsPerShare = doc.get("dilutedEarningsPerShare").asInstanceOf[Decimal128].doubleValue(),
-        netCashFlow = doc.get("netCashFlow").asInstanceOf[Decimal128].doubleValue(),
-        netCashFlowFromOperatingActivities = doc.get("netCashFlowFromOperatingActivities").asInstanceOf[Decimal128].doubleValue(),
-        netCashFlowFromInvestingActivities = doc.get("netCashFlowFromInvestingActivities").asInstanceOf[Decimal128].doubleValue(),
-        netCashFlowFromFinancingActivities = doc.get("netCashFlowFromFinancingActivities").asInstanceOf[Decimal128].doubleValue()
-      )
-    }
-    qdata.toSeq.sortBy(_.year)
-  }
+
+ 
 
   def saveFinancialsAnnually(ticker: String, data: Chunk[AnnualFinancialData]) = {
     val collection = getCollection("annual-financials", "polygon").get

@@ -16,6 +16,9 @@ import org.bson.codecs.EncoderContext
 import org.bson.codecs.configuration.CodecRegistries
 
 import java.time.LocalDate
+import io.greensheep.trading.core.types.AnnualFinancialData
+import io.greensheep.trading.core.types.QuarterlyFinancialData
+import io.greensheep.trading.core.types.StockFinancials
 
 
 
@@ -102,6 +105,25 @@ object MongoDataRepo {
     } yield ()
   }
 
+  def updateFinancials(ticker: String, annual: Seq[AnnualFinancialData], quarterly: Seq[QuarterlyFinancialData]): ZIO[MongoDatabase, Throwable, Unit] = {
+    for {
+      db <- ZIO.service[MongoDatabase]
+      coll = db.getCollection[StockFinancials]("financials")
+      financials = StockFinancials(ticker, annual, quarterly)
+      _ <- coll.replaceOne(filters.eq("_id", ticker), financials, ReplaceOptions(upsert = true)).map(_.wasAcknowledged())
+    } yield ()
+  }
+
+
+  def getFinancials(ticker: String): ZIO[MongoDatabase, Throwable, StockFinancials] = {
+    for {
+      db <- ZIO.service[MongoDatabase]
+      coll = db.getCollection[StockFinancials]("financials")
+      financialsOpt <- coll.find(filters.eq("_id", ticker)).runHead
+      financials <- ZIO.fromOption(financialsOpt).orElseFail(new NoSuchElementException(s"No financials found for ticker $ticker"))
+    } yield financials
+  }
+  
   def hasStockUniverse: ZIO[MongoDatabase, Throwable, Boolean] = {
     for {
       db <- ZIO.service[MongoDatabase]
