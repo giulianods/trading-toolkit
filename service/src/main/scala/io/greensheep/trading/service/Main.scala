@@ -78,7 +78,7 @@ object Main extends ZIOAppDefault {
       _ <- ZIO.logInfo("Starting initialization")
       _ <- intitializer
       //_ <- ZIO.logInfo("Initialization completed")
-      _ <- initFinancials
+      //_ <- initFinancials
       _ <- ZIO.logInfo("Starting rest api")
       allApi = (finRoutes ++ allRoutes).toHttpApp
       web = WebApp.app
