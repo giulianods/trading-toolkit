@@ -114,6 +114,22 @@ object MongoDataRepo {
     } yield ()
   }
 
+  def hasFinancials(ticker: String): ZIO[MongoDatabase, Throwable, Boolean] = {
+    for {
+      db <- ZIO.service[MongoDatabase]
+      coll = db.getCollection[StockFinancials]("financials")
+      count <- coll.countDocuments(filters.eq("_id", ticker)).map(_.toInt)
+    } yield count > 0
+  }
+
+  def presentFianancials(): ZIO[MongoDatabase, Throwable, Seq[StockFinancials]] = {
+    for {
+      db <- ZIO.service[MongoDatabase]
+      coll = db.getCollection[StockFinancials]("financials")
+      financials <- coll.find().runToSeq
+    } yield financials
+  }
+
 
   def getFinancials(ticker: String): ZIO[MongoDatabase, Throwable, StockFinancials] = {
     for {

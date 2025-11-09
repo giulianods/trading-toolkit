@@ -76,7 +76,7 @@ object Main extends ZIOAppDefault {
 
     val everything = for {
       _ <- ZIO.logInfo("Starting initialization")
-      //_ <- intitializer
+      _ <- intitializer
       //_ <- ZIO.logInfo("Initialization completed")
       _ <- initFinancials
       _ <- ZIO.logInfo("Starting rest api")

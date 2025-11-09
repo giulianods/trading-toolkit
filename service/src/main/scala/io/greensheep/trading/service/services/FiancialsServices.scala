@@ -56,8 +56,10 @@ object FiancialsServices {
       for {
         _ <- ZIO.logInfo("Updating financials")
         universe <- intializeUniverse()
+        present <- MongoDataRepo.presentFianancials()
+        toUpdate = universe.symbols.filter(s => !present.exists(_.ticker == s))
         remoteApi <- ZIO.service[FinnhubClient]
-        _ <- ZIO.foreach(universe.symbols)(s => updateFinancials(s).catchAll(e => ZIO.logError(s"Error updating financials ${e.getMessage}")))
+        _ <- ZIO.foreach(toUpdate)(s => updateFinancials(s).catchAll(e => ZIO.logError(s"Error updating financials ${e.getMessage}")))
       } yield ()
     }
 
