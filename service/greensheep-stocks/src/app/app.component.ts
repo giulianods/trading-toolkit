@@ -286,6 +286,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
     this.financialChartCanvases.changes.subscribe(() => {
       this.renderFinancialCharts();
     });
+
+    setTimeout(() => this.renderFinancialCharts());
   }
 
   selectTab(tab: 'charts' | 'breadth' | 'history'): void {
