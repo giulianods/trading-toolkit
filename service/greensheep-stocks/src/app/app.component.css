@@ -192,28 +192,37 @@
 .description {
   flex: 0 0 auto;
   width: 100%;
-  height: 180px;
-  overflow-y: auto;
+  height: 320px;
   padding: 0.6rem;
   background-color: rgba(0, 0, 0, 0.3);
   border: 1px solid #333;
   border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.description-text {
+  flex: 1 1 auto;
+  overflow-y: auto;
 }
 
 .description h2 {
-  font-size: 0.6rem;
-  margin: 0 0 0.3rem;
+  font-size: 0.5rem;
+  margin: 0 0 0.2rem;
   color: var(--primary-green, #24c06f);
 }
 
 .description p {
-  font-size: 0.45rem;
-  margin: 0.25rem 0;
-  line-height: 1.1;
+  font-size: 0.4rem;
+  margin: 0.15rem 0;
+  line-height: 1.05;
 }
+
 .financials-chart {
   width: 100%;
-  height: 140px;
+  flex: 0 0 120px;
+  height: 120px;
   border: 1px solid #333;
   border-radius: 4px;
   background-color: rgba(0, 0, 0, 0.3);
