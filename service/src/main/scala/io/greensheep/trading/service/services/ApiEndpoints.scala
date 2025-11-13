@@ -73,7 +73,10 @@ object ApiEndpoints {
     }
   }
 
-  def financialsRoutes(mongoRepo: ZLayer[Any, Throwable, MongoDatabase]): Routes[Any, Response] = {
+  def financialsRoutes(
+      mongoRepo: ZLayer[Any, Throwable, MongoDatabase],
+      chartServicesLayer: ZLayer[Any, Throwable, ChartServices]
+  ): Routes[Any, Response] = {
     Routes(
       (Method.GET / "financials") -> {
         Handler.fromFunctionZIO[Request] { req =>
@@ -102,6 +105,33 @@ object ApiEndpoints {
           result.catchSome { case e: IllegalArgumentException =>
             ZIO.succeed(Response.text(e.getMessage).status(Status.BadRequest))
           }.provideLayer(mongoRepo)
+        }.mapError(handleError)
+      },
+      (Method.GET / "financials" / "chart" / string("ticker")) -> {
+        Handler.fromFunctionZIO[(String, Request)] { case (ticker, req) =>
+          val result = for {
+            category <- ZIO.fromEither(parseSingleCategory(req.url.queryParams.get("category")))
+            limit <- ZIO.fromEither(
+              parseBoundedInt("limit", req.url.queryParams.get("limit"), default = 5, min = 1, max = 5)
+            )
+            width <- ZIO.fromEither(
+              parseBoundedInt("width", req.url.queryParams.get("width"), default = 320, min = 120, max = 800)
+            )
+            height <- ZIO.fromEither(
+              parseBoundedInt("height", req.url.queryParams.get("height"), default = 200, min = 100, max = 600)
+            )
+            chartService <- ZIO.service[ChartServices]
+            svg <- chartService.financialChartSvg(ticker, category, limit, width, height)
+          } yield Response.text(svg).addHeader(Header.Custom("Content-Type", "image/svg+xml"))
+
+          result
+            .catchSome {
+              case e: IllegalArgumentException =>
+                ZIO.succeed(Response.text(e.getMessage).status(Status.BadRequest))
+              case _: NoSuchElementException =>
+                ZIO.succeed(Response.text(s"No financial data found for $ticker").status(Status.NotFound))
+            }
+            .provideLayer(chartServicesLayer)
         }.mapError(handleError)
       }
     )
@@ -182,26 +212,6 @@ object ApiEndpoints {
                 MongoDataRepo.getWatchlistLatest(name).map(_.toJson).map(Response.json)
             }
           }
-        }.mapError(handleError)
-      },
-      (Method.GET / "financials" / "chart" / string("ticker")) -> {
-        Handler.fromFunctionZIO[(String, Request)] {
-          case (ticker, req) =>
-            val result = for {
-              category <- ZIO.fromEither(parseSingleCategory(req.url.queryParams.get("category")))
-              limit <- ZIO.fromEither(parseBoundedInt("limit", req.url.queryParams.get("limit"), default = 5, min = 1, max = 5))
-              width <- ZIO.fromEither(parseBoundedInt("width", req.url.queryParams.get("width"), default = 320, min = 120, max = 800))
-              height <- ZIO.fromEither(parseBoundedInt("height", req.url.queryParams.get("height"), default = 200, min = 100, max = 600))
-              chartService <- ZIO.service[ChartServices]
-              svg <- chartService.financialChartSvg(ticker, category, limit, width, height)
-            } yield Response.text(svg).addHeader(Header.Custom("Content-Type", "image/svg+xml"))
-
-            result.catchSome {
-              case e: IllegalArgumentException =>
-                ZIO.succeed(Response.text(e.getMessage).status(Status.BadRequest))
-              case _: NoSuchElementException =>
-                ZIO.succeed(Response.text(s"No financial data found for $ticker").status(Status.NotFound))
-            }
         }.mapError(handleError)
       },
       (Method.GET / "chart" / string("ticker")) -> {
