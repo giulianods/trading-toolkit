@@ -182,9 +182,16 @@
   object-fit: fill;
   flex-shrink: 0;
 }
-.description {
+.profile-column {
+  display: flex;
+  flex-direction: column;
   flex: 0 0 180px;
   width: 180px;
+  gap: 0.5rem;
+}
+.description {
+  flex: 0 0 auto;
+  width: 100%;
   height: 180px;
   overflow-y: auto;
   padding: 0.6rem;
@@ -203,6 +210,23 @@
   font-size: 0.45rem;
   margin: 0.25rem 0;
   line-height: 1.1;
+}
+.financials-chart {
+  width: 100%;
+  height: 140px;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background-color: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+}
+
+.financials-chart img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .stats-table {
