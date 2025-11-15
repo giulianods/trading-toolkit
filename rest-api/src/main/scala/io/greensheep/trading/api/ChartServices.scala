@@ -6,7 +6,7 @@ import io.greensheep.trading.dataservice.MongoDataRepo
 import org.jfree.chart.JFreeChart
 import org.jfree.chart.axis.{CategoryAxis, DateAxis, NumberAxis}
 import org.jfree.chart.plot.{CategoryPlot, CombinedDomainXYPlot, ValueMarker, XYPlot}
-import org.jfree.chart.renderer.category.LineAndShapeRenderer
+import org.jfree.chart.renderer.category.{BarRenderer, StandardBarPainter}
 import org.jfree.chart.renderer.xy.{CandlestickRenderer, XYBarRenderer, XYLineAndShapeRenderer}
 import org.jfree.data.category.DefaultCategoryDataset
 import org.jfree.data.time.{Day, TimeSeries, TimeSeriesCollection}
@@ -209,19 +209,27 @@ object ChartServices {
         marginDataset.addValue(point.netIncomeMarginPct, "Net Income Margin %", point.label)
       }
       domainAxis = new CategoryAxis("Year")
+      _ = domainAxis.setTickLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 8))
+      _ = domainAxis.setLabelFont(new Font(Font.SANS_SERIF, Font.BOLD, 8))
       currencyAxis = new NumberAxis("$ per share")
+      _ = currencyAxis.setLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 8))
+      _ = currencyAxis.setTickLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 7))
       _ = currencyAxis.setAutoRangeIncludesZero(false)
-      currencyRenderer = new LineAndShapeRenderer(true, true)
+      currencyRenderer = new BarRenderer()
       _ = currencyRenderer.setSeriesPaint(0, new Color(36, 192, 111))
       _ = currencyRenderer.setSeriesPaint(1, new Color(86, 182, 255))
-      _ = currencyRenderer.setSeriesStroke(0, new BasicStroke(2.0f))
-      _ = currencyRenderer.setSeriesStroke(1, new BasicStroke(2.0f))
+      _ = currencyRenderer.setBarPainter(new StandardBarPainter())
+      _ = currencyRenderer.setShadowVisible(false)
+      _ = currencyRenderer.setMaximumBarWidth(0.3)
       marginAxis = new NumberAxis("Margin %")
-      marginRenderer = new LineAndShapeRenderer(true, true)
+      _ = marginAxis.setLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 8))
+      _ = marginAxis.setTickLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 7))
+      marginRenderer = new BarRenderer()
       _ = marginRenderer.setSeriesPaint(0, new Color(255, 193, 7))
       _ = marginRenderer.setSeriesPaint(1, new Color(255, 99, 132))
-      _ = marginRenderer.setSeriesStroke(0, new BasicStroke(2.0f))
-      _ = marginRenderer.setSeriesStroke(1, new BasicStroke(2.0f))
+      _ = marginRenderer.setBarPainter(new StandardBarPainter())
+      _ = marginRenderer.setShadowVisible(false)
+      _ = marginRenderer.setMaximumBarWidth(0.3)
       plot = new CategoryPlot(currencyDataset, domainAxis, currencyAxis, currencyRenderer)
       _ = plot.setDataset(1, marginDataset)
       _ = plot.setRenderer(1, marginRenderer)
@@ -238,12 +246,13 @@ object ChartServices {
       chart = new JFreeChart(s"$ticker ${category.label} Financials", JFreeChart.DEFAULT_TITLE_FONT, plot, true)
       _ = chart.setBackgroundPaint(Color.WHITE)
       _ = chart.setPadding(new RectangleInsets(2, 2, 2, 2))
+      _ = Option(chart.getTitle).foreach(_.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10)))
       val legend = Option(chart.getLegend)
       _ = legend.foreach { lg =>
-        lg.setItemFont(new Font(Font.SANS_SERIF, Font.PLAIN, 6))
-        lg.setItemLabelPadding(new RectangleInsets(0, 2, 0, 2))
+        lg.setItemFont(new Font(Font.SANS_SERIF, Font.PLAIN, 5))
+        lg.setItemLabelPadding(new RectangleInsets(0, 1, 0, 1))
         lg.setLegendItemGraphicPadding(RectangleInsets.ZERO_INSETS)
-        lg.setPadding(new RectangleInsets(1, 1, 1, 1))
+        lg.setPadding(new RectangleInsets(0, 0, 0, 0))
         lg.setBorder(BlockBorder.NONE)
         lg.setBackgroundPaint(Color.WHITE)
       }
