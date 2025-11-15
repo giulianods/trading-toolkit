@@ -64,6 +64,29 @@ interface WatchlistChartGroup {
   }[];
 }
 
+interface AnnualFinancialEntry {
+  year: number;
+  revenuePerShare: number;
+  basicEarningsPerShare: number;
+  operatingMargin: number;
+  netIncomeMargin: number;
+}
+
+interface QuarterlyFinancialEntry {
+  year: number;
+  quarter: number;
+  revenuePerShare: number;
+  basicEarningsPerShare: number;
+  operatingMargin: number;
+  netIncomeMargin: number;
+}
+
+interface StockFinancialsResponse {
+  ticker: string;
+  annual: AnnualFinancialEntry[];
+  quarterly: QuarterlyFinancialEntry[];
+}
+
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
@@ -74,6 +97,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   symbols: string[] = [];
   descriptions: { [symbol: string]: StockDescription } = {};
   stats: { [ticker: string]: { [key: string]: string } } = {};
+  financialChartAvailability: { [symbol: string]: boolean } = {};
   breadthIndicators: BreadthIndicator[] = [];
   breadthIndicatorColumns: {
     key: keyof BreadthIndicator;
@@ -285,6 +309,7 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.symbols = [];
     this.descriptions = {};
     this.stats = {};
+    this.financialChartAvailability = {};
     this.focusedIndex = 0;
     this.hasUserNavigated = false;
 
@@ -292,6 +317,7 @@ export class AppComponent implements OnInit, AfterViewInit {
 
     this.http.get(url, { responseType: 'json' }).subscribe((data: any) => {
       this.symbols = data['tickers'].slice(0, 100);
+      this.loadFinancials(this.symbols);
 
       // Extract and store stats data
       if (data['stats']) {
@@ -306,6 +332,31 @@ export class AppComponent implements OnInit, AfterViewInit {
         });
       });
     });
+  }
+
+  private loadFinancials(tickers: string[]): void {
+    if (!tickers.length) {
+      this.financialChartAvailability = {};
+      return;
+    }
+
+    const encodedTickers = encodeURIComponent(tickers.join(','));
+    const url = `/financials?tickers=${encodedTickers}&category=annual`;
+
+    this.http
+      .get<Record<string, StockFinancialsResponse>>(url)
+      .subscribe({
+        next: data => {
+          const availability: { [symbol: string]: boolean } = {};
+          Object.entries(data || {}).forEach(([symbol, financials]) => {
+            availability[symbol] = Array.isArray(financials?.annual) && financials.annual.length > 0;
+          });
+          this.financialChartAvailability = availability;
+        },
+        error: () => {
+          this.financialChartAvailability = {};
+        }
+      });
   }
 
   loadWatchlistHistory(): void {
@@ -630,6 +681,11 @@ export class AppComponent implements OnInit, AfterViewInit {
     }
 
     return url;
+  }
+
+  financialChartUrl(symbol: string): string {
+    const base = `/financials/chart/${symbol}?category=annual&limit=5`;
+    return `${base}&width=180&height=140`;
   }
 
   getStatsArray(ticker: string): { key: string; value: string }[] {
