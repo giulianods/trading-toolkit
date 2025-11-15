@@ -131,7 +131,7 @@ object ApiEndpoints {
               case _: NoSuchElementException =>
                 ZIO.succeed(Response.text(s"No financial data found for $ticker").status(Status.NotFound))
             }
-            .provideLayer(mongoRepo ++ chartServicesLayer)
+            .provideLayer(chartServicesLayer ++ mongoRepo)
         }.mapError(handleError)
       }
     )
