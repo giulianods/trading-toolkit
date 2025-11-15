@@ -248,13 +248,13 @@ object ChartServices {
       _ = chart.setBackgroundPaint(Color.WHITE)
       _ = chart.setPadding(new RectangleInsets(2, 2, 2, 2))
       _ = Option(chart.getTitle).foreach(_.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 7)))
-      val legend = Option(chart.getLegend)
+      legend = Option(chart.getLegend)
       _ = legend.foreach { lg =>
         lg.setItemFont(new Font(Font.SANS_SERIF, Font.PLAIN, 4))
         lg.setItemLabelPadding(new RectangleInsets(0, 0, 0, 0))
         lg.setLegendItemGraphicPadding(RectangleInsets.ZERO_INSETS)
         lg.setPadding(RectangleInsets.ZERO_INSETS)
-        lg.setBorder(BlockBorder.NONE)
+        lg.setBorder(0.0f,0.0f,0.0f,0.0f)
         lg.setBackgroundPaint(Color.WHITE)
       }
       g2 = new SVGGraphics2D(width, height)
