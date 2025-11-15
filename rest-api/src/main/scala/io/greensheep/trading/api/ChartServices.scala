@@ -235,11 +235,12 @@ object ChartServices {
       _ = chart.setBackgroundPaint(Color.BLACK)
       val legend = Option(chart.getLegend)
       _ = legend.foreach { lg =>
-        lg.setItemFont(new Font(Font.SANS_SERIF, Font.PLAIN, 7))
-        lg.setItemLabelPadding(new RectangleInsets(1.0, 2.0, 1.0, 2.0))
-        lg.setLegendItemGraphicPadding(new RectangleInsets(1.0, 2.0, 1.0, 2.0))
+        lg.setItemFont(new Font(Font.SANS_SERIF, Font.PLAIN, 5))
+        lg.setItemLabelPadding(RectangleInsets.ZERO_INSETS)
+        lg.setLegendItemGraphicPadding(new RectangleInsets(0.5, 1.0, 0.5, 1.0))
         lg.setPadding(RectangleInsets.ZERO_INSETS)
         lg.setBorder(BlockBorder.NONE)
+        lg.setBackgroundPaint(new Color(0, 0, 0, 0))
       }
       g2 = new SVGGraphics2D(width, height)
       _ = chart.draw(g2, new Rectangle2D.Double(0, 0, width, height))
