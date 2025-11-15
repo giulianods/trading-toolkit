@@ -15,7 +15,9 @@ import org.jfree.svg.SVGGraphics2D
 import zio.*
 import zio.cache.{Cache, Lookup}
 
-import java.awt.{BasicStroke, Color}
+import java.awt.{BasicStroke, Color, Font}
+import org.jfree.chart.block.BlockBorder
+import org.jfree.chart.ui.RectangleInsets
 import java.awt.geom.Rectangle2D
 import java.time.{LocalDate, ZoneId}
 import java.util.Date
@@ -231,6 +233,14 @@ object ChartServices {
       _ = plot.setRangeGridlinePaint(Color.DARK_GRAY)
       chart = new JFreeChart(s"$ticker ${category.label} Financials", JFreeChart.DEFAULT_TITLE_FONT, plot, true)
       _ = chart.setBackgroundPaint(Color.BLACK)
+      val legend = Option(chart.getLegend)
+      _ = legend.foreach { lg =>
+        lg.setItemFont(new Font(Font.SANS_SERIF, Font.PLAIN, 7))
+        lg.setItemLabelPadding(new RectangleInsets(1.0, 2.0, 1.0, 2.0))
+        lg.setLegendItemGraphicPadding(new RectangleInsets(1.0, 2.0, 1.0, 2.0))
+        lg.setPadding(RectangleInsets.ZERO_INSETS)
+        lg.setBorder(BlockBorder.NONE)
+      }
       g2 = new SVGGraphics2D(width, height)
       _ = chart.draw(g2, new Rectangle2D.Double(0, 0, width, height))
     } yield g2.getSVGElement()
