@@ -233,13 +233,13 @@ object ChartServices {
       _ = plot.setRangeGridlinePaint(Color.DARK_GRAY)
       chart = new JFreeChart(s"$ticker ${category.label} Financials", JFreeChart.DEFAULT_TITLE_FONT, plot, true)
       _ = chart.setBackgroundPaint(Color.BLACK)
-      val legend = Option(chart.getLegend)
+      legend = Option(chart.getLegend)
       _ = legend.foreach { lg =>
         lg.setItemFont(new Font(Font.SANS_SERIF, Font.PLAIN, 5))
         lg.setItemLabelPadding(RectangleInsets.ZERO_INSETS)
         lg.setLegendItemGraphicPadding(new RectangleInsets(0.5, 1.0, 0.5, 1.0))
         lg.setPadding(RectangleInsets.ZERO_INSETS)
-        lg.setBorder(BlockBorder.NONE)
+        lg.setBorder(0.0f,0.0f,0.0f,0.0f)
         lg.setBackgroundPaint(new Color(0, 0, 0, 0))
       }
       g2 = new SVGGraphics2D(width, height)
