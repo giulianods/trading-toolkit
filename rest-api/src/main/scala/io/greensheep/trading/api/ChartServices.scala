@@ -1,26 +1,62 @@
 package io.greensheep.trading.api
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
-import io.greensheep.trading.api.ChartServices.CacheKey
+import io.greensheep.trading.api.ChartServices.{CacheKey, FinancialChartCacheKey}
 import io.greensheep.trading.dataservice.MongoDataRepo
 import org.jfree.chart.JFreeChart
-import org.jfree.chart.axis.{DateAxis, NumberAxis}
-import org.jfree.chart.plot.{CombinedDomainXYPlot, ValueMarker, XYPlot}
+import org.jfree.chart.axis.{CategoryAxis, DateAxis, NumberAxis}
+import org.jfree.chart.plot.{CategoryPlot, CombinedDomainXYPlot, ValueMarker, XYPlot}
+import org.jfree.chart.renderer.category.{BarRenderer, StandardBarPainter}
 import org.jfree.chart.renderer.xy.{CandlestickRenderer, XYBarRenderer, XYLineAndShapeRenderer}
+import org.jfree.data.category.DefaultCategoryDataset
 import org.jfree.data.time.{Day, TimeSeries, TimeSeriesCollection}
 import org.jfree.data.xy.DefaultHighLowDataset
 import org.jfree.svg.SVGGraphics2D
 import zio.*
 import zio.cache.{Cache, Lookup}
 
-import java.awt.{BasicStroke, Color}
+import java.awt.{BasicStroke, Color, Font}
+import org.jfree.chart.block.BlockBorder
+import org.jfree.chart.ui.RectangleInsets
 import java.awt.geom.Rectangle2D
 import java.time.{LocalDate, ZoneId}
 import java.util.Date
 
 object ChartServices {
 
+  sealed trait FinancialChartCategory {
+    def label: String
+    def paramValue: String
+  }
+
+  object FinancialChartCategory {
+    case object Annual extends FinancialChartCategory {
+      val label = "Annual"
+      val paramValue = "annual"
+    }
+    case object Quarterly extends FinancialChartCategory {
+      val label = "Quarterly"
+      val paramValue = "quarterly"
+    }
+
+    val defaults: Set[FinancialChartCategory] = Set(Annual, Quarterly)
+
+    def fromString(value: String): Option[FinancialChartCategory] =
+      value.toLowerCase match {
+        case "annual" => Some(Annual)
+        case "quarterly" => Some(Quarterly)
+        case _ => None
+      }
+  }
+
   final case class CacheKey(ticker: String, days: Int, width: Int, height: Int, highlightDay: Option[LocalDate])
+  final case class FinancialChartCacheKey(
+      ticker: String,
+      category: FinancialChartCategory,
+      limit: Int,
+      width: Int,
+      height: Int
+  )
 
   private val cacheTtl = 8.hours
   
@@ -30,11 +66,20 @@ object ChartServices {
     lookup = Lookup(lookup = (key: CacheKey) => renderChart(key.ticker, key.days, key.width, key.height, key.highlightDay))
   )
 
+  private lazy val financialChartCache: URIO[MongoDatabase, Cache[FinancialChartCacheKey, Throwable, String]] = Cache.make(
+    capacity = 2000,
+    timeToLive = cacheTtl,
+    lookup = Lookup(lookup = (key: FinancialChartCacheKey) =>
+      renderFinancialChart(key.ticker, key.category, key.limit, key.width, key.height)
+    )
+  )
+
   def buildLayer: ZLayer[MongoDatabase, Nothing, ChartServices] =
     ZLayer.scoped {
       for {
-        cache <- chartCache
-      } yield new ChartServices(cache)
+        priceCache <- chartCache
+        financialCache <- financialChartCache
+      } yield new ChartServices(priceCache, financialCache)
     }
 
   private def renderChart(ticker: String, days: Int, width: Int, height: Int, highlightDay: Option[LocalDate]): ZIO[MongoDatabase, Throwable, String] =
@@ -114,9 +159,113 @@ object ChartServices {
       g2 = new SVGGraphics2D(width, height)
       _ = chart.draw(g2, new Rectangle2D.Double(0, 0, width, height))
     } yield g2.getSVGElement()
+
+  private def renderFinancialChart(
+      ticker: String,
+      category: FinancialChartCategory,
+      limit: Int,
+      width: Int,
+      height: Int
+  ): ZIO[MongoDatabase, Throwable, String] = {
+    final case class FinancialPoint(
+        label: String,
+        revenuePerShare: Double,
+        basicEarningsPerShare: Double,
+        operatingMarginPct: Double,
+        netIncomeMarginPct: Double
+    )
+
+    for {
+      data <- MongoDataRepo.getFinancials(ticker)
+      ordered = category match {
+        case FinancialChartCategory.Annual =>
+          data.annual.sortBy(_.year).takeRight(limit).map(entry =>
+            FinancialPoint(
+              label = entry.year.toString,
+              revenuePerShare = entry.revenuePerShare,
+              basicEarningsPerShare = entry.basicEarningsPerShare,
+              operatingMarginPct = entry.operatingMargin * 100.0,
+              netIncomeMarginPct = entry.netIncomeMargin * 100.0
+            )
+          )
+        case FinancialChartCategory.Quarterly =>
+          data.quarterly.sortBy(q => (q.year, q.quarter)).takeRight(limit).map(entry =>
+            FinancialPoint(
+              label = s"${entry.year} Q${entry.quarter}",
+              revenuePerShare = entry.revenuePerShare,
+              basicEarningsPerShare = entry.basicEarningsPerShare,
+              operatingMarginPct = entry.operatingMargin * 100.0,
+              netIncomeMarginPct = entry.netIncomeMargin * 100.0
+            )
+          )
+      }
+      _ <- ZIO.cond(ordered.nonEmpty, (), new NoSuchElementException(s"No ${category.label.toLowerCase} financials for ticker $ticker"))
+      currencyDataset = new DefaultCategoryDataset()
+      marginDataset = new DefaultCategoryDataset()
+      _ = ordered.foreach { point =>
+        currencyDataset.addValue(point.revenuePerShare, "Revenue / Share", point.label)
+        currencyDataset.addValue(point.basicEarningsPerShare, "Basic EPS", point.label)
+        marginDataset.addValue(point.operatingMarginPct, "Operating Margin %", point.label)
+        marginDataset.addValue(point.netIncomeMarginPct, "Net Income Margin %", point.label)
+      }
+      domainAxis = new CategoryAxis("Year")
+      _ = domainAxis.setTickLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 8))
+      _ = domainAxis.setLabelFont(new Font(Font.SANS_SERIF, Font.BOLD, 8))
+      currencyAxis = new NumberAxis("$ per share")
+      _ = currencyAxis.setLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 8))
+      _ = currencyAxis.setTickLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 7))
+      _ = currencyAxis.setAutoRangeIncludesZero(false)
+      currencyRenderer = new BarRenderer()
+      _ = currencyRenderer.setSeriesPaint(0, new Color(36, 192, 111))
+      _ = currencyRenderer.setSeriesPaint(1, new Color(86, 182, 255))
+      _ = currencyRenderer.setBarPainter(new StandardBarPainter())
+      _ = currencyRenderer.setShadowVisible(false)
+      _ = currencyRenderer.setMaximumBarWidth(0.3)
+      marginAxis = new NumberAxis("Margin %")
+      _ = marginAxis.setLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 8))
+      _ = marginAxis.setTickLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 7))
+      marginRenderer = new BarRenderer()
+      _ = marginRenderer.setSeriesPaint(0, new Color(255, 193, 7))
+      _ = marginRenderer.setSeriesPaint(1, new Color(255, 99, 132))
+      _ = marginRenderer.setBarPainter(new StandardBarPainter())
+      _ = marginRenderer.setShadowVisible(false)
+      _ = marginRenderer.setMaximumBarWidth(0.3)
+      plot = new CategoryPlot(currencyDataset, domainAxis, currencyAxis, currencyRenderer)
+      _ = plot.setDataset(1, marginDataset)
+      _ = plot.setRenderer(1, marginRenderer)
+      _ = plot.setRangeAxis(1, marginAxis)
+      _ = plot.mapDatasetToRangeAxis(1, 1)
+      _ = plot.setBackgroundPaint(Color.WHITE)
+      _ = plot.setOutlineVisible(false)
+      _ = plot.setInsets(RectangleInsets.ZERO_INSETS)
+      _ = plot.setAxisOffset(RectangleInsets.ZERO_INSETS)
+      _ = plot.setDomainGridlinesVisible(true)
+      _ = plot.setRangeGridlinesVisible(true)
+      _ = plot.setDomainGridlinePaint(new Color(220, 220, 220))
+      _ = plot.setRangeGridlinePaint(new Color(220, 220, 220))
+      chart = new JFreeChart(s"$ticker ${category.label} Financials", JFreeChart.DEFAULT_TITLE_FONT, plot, true)
+      _ = chart.setBackgroundPaint(Color.WHITE)
+      _ = chart.setPadding(new RectangleInsets(2, 2, 2, 2))
+      _ = Option(chart.getTitle).foreach(_.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10)))
+      val legend = Option(chart.getLegend)
+      _ = legend.foreach { lg =>
+        lg.setItemFont(new Font(Font.SANS_SERIF, Font.PLAIN, 5))
+        lg.setItemLabelPadding(new RectangleInsets(0, 1, 0, 1))
+        lg.setLegendItemGraphicPadding(RectangleInsets.ZERO_INSETS)
+        lg.setPadding(new RectangleInsets(0, 0, 0, 0))
+        lg.setBorder(BlockBorder.NONE)
+        lg.setBackgroundPaint(Color.WHITE)
+      }
+      g2 = new SVGGraphics2D(width, height)
+      _ = chart.draw(g2, new Rectangle2D.Double(0, 0, width, height))
+    } yield g2.getSVGElement()
+  }
 }
 
-class ChartServices(cache: Cache[CacheKey, Throwable, String]) {
+class ChartServices(
+    priceChartCache: Cache[CacheKey, Throwable, String],
+    financialChartCache: Cache[FinancialChartCacheKey, Throwable, String]
+) {
 
   /**
    * Generate a candlestick chart with 50 day moving average and volume bars in SVG format for the given ticker.
@@ -129,7 +278,21 @@ class ChartServices(cache: Cache[CacheKey, Throwable, String]) {
    */
   def chartSvg(ticker: String, days: Int, width: Int = 800, height: Int = 400, highlightDay: Option[LocalDate] = None): ZIO[MongoDatabase, Throwable, String] = {
     val key = CacheKey(ticker, days, width, height, highlightDay)
-    cache.get(key)
+    priceChartCache.get(key)
+  }
+
+  def financialChartSvg(
+      ticker: String,
+      category: ChartServices.FinancialChartCategory,
+      limit: Int = 5,
+      width: Int = 320,
+      height: Int = 200
+  ): ZIO[MongoDatabase, Throwable, String] = {
+    val sanitizedLimit = math.max(1, math.min(limit, 5))
+    val sanitizedWidth = math.max(120, math.min(width, 800))
+    val sanitizedHeight = math.max(100, math.min(height, 600))
+    val key = FinancialChartCacheKey(ticker, category, sanitizedLimit, sanitizedWidth, sanitizedHeight)
+    financialChartCache.get(key)
   }
 }
 

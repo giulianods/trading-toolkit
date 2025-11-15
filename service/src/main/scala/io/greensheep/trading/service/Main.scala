@@ -62,6 +62,7 @@ object Main extends ZIOAppDefault {
     val initFinancials = FiancialsServices.updateFinancials().provide(finnhubLayer ++ finnhubMongoLayer)
 
     val chartServiceLayer = polygonMongoLayer >>> ChartServices.buildLayer
+    val financialChartServiceLayer = finnhubMongoLayer >>> ChartServices.buildLayer
 
     val restPort = 7777
 
@@ -71,7 +72,7 @@ object Main extends ZIOAppDefault {
     val intitializer = InitializationService.initializeApp()
 
     val allRoutes =  ApiEndpoints.OtherRoutes
-    val finRoutes = ApiEndpoints.financialsRoutes(finnhubMongoLayer)
+    val finRoutes = ApiEndpoints.financialsRoutes(finnhubMongoLayer, financialChartServiceLayer)
    
 
     val everything = for {

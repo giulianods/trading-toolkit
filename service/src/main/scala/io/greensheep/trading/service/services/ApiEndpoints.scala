@@ -2,6 +2,7 @@ package io.greensheep.trading.service.services
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.trading.api.ChartServices
+import io.greensheep.trading.api.ChartServices.FinancialChartCategory
 import io.greensheep.trading.core.types.{DailyQuoteData, Watchlist, WatchlistHistoryEntry, WatchlistSummary}
 import io.greensheep.trading.dataservice.MongoDataRepo
 import io.greensheep.trading.service.services.ScreenerServices
@@ -25,7 +26,57 @@ object ApiEndpoints {
     (Response.text(stackTrace).status(Status.InternalServerError))
   }
 
-  def financialsRoutes(mongoRepo: ZLayer[Any, Throwable, MongoDatabase]): Routes[Any, Response] = {
+  private def parseCategoryFilter(param: Option[String]): Either[IllegalArgumentException, Set[FinancialChartCategory]] = {
+    param match {
+      case None => Right(FinancialChartCategory.defaults)
+      case Some(value) =>
+        val tokens = value.split(",").map(_.trim).filter(_.nonEmpty)
+        if (tokens.isEmpty) {
+          Right(FinancialChartCategory.defaults)
+        } else {
+          val parsed = tokens.map(FinancialChartCategory.fromString)
+          if (parsed.contains(None)) {
+            Left(new IllegalArgumentException("category must be 'annual' or 'quarterly'"))
+          } else {
+            Right(parsed.flatten.toSet)
+          }
+        }
+    }
+  }
+
+  private def parseSingleCategory(param: Option[String]): Either[IllegalArgumentException, FinancialChartCategory] = {
+    param match {
+      case None => Right(FinancialChartCategory.Annual)
+      case Some(value) if value.trim.isEmpty => Right(FinancialChartCategory.Annual)
+      case Some(value) =>
+        FinancialChartCategory
+          .fromString(value.trim)
+          .toRight(new IllegalArgumentException("category must be 'annual' or 'quarterly'"))
+    }
+  }
+
+  private def parseBoundedInt(
+      name: String,
+      param: Option[String],
+      default: Int,
+      min: Int,
+      max: Int
+  ): Either[IllegalArgumentException, Int] = {
+    param match {
+      case None => Right(default)
+      case Some(value) =>
+        Try(value.toInt).toOption match {
+          case Some(parsed) if parsed >= min && parsed <= max => Right(parsed)
+          case Some(_) => Left(new IllegalArgumentException(s"$name must be between $min and $max"))
+          case None => Left(new IllegalArgumentException(s"$name must be an integer"))
+        }
+    }
+  }
+
+  def financialsRoutes(
+      mongoRepo: ZLayer[Any, Throwable, MongoDatabase],
+      chartServicesLayer: ZLayer[Any, Throwable, ChartServices]
+  ): Routes[Any, Response] = {
     Routes(
       (Method.GET / "financials") -> {
         Handler.fromFunctionZIO[Request] { req =>
@@ -35,9 +86,15 @@ object ApiEndpoints {
             tickers = tickersParam.split(",").map(_.trim).filter(_.nonEmpty).toSeq
             _ <- ZIO.fail(new IllegalArgumentException("At least one ticker is required"))
               .when(tickers.isEmpty)
+            categories <- ZIO.fromEither(parseCategoryFilter(req.url.queryParams.get("category")))
+            includeAnnual = categories.contains(FinancialChartCategory.Annual)
+            includeQuarterly = categories.contains(FinancialChartCategory.Quarterly)
             financialsMap <- ZIO.foreach(tickers) { ticker =>
               MongoDataRepo.getFinancials(ticker)
-                .map(financials => Some(ticker -> financials))
+                .map(financials => Some(ticker -> financials.copy(
+                  annual = if (includeAnnual) financials.annual else Seq.empty,
+                  quarterly = if (includeQuarterly) financials.quarterly else Seq.empty
+                )))
                 .catchSome {
                   case _: NoSuchElementException =>
                     ZIO.logDebug(s"No financials found for ticker: $ticker").as(None)
@@ -48,6 +105,33 @@ object ApiEndpoints {
           result.catchSome { case e: IllegalArgumentException =>
             ZIO.succeed(Response.text(e.getMessage).status(Status.BadRequest))
           }.provideLayer(mongoRepo)
+        }.mapError(handleError)
+      },
+      (Method.GET / "financials" / "chart" / string("ticker")) -> {
+        Handler.fromFunctionZIO[(String, Request)] { case (ticker, req) =>
+          val result = for {
+            category <- ZIO.fromEither(parseSingleCategory(req.url.queryParams.get("category")))
+            limit <- ZIO.fromEither(
+              parseBoundedInt("limit", req.url.queryParams.get("limit"), default = 5, min = 1, max = 5)
+            )
+            width <- ZIO.fromEither(
+              parseBoundedInt("width", req.url.queryParams.get("width"), default = 320, min = 120, max = 800)
+            )
+            height <- ZIO.fromEither(
+              parseBoundedInt("height", req.url.queryParams.get("height"), default = 200, min = 100, max = 600)
+            )
+            chartService <- ZIO.service[ChartServices]
+            svg <- chartService.financialChartSvg(ticker, category, limit, width, height)
+          } yield Response.text(svg).addHeader(Header.Custom("Content-Type", "image/svg+xml"))
+
+          result
+            .catchSome {
+              case e: IllegalArgumentException =>
+                ZIO.succeed(Response.text(e.getMessage).status(Status.BadRequest))
+              case _: NoSuchElementException =>
+                ZIO.succeed(Response.text(s"No financial data found for $ticker").status(Status.NotFound))
+            }
+            .provideLayer(mongoRepo ++ chartServicesLayer)
         }.mapError(handleError)
       }
     )
