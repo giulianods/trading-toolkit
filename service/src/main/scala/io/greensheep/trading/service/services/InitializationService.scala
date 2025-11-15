@@ -230,7 +230,7 @@ object InitializationService {
   def initializeApp(): ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] =  {
     for {
       _ <- InitializeStockUniverse
-      _ <- InitializeDescriptions
+      //_ <- InitializeDescriptions
       _ <- initializeQuotes()
       //_ <- rectifySplits
       _ <- repairQuotes
