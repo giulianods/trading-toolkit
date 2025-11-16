@@ -190,12 +190,15 @@ object ChartServices {
           AxisBounds(-1.0, 1.0)
         } else {
           val clampedTarget = math.min(math.max(target, epsilon), 1.0 - epsilon)
+
           val requiredNegative = positiveExtent * (1.0 - clampedTarget) / clampedTarget
           if (requiredNegative >= negativeExtent) {
+            // Expand the negative side so we never trim existing positive values.
             AxisBounds(min = -requiredNegative, max = math.max(max, 0.0))
           } else {
+            // Keep the negative side as-is and expand the positive side if needed.
             val requiredPositive = negativeExtent * clampedTarget / (1.0 - clampedTarget)
-            AxisBounds(min = math.min(min, 0.0), max = requiredPositive)
+            AxisBounds(min = math.min(min, 0.0), max = math.max(requiredPositive, positiveExtent))
           }
         }
       }
