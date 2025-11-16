@@ -175,6 +175,51 @@ object ChartServices {
         netIncomeMarginPct: Double
     )
 
+    final case class AxisBounds(min: Double, max: Double) {
+      private val positiveExtent: Double = math.max(max, 0.0)
+      private val negativeExtent: Double = math.abs(math.min(min, 0.0))
+
+      private def zeroRatio: Double = {
+        val total = positiveExtent + negativeExtent
+        if (total == 0.0) 0.5 else positiveExtent / total
+      }
+
+      private def adjustToRatio(target: Double): AxisBounds = {
+        val epsilon = 1e-6
+        if (positiveExtent == 0.0 && negativeExtent == 0.0) {
+          AxisBounds(-1.0, 1.0)
+        } else {
+          val clampedTarget = math.min(math.max(target, epsilon), 1.0 - epsilon)
+          val requiredNegative = positiveExtent * (1.0 - clampedTarget) / clampedTarget
+          if (requiredNegative >= negativeExtent) {
+            AxisBounds(min = -requiredNegative, max = math.max(max, 0.0))
+          } else {
+            val requiredPositive = negativeExtent * clampedTarget / (1.0 - clampedTarget)
+            AxisBounds(min = math.min(min, 0.0), max = requiredPositive)
+          }
+        }
+      }
+
+      def alignWith(other: AxisBounds): (AxisBounds, AxisBounds) = {
+        val ratioDifference = math.abs(zeroRatio - other.zeroRatio)
+        if (ratioDifference < 1e-6) {
+          (this, other)
+        } else {
+          val targetRatio = (zeroRatio + other.zeroRatio) / 2.0
+          (adjustToRatio(targetRatio), other.adjustToRatio(targetRatio))
+        }
+      }
+    }
+
+    def boundsFor(values: Seq[Double]): AxisBounds = {
+      if (values.isEmpty) AxisBounds(-1.0, 1.0)
+      else {
+        val minValue = values.min
+        val maxValue = values.max
+        AxisBounds(math.min(minValue, 0.0), math.max(maxValue, 0.0))
+      }
+    }
+
     for {
       data <- MongoDataRepo.getFinancials(ticker)
       ordered = category match {
@@ -200,6 +245,10 @@ object ChartServices {
           )
       }
       _ <- ZIO.cond(ordered.nonEmpty, (), new NoSuchElementException(s"No ${category.label.toLowerCase} financials for ticker $ticker"))
+      currencyValues = ordered.flatMap(point => Seq(point.revenuePerShare, point.basicEarningsPerShare))
+      marginValues = ordered.flatMap(point => Seq(point.operatingMarginPct, point.netIncomeMarginPct))
+      alignedBounds = boundsFor(currencyValues).alignWith(boundsFor(marginValues))
+      (currencyBounds, marginBounds) = alignedBounds
       currencyDataset = new DefaultCategoryDataset()
       marginDataset = new DefaultCategoryDataset()
       _ = ordered.foreach { point =>
@@ -215,6 +264,7 @@ object ChartServices {
       _ = currencyAxis.setLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 8))
       _ = currencyAxis.setTickLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 7))
       _ = currencyAxis.setAutoRangeIncludesZero(false)
+      _ = currencyAxis.setRange(currencyBounds.min, currencyBounds.max)
       currencyRenderer = new BarRenderer()
       _ = currencyRenderer.setSeriesPaint(0, new Color(36, 192, 111))
       _ = currencyRenderer.setSeriesPaint(1, new Color(86, 182, 255))
@@ -224,6 +274,7 @@ object ChartServices {
       marginAxis = new NumberAxis("Margin %")
       _ = marginAxis.setLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 8))
       _ = marginAxis.setTickLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 7))
+      _ = marginAxis.setRange(marginBounds.min, marginBounds.max)
       marginRenderer = new BarRenderer()
       _ = marginRenderer.setSeriesPaint(0, new Color(255, 193, 7))
       _ = marginRenderer.setSeriesPaint(1, new Color(255, 99, 132))
