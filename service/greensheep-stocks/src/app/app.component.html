@@ -51,7 +51,7 @@
     >
       <div
         class="profile-column"
-        *ngIf="descriptions[s] || financialChartAvailability[s]"
+        *ngIf="descriptions[s] || financialChartAvailability[s]?.annual"
       >
         <div class="description">
           <div class="description-text" *ngIf="descriptions[s]">
@@ -59,7 +59,7 @@
             <p class="sic">{{ descriptions[s].sicDescription }}</p>
             <p>{{ descriptions[s].description }}</p>
           </div>
-          <div class="financials-chart" *ngIf="financialChartAvailability[s]">
+          <div class="financials-chart" *ngIf="financialChartAvailability[s]?.annual">
             <img
               [src]="financialChartUrl(s)"
               [alt]="s + ' annual financial performance'"
@@ -69,15 +69,30 @@
         </div>
       </div>
       <img [src]="chartUrl(s)" [alt]="s">
-      <div class="stats-table" *ngIf="stats[s]">
-        <table>
-          <tbody>
-            <tr *ngFor="let stat of getStatsArray(s)">
-              <td class="stat-key">{{ stat.key }}</td>
-              <td class="stat-value">{{ stat.value }}</td>
-            </tr>
-          </tbody>
-        </table>
+      <div
+        class="right-column"
+        *ngIf="financialChartAvailability[s]?.quarterly || stats[s]"
+      >
+        <div
+          class="financials-chart quarterly-chart"
+          *ngIf="financialChartAvailability[s]?.quarterly"
+        >
+          <img
+            [src]="quarterlyFinancialChartUrl(s)"
+            [alt]="s + ' quarterly financial performance'"
+            loading="lazy"
+          >
+        </div>
+        <div class="stats-table" *ngIf="stats[s]">
+          <table>
+            <tbody>
+              <tr *ngFor="let stat of getStatsArray(s)">
+                <td class="stat-key">{{ stat.key }}</td>
+                <td class="stat-value">{{ stat.value }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>

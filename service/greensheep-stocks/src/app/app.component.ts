@@ -87,6 +87,11 @@ interface StockFinancialsResponse {
   quarterly: QuarterlyFinancialEntry[];
 }
 
+interface FinancialChartAvailability {
+  annual: boolean;
+  quarterly: boolean;
+}
+
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
@@ -97,7 +102,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   symbols: string[] = [];
   descriptions: { [symbol: string]: StockDescription } = {};
   stats: { [ticker: string]: { [key: string]: string } } = {};
-  financialChartAvailability: { [symbol: string]: boolean } = {};
+  financialChartAvailability: { [symbol: string]: FinancialChartAvailability } = {};
   breadthIndicators: BreadthIndicator[] = [];
   breadthIndicatorColumns: {
     key: keyof BreadthIndicator;
@@ -341,15 +346,17 @@ export class AppComponent implements OnInit, AfterViewInit {
     }
 
     const encodedTickers = encodeURIComponent(tickers.join(','));
-    const url = `/financials?tickers=${encodedTickers}&category=annual`;
+    const url = `/financials?tickers=${encodedTickers}&category=annual,quarterly`;
 
     this.http
       .get<Record<string, StockFinancialsResponse>>(url)
       .subscribe({
         next: data => {
-          const availability: { [symbol: string]: boolean } = {};
+          const availability: { [symbol: string]: FinancialChartAvailability } = {};
           Object.entries(data || {}).forEach(([symbol, financials]) => {
-            availability[symbol] = Array.isArray(financials?.annual) && financials.annual.length > 0;
+            const hasAnnual = Array.isArray(financials?.annual) && financials.annual.length > 0;
+            const hasQuarterly = Array.isArray(financials?.quarterly) && financials.quarterly.length > 0;
+            availability[symbol] = { annual: hasAnnual, quarterly: hasQuarterly };
           });
           this.financialChartAvailability = availability;
         },
@@ -685,6 +692,11 @@ export class AppComponent implements OnInit, AfterViewInit {
 
   financialChartUrl(symbol: string): string {
     const base = `/financials/chart/${symbol}?category=annual&limit=5`;
+    return `${base}&width=180&height=140`;
+  }
+
+  quarterlyFinancialChartUrl(symbol: string): string {
+    const base = `/financials/chart/${symbol}?category=quarterly&limit=5`;
     return `${base}&width=180&height=140`;
   }
 
