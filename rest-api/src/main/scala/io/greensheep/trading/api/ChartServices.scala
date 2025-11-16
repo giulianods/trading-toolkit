@@ -175,13 +175,13 @@ object ChartServices {
         netIncomeMarginPct: Double
     )
 
-    private sealed trait CategorySlotType
-    private object CategorySlotType {
+    sealed trait CategorySlotType
+    object CategorySlotType {
       case object Currency extends CategorySlotType
       case object Margin extends CategorySlotType
     }
 
-    private final case class CategorySlot(order: Int, slotType: CategorySlotType, displayLabel: String)
+    final case class CategorySlot(order: Int, slotType: CategorySlotType, displayLabel: String)
         extends Comparable[CategorySlot] {
       override def compareTo(other: CategorySlot): Int = order.compareTo(other.order)
 
