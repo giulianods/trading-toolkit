@@ -175,6 +175,22 @@ object ChartServices {
         netIncomeMarginPct: Double
     )
 
+    private sealed trait CategorySlotType
+    private object CategorySlotType {
+      case object Currency extends CategorySlotType
+      case object Margin extends CategorySlotType
+    }
+
+    private final case class CategorySlot(order: Int, slotType: CategorySlotType, displayLabel: String)
+        extends Comparable[CategorySlot] {
+      override def compareTo(other: CategorySlot): Int = order.compareTo(other.order)
+
+      override def toString: String = slotType match {
+        case CategorySlotType.Currency => displayLabel
+        case CategorySlotType.Margin => ""
+      }
+    }
+
     final case class AxisBounds(min: Double, max: Double) {
       private val positiveExtent: Double = math.max(max, 0.0)
       private val negativeExtent: Double = math.abs(math.min(min, 0.0))
@@ -254,11 +270,20 @@ object ChartServices {
       (currencyBounds, marginBounds) = alignedBounds
       currencyDataset = new DefaultCategoryDataset()
       marginDataset = new DefaultCategoryDataset()
-      _ = ordered.foreach { point =>
-        currencyDataset.addValue(point.revenuePerShare, "Revenue / Share", point.label)
-        currencyDataset.addValue(point.basicEarningsPerShare, "Basic EPS", point.label)
-        marginDataset.addValue(point.operatingMarginPct, "Operating Margin %", point.label)
-        marginDataset.addValue(point.netIncomeMarginPct, "Net Income Margin %", point.label)
+      _ = ordered.zipWithIndex.foreach { case (point, idx) =>
+        val baseOrder = idx * 2
+        val currencySlot = CategorySlot(baseOrder, CategorySlotType.Currency, point.label)
+        val marginSlot = CategorySlot(baseOrder + 1, CategorySlotType.Margin, point.label)
+
+        currencyDataset.addValue(point.revenuePerShare, "Revenue / Share", currencySlot)
+        currencyDataset.addValue(point.basicEarningsPerShare, "Basic EPS", currencySlot)
+        currencyDataset.addValue(null, "Revenue / Share", marginSlot)
+        currencyDataset.addValue(null, "Basic EPS", marginSlot)
+
+        marginDataset.addValue(null, "Operating Margin %", currencySlot)
+        marginDataset.addValue(null, "Net Income Margin %", currencySlot)
+        marginDataset.addValue(point.operatingMarginPct, "Operating Margin %", marginSlot)
+        marginDataset.addValue(point.netIncomeMarginPct, "Net Income Margin %", marginSlot)
       }
       domainAxis = new CategoryAxis("Year")
       _ = domainAxis.setTickLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 8))
