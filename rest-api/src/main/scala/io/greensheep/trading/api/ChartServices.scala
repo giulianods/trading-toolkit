@@ -179,8 +179,14 @@ object ChartServices {
         val maxValue = values.max
         val minWithZero = math.min(minValue, 0.0)
         val maxWithZero = math.max(maxValue, 0.0)
-        if (minWithZero == maxWithZero) (minWithZero - 1.0, maxWithZero + 1.0)
-        else (minWithZero, maxWithZero)
+        val span = maxWithZero - minWithZero
+        val padding =
+          if (span == 0.0) math.max(1.0, math.abs(maxWithZero) * 0.1)
+          else math.max(span * 0.05, 0.1)
+
+        val lowerBound = if (minValue < 0.0) minWithZero - padding else minWithZero
+        val upperBound = if (maxValue > 0.0) maxWithZero + padding else maxWithZero + padding
+        (lowerBound, upperBound)
       }
     }
 
