@@ -73,16 +73,6 @@
         class="right-column"
         *ngIf="financialChartAvailability[s]?.quarterly || stats[s]"
       >
-        <div
-          class="financials-chart quarterly-chart"
-          *ngIf="financialChartAvailability[s]?.quarterly"
-        >
-          <img
-            [src]="quarterlyFinancialChartUrl(s)"
-            [alt]="s + ' quarterly financial performance'"
-            loading="lazy"
-          >
-        </div>
         <div class="stats-table" *ngIf="stats[s]">
           <table>
             <tbody>
@@ -92,6 +82,16 @@
               </tr>
             </tbody>
           </table>
+        </div>
+        <div
+          class="financials-chart quarterly-chart"
+          *ngIf="financialChartAvailability[s]?.quarterly"
+        >
+          <img
+            [src]="quarterlyFinancialChartUrl(s)"
+            [alt]="s + ' quarterly financial performance'"
+            loading="lazy"
+          >
         </div>
       </div>
     </div>
