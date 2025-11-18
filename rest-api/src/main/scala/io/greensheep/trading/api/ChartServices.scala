@@ -16,7 +16,6 @@ import zio.*
 import zio.cache.{Cache, Lookup}
 
 import java.awt.{BasicStroke, Color, Font}
-import org.jfree.chart.block.BlockBorder
 import org.jfree.chart.ui.RectangleInsets
 import java.awt.geom.Rectangle2D
 import java.time.{LocalDate, ZoneId}
@@ -170,72 +169,18 @@ object ChartServices {
     final case class FinancialPoint(
         label: String,
         revenuePerShare: Double,
-        basicEarningsPerShare: Double,
-        operatingMarginPct: Double,
-        netIncomeMarginPct: Double
+        basicEarningsPerShare: Double
     )
 
-    sealed trait CategorySlotType
-    object CategorySlotType {
-      case object Currency extends CategorySlotType
-      case object Margin extends CategorySlotType
-    }
-
-    final case class CategorySlot(order: Int, slotType: CategorySlotType, displayLabel: String)
-        extends Comparable[CategorySlot] {
-      override def compareTo(other: CategorySlot): Int = order.compareTo(other.order)
-
-      override def toString: String = slotType match {
-        case CategorySlotType.Currency => displayLabel
-        case CategorySlotType.Margin => ""
-      }
-    }
-
-    final case class AxisBounds(min: Double, max: Double) {
-      private val positiveExtent: Double = math.max(max, 0.0)
-      private val negativeExtent: Double = math.abs(math.min(min, 0.0))
-
-      private def zeroRatio: Double = {
-        val total = positiveExtent + negativeExtent
-        if (total == 0.0) 0.5 else positiveExtent / total
-      }
-
-      private def adjustToRatio(target: Double): AxisBounds = {
-        val epsilon = 1e-6
-        if (positiveExtent == 0.0 && negativeExtent == 0.0) {
-          AxisBounds(-1.0, 1.0)
-        } else {
-          val clampedTarget = math.min(math.max(target, epsilon), 1.0 - epsilon)
-
-          val requiredNegative = positiveExtent * (1.0 - clampedTarget) / clampedTarget
-          if (requiredNegative >= negativeExtent) {
-            // Expand the negative side so we never trim existing positive values.
-            AxisBounds(min = -requiredNegative, max = math.max(max, 0.0))
-          } else {
-            // Keep the negative side as-is and expand the positive side if needed.
-            val requiredPositive = negativeExtent * clampedTarget / (1.0 - clampedTarget)
-            AxisBounds(min = math.min(min, 0.0), max = math.max(requiredPositive, positiveExtent))
-          }
-        }
-      }
-
-      def alignWith(other: AxisBounds): (AxisBounds, AxisBounds) = {
-        val ratioDifference = math.abs(zeroRatio - other.zeroRatio)
-        if (ratioDifference < 1e-6) {
-          (this, other)
-        } else {
-          val targetRatio = (zeroRatio + other.zeroRatio) / 2.0
-          (adjustToRatio(targetRatio), other.adjustToRatio(targetRatio))
-        }
-      }
-    }
-
-    def boundsFor(values: Seq[Double]): AxisBounds = {
-      if (values.isEmpty) AxisBounds(-1.0, 1.0)
+    def boundsFor(values: Seq[Double]): (Double, Double) = {
+      if (values.isEmpty) (-1.0, 1.0)
       else {
         val minValue = values.min
         val maxValue = values.max
-        AxisBounds(math.min(minValue, 0.0), math.max(maxValue, 0.0))
+        val minWithZero = math.min(minValue, 0.0)
+        val maxWithZero = math.max(maxValue, 0.0)
+        if (minWithZero == maxWithZero) (minWithZero - 1.0, maxWithZero + 1.0)
+        else (minWithZero, maxWithZero)
       }
     }
 
@@ -247,9 +192,7 @@ object ChartServices {
             FinancialPoint(
               label = entry.year.toString,
               revenuePerShare = entry.revenuePerShare,
-              basicEarningsPerShare = entry.basicEarningsPerShare,
-              operatingMarginPct = entry.operatingMargin * 100.0,
-              netIncomeMarginPct = entry.netIncomeMargin * 100.0
+              basicEarningsPerShare = entry.basicEarningsPerShare
             )
           )
         case FinancialChartCategory.Quarterly =>
@@ -257,63 +200,37 @@ object ChartServices {
             FinancialPoint(
               label = s"${entry.year} Q${entry.quarter}",
               revenuePerShare = entry.revenuePerShare,
-              basicEarningsPerShare = entry.basicEarningsPerShare,
-              operatingMarginPct = entry.operatingMargin * 100.0,
-              netIncomeMarginPct = entry.netIncomeMargin * 100.0
+              basicEarningsPerShare = entry.basicEarningsPerShare
             )
           )
       }
       _ <- ZIO.cond(ordered.nonEmpty, (), new NoSuchElementException(s"No ${category.label.toLowerCase} financials for ticker $ticker"))
       currencyValues = ordered.flatMap(point => Seq(point.revenuePerShare, point.basicEarningsPerShare))
-      marginValues = ordered.flatMap(point => Seq(point.operatingMarginPct, point.netIncomeMarginPct))
-      alignedBounds = boundsFor(currencyValues).alignWith(boundsFor(marginValues))
-      (currencyBounds, marginBounds) = alignedBounds
-      currencyDataset = new DefaultCategoryDataset()
-      marginDataset = new DefaultCategoryDataset()
-      _ = ordered.zipWithIndex.foreach { case (point, idx) =>
-        val baseOrder = idx * 2
-        val currencySlot = CategorySlot(baseOrder, CategorySlotType.Currency, point.label)
-        val marginSlot = CategorySlot(baseOrder + 1, CategorySlotType.Margin, point.label)
-
-        currencyDataset.addValue(point.revenuePerShare, "Revenue / Share", currencySlot)
-        currencyDataset.addValue(point.basicEarningsPerShare, "Basic EPS", currencySlot)
-        currencyDataset.addValue(null, "Revenue / Share", marginSlot)
-        currencyDataset.addValue(null, "Basic EPS", marginSlot)
-
-        marginDataset.addValue(null, "Operating Margin %", currencySlot)
-        marginDataset.addValue(null, "Net Income Margin %", currencySlot)
-        marginDataset.addValue(point.operatingMarginPct, "Operating Margin %", marginSlot)
-        marginDataset.addValue(point.netIncomeMarginPct, "Net Income Margin %", marginSlot)
+      (minRange, maxRange) = boundsFor(currencyValues)
+      dataset = new DefaultCategoryDataset()
+      _ = ordered.foreach { point =>
+        dataset.addValue(point.revenuePerShare, "Revenue / Share", point.label)
+        dataset.addValue(point.basicEarningsPerShare, "Basic EPS", point.label)
       }
-      domainAxis = new CategoryAxis("Year")
+      domainAxisLabel = category match {
+        case FinancialChartCategory.Annual => "Year"
+        case FinancialChartCategory.Quarterly => "Quarter"
+      }
+      domainAxis = new CategoryAxis(domainAxisLabel)
       _ = domainAxis.setTickLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 4))
       _ = domainAxis.setLabelFont(new Font(Font.SANS_SERIF, Font.BOLD, 4))
       currencyAxis = new NumberAxis("$ per share")
       _ = currencyAxis.setLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 4))
       _ = currencyAxis.setTickLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 3))
       _ = currencyAxis.setAutoRangeIncludesZero(false)
-      _ = currencyAxis.setRange(currencyBounds.min, currencyBounds.max)
+      _ = currencyAxis.setRange(minRange, maxRange)
       currencyRenderer = new BarRenderer()
       _ = currencyRenderer.setSeriesPaint(0, new Color(36, 192, 111))
       _ = currencyRenderer.setSeriesPaint(1, new Color(86, 182, 255))
       _ = currencyRenderer.setBarPainter(new StandardBarPainter())
       _ = currencyRenderer.setShadowVisible(false)
       _ = currencyRenderer.setMaximumBarWidth(0.3)
-      marginAxis = new NumberAxis("Margin %")
-      _ = marginAxis.setLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 4))
-      _ = marginAxis.setTickLabelFont(new Font(Font.SANS_SERIF, Font.PLAIN, 3))
-      _ = marginAxis.setRange(marginBounds.min, marginBounds.max)
-      marginRenderer = new BarRenderer()
-      _ = marginRenderer.setSeriesPaint(0, new Color(255, 193, 7))
-      _ = marginRenderer.setSeriesPaint(1, new Color(255, 99, 132))
-      _ = marginRenderer.setBarPainter(new StandardBarPainter())
-      _ = marginRenderer.setShadowVisible(false)
-      _ = marginRenderer.setMaximumBarWidth(0.3)
-      plot = new CategoryPlot(currencyDataset, domainAxis, currencyAxis, currencyRenderer)
-      _ = plot.setDataset(1, marginDataset)
-      _ = plot.setRenderer(1, marginRenderer)
-      _ = plot.setRangeAxis(1, marginAxis)
-      _ = plot.mapDatasetToRangeAxis(1, 1)
+      plot = new CategoryPlot(dataset, domainAxis, currencyAxis, currencyRenderer)
       _ = plot.setBackgroundPaint(Color.WHITE)
       _ = plot.setOutlineVisible(false)
       _ = plot.setInsets(RectangleInsets.ZERO_INSETS)
