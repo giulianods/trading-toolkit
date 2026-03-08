@@ -24,3 +24,4 @@ project/project/project/metals.sbt
 service/greensheep-stocks/node_modules/
 service/greensheep-stocks/dist/
 
+/local.properties

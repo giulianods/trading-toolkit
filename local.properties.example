@@ -1,0 +1,3 @@
+# Copy to local.properties and set your local secrets.
+polygon.api.key=
+finnhub.api.key=

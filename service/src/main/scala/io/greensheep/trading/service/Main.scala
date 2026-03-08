@@ -5,9 +5,10 @@ import io.greensheep.providers.polygon.PolygonAsyncApi
 import io.greensheep.trading.api.ChartServices
 import io.greensheep.trading.core.services.{DataRepo, DataSource}
 import io.greensheep.trading.core.types.Quote
+import io.greensheep.trading.core.utils.LocalConfig
 import io.greensheep.trading.dataservice.{LocalFileDataRepo, MongoDataRepo, MongoDbDataRepo, PolygonDataSource}
 import io.greensheep.trading.service.app.{CronJobs, WebApp}
-import io.greensheep.trading.service.services.{ApiEndpoints, InitializationService, QuotesServices}
+import io.greensheep.trading.service.services.{ApiEndpoints, FinnhubApiClient, InitializationService, QuotesServices}
 import zio.*
 import zio.http.{Client, Server, URL}
 import zio.http.Header.Authorization
@@ -16,10 +17,13 @@ import zio.logging.backend.SLF4J
 
 import scala.jdk.CollectionConverters.*
 import java.time.LocalDate
-import io.finnhub.client.FinnhubClient
 import io.greensheep.trading.service.services.FiancialsServices
 
 object Main extends ZIOAppDefault {
+  // Some environments resolve finnhub.io to IPv6 without a working IPv6 route.
+  // Prefer IPv4 sockets to avoid NoRouteToHostException on IPv6 destinations.
+  java.lang.System.setProperty("java.net.preferIPv4Stack", "true")
+  java.lang.System.setProperty("java.net.preferIPv6Addresses", "false")
 
   private def datesBetween(startDate: LocalDate, endDate: LocalDate) = startDate.datesUntil(endDate).iterator().asScala.toSeq
 
@@ -34,8 +38,8 @@ object Main extends ZIOAppDefault {
 
   override def run: ZIO[Environment & ZIOAppArgs & Scope, Any, Any] = {
 
-    val polygonApiKey = java.lang.System.getenv("POLYGON_API_KEY")
-    val finnhubApiKey = java.lang.System.getenv("FINNHUB_API_KEY")
+    val polygonApiKey = LocalConfig.require("polygon.api.key")
+    val finnhubApiKey = LocalConfig.require("finnhub.api.key")
 
     val polygonClientLayer = Client.default.map(_.update(
       client =>
@@ -43,15 +47,11 @@ object Main extends ZIOAppDefault {
           .url(URL.decode("https://api.polygon.io").toOption.get)
     ))
 
-    val finnhubClientLayer = Client.default.map(_.update(
-      client =>
-        client.addHeader("X-Finnhub-Token", finnhubApiKey)
-    ))
-
     val polygonLayer = ZLayer.fromZIO(PolygonAsyncApi.build())
     val environment = polygonClientLayer >>> polygonLayer
 
-    val finnhubLayer = ZLayer.succeed(new FinnhubClient(finnhubClientLayer))
+    val finnhubClientLayer = Client.default
+    val finnhubLayer = ZLayer.succeed(FinnhubApiClient(finnhubApiKey))
 
     val mongoClient = MongoClient.live("mongodb://127.0.0.1:27017")
 
@@ -59,7 +59,7 @@ object Main extends ZIOAppDefault {
     val finnhubMongoLayer = mongoClient >>> ZLayer.fromZIO(ZIO.serviceWith[MongoClient](_.getDatabase("finnhub")))
 
     
-    val initFinancials = FiancialsServices.updateFinancials().provide(finnhubLayer ++ finnhubMongoLayer)
+    val initFinancials = FiancialsServices.updateFinancials().provideSome[Scope](finnhubLayer ++ finnhubMongoLayer ++ finnhubClientLayer)
 
     val chartServiceLayer = polygonMongoLayer >>> ChartServices.buildLayer
     val financialChartServiceLayer = finnhubMongoLayer >>> ChartServices.buildLayer
@@ -79,7 +79,7 @@ object Main extends ZIOAppDefault {
       _ <- ZIO.logInfo("Starting initialization")
       _ <- intitializer
       //_ <- ZIO.logInfo("Initialization completed")
-      //_ <- initFinancials
+      _ <- initFinancials
       _ <- ZIO.logInfo("Starting rest api")
       allApi = (finRoutes ++ allRoutes).toHttpApp
       web = WebApp.app
@@ -90,7 +90,7 @@ object Main extends ZIOAppDefault {
       _ <- ZIO.never
     } yield ()
 
-    val program = everything.provide(environment ++ polygonMongoLayer ++ restServer ++ chartServiceLayer)
+    val program = everything.provideSome[Scope](environment ++ polygonMongoLayer ++ restServer ++ chartServiceLayer)
 
     program catchAll {
       th =>
