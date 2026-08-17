@@ -9,7 +9,7 @@ import java.nio.file.{Files, Path, Paths}
 object WebApp {
 
   private val classpathPrefix = "/web"
-  private val defaultRelativeRoot = "../greensheep-stocks/build"
+  private val defaultRelativeRoot = "web/build"
 
   private val assetExtensions: Set[String] = Set(
     "js", "css", "map", "json", "png", "jpg", "jpeg", "gif", "svg", "ico",

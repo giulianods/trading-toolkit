@@ -53,7 +53,7 @@ object Main extends ZIOAppDefault {
       webSource = WebApp.describeSource
       _ <- ZIO.logInfo(s"Serving web app from $webSource")
       _ <- ZIO
-        .logWarning("Web app not found on disk or classpath. Build greensheep-stocks or run `sbt service/packageService`.")
+        .logWarning("Web app not found on disk or classpath. Run `sbt service/packageService` or `npm run build` in web/.")
         .when(webSource == "missing")
       _ <- Server.install(allApi ++ WebApp.app)
       _ <- ZIO.logInfo(s"Rest api started on port $restPort")

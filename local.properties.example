@@ -5,4 +5,4 @@ mongodb.url=mongodb://127.0.0.1:27017
 ttk.skip.initialization=false
 ttk.skip.cron=false
 # Optional local overlay of the React build. Packaged jars serve classpath:/web instead.
-# ttk.web.root=../greensheep-stocks/build
+# ttk.web.root=web/build

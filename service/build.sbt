@@ -12,23 +12,21 @@ dependencyOverrides ++= Seq (
   "io.circe" %% "circe-yaml" % "0.15.1"
 )
 
-val frontendSrc = settingKey[File]("Directory of the greensheep-stocks React app")
-val npmBuild = taskKey[File]("Install and build greensheep-stocks")
+val frontendSrc = settingKey[File]("Directory of the React web app")
+val npmBuild = taskKey[File]("Install and build the React web app")
 val packageService = taskKey[File]("Build the React UI and assemble the service fat jar")
 
 frontendSrc := {
   sys.env.get("TTK_WEB_SRC").map(file)
     .orElse(sys.props.get("ttk.web.src").map(file))
-    .getOrElse((ThisBuild / baseDirectory).value.getParentFile / "greensheep-stocks")
+    .getOrElse((ThisBuild / baseDirectory).value / "web")
 }
 
 npmBuild := {
   val dir = frontendSrc.value
   val log = streams.value.log
   if (!dir.exists) {
-    sys.error(
-      s"Frontend project not found at $dir. Place greensheep-stocks next to trading-toolkit or set TTK_WEB_SRC."
-    )
+    sys.error(s"Frontend project not found at $dir")
   }
   if (!(dir / "node_modules").exists) {
     log.info(s"Installing frontend dependencies in $dir")

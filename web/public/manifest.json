@@ -1,0 +1,20 @@
+{
+  "short_name": "Greensheep Stocks",
+  "name": "Greensheep Stocks",
+  "icons": [
+    {
+      "src": "favicon-rounded.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "favicon-rounded.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#1a2332",
+  "background_color": "#0f1114"
+}

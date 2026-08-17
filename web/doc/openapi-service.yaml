@@ -1,0 +1,614 @@
+openapi: 3.0.3
+info:
+  title: Trading Toolkit Service API
+  version: 1.0.0
+  description: |
+    OpenAPI description for the HTTP routes mounted by `Main` on port 7777.
+servers:
+  - url: http://localhost:7777
+    description: Local development server
+tags:
+  - name: Quotes
+  - name: Financials
+  - name: Watchlists
+  - name: Charts
+  - name: Metadata
+  - name: Breadth
+paths:
+  /quotes/{ticker}:
+    get:
+      tags: [Quotes]
+      summary: Get daily quote data for a ticker
+      description: |
+        Returns quote history as JSON by default.
+        If request header `Content-Type: text/csv` is set, returns CSV text.
+      parameters:
+        - $ref: '#/components/parameters/TickerParam'
+        - name: Content-Type
+          in: header
+          required: false
+          schema:
+            type: string
+            enum: [application/json, text/csv]
+            default: application/json
+          description: Non-standard content negotiation used by the service for this endpoint.
+      responses:
+        '200':
+          description: Quote data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyQuoteData'
+              examples:
+                sample:
+                  value:
+                    quotes:
+                      - day: '2026-02-23'
+                        o: 190.1
+                        h: 193.4
+                        l: 189.7
+                        c: 192.8
+                        v: 61002000
+                      - day: '2026-02-24'
+                        o: 192.6
+                        h: 194.0
+                        l: 191.3
+                        c: 193.1
+                        v: 52034000
+            text/csv:
+              schema:
+                type: string
+              examples:
+                sample:
+                  value: |
+                    date,open,high,low,close,volume
+                    2026-02-23,190.1,193.4,189.7,192.8,61002000
+                    2026-02-24,192.6,194.0,191.3,193.1,52034000
+        '400':
+          $ref: '#/components/responses/BadRequestText'
+        '500':
+          $ref: '#/components/responses/InternalErrorText'
+  /financials:
+    get:
+      tags: [Financials]
+      summary: Get financial data for one or more tickers
+      parameters:
+        - name: tickers
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Comma-separated tickers, e.g. `AAPL,MSFT`.
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+            example: annual,quarterly
+          description: |
+            Comma-separated filter. Allowed values are `annual` and `quarterly`.
+            Defaults to both.
+      responses:
+        '200':
+          description: Financial data keyed by ticker symbol
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/StockFinancials'
+              examples:
+                sample:
+                  value:
+                    AAPL:
+                      ticker: AAPL
+                      annual:
+                        - year: 2024
+                          revenuePerShare: 26.4
+                          basicEarningsPerShare: 6.2
+                          operatingMargin: 0.29
+                          netIncomeMargin: 0.25
+                      quarterly:
+                        - quarter: 4
+                          year: 2025
+                          revenuePerShare: 6.7
+                          basicEarningsPerShare: 1.6
+                          netIncomeMargin: 0.24
+                          operatingMargin: 0.28
+                    MSFT:
+                      ticker: MSFT
+                      annual: []
+                      quarterly:
+                        - quarter: 3
+                          year: 2025
+                          revenuePerShare: 8.3
+                          basicEarningsPerShare: 2.7
+                          netIncomeMargin: 0.34
+                          operatingMargin: 0.43
+        '400':
+          $ref: '#/components/responses/BadRequestText'
+        '500':
+          $ref: '#/components/responses/InternalErrorText'
+  /financials/chart/{ticker}:
+    get:
+      tags: [Financials, Charts]
+      summary: Render financial chart as SVG
+      parameters:
+        - $ref: '#/components/parameters/TickerParam'
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [annual, quarterly]
+            default: annual
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+            default: 5
+        - name: width
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 120
+            maximum: 800
+            default: 320
+        - name: height
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 100
+            maximum: 600
+            default: 200
+      responses:
+        '200':
+          description: SVG chart
+          content:
+            image/svg+xml:
+              schema:
+                type: string
+              examples:
+                sample:
+                  value: "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='200'>...</svg>"
+        '400':
+          $ref: '#/components/responses/BadRequestText'
+        '404':
+          description: No financial data for ticker
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                sample:
+                  value: No financial data found for AAPL
+        '500':
+          $ref: '#/components/responses/InternalErrorText'
+  /watchlists/history:
+    get:
+      tags: [Watchlists]
+      summary: Get watchlist history by day
+      parameters:
+        - name: start
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: end
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Historical watchlist summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WatchlistHistoryEntry'
+              examples:
+                sample:
+                  value:
+                    - day: '2026-02-24'
+                      watchlists:
+                        - name: vcp
+                          symbolCount: 12
+                        - name: sepa
+                          symbolCount: 9
+                    - day: '2026-02-25'
+                      watchlists:
+                        - name: vcp
+                          symbolCount: 10
+        '400':
+          $ref: '#/components/responses/BadRequestText'
+        '500':
+          $ref: '#/components/responses/InternalErrorText'
+  /watchlists/{name}:
+    get:
+      tags: [Watchlists]
+      summary: Get one watchlist by name
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          example: vcp
+        - name: day
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: If omitted, latest watchlist is returned.
+      responses:
+        '200':
+          description: Watchlist payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Watchlist'
+              examples:
+                sample:
+                  value:
+                    day: '2026-02-25'
+                    screenName: vcp
+                    tickers: [AAPL, MSFT, NVDA]
+                    stats:
+                      - ticker: AAPL
+                        stats:
+                          breakoutScore: '78'
+                          rsRank: '92'
+        '500':
+          $ref: '#/components/responses/InternalErrorText'
+  /chart/{ticker}:
+    get:
+      tags: [Charts]
+      summary: Render quote chart as SVG
+      parameters:
+        - $ref: '#/components/parameters/TickerParam'
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+          description: Number of days in chart window.
+        - name: day
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Optional day to highlight.
+      responses:
+        '200':
+          description: SVG chart
+          content:
+            image/svg+xml:
+              schema:
+                type: string
+              examples:
+                sample:
+                  value: "<svg xmlns='http://www.w3.org/2000/svg' width='900' height='480'>...</svg>"
+        '500':
+          $ref: '#/components/responses/InternalErrorText'
+  /description/{ticker}:
+    get:
+      tags: [Metadata]
+      summary: Get stock description metadata
+      parameters:
+        - $ref: '#/components/parameters/TickerParam'
+      responses:
+        '200':
+          description: Stock description
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockDescription'
+              examples:
+                sample:
+                  value:
+                    symbol: AAPL
+                    companyName: Apple Inc.
+                    ipoDate: '1980-12-12'
+                    primaryExchange: XNAS
+                    description: Consumer electronics and software company.
+                    totalEmployees: 161000
+                    sicCode: '3571'
+                    sicDescription: Electronic Computers
+                    marketCap: 2820000000000
+                    weightedSharesOutstanding: 15500000000
+        '500':
+          $ref: '#/components/responses/InternalErrorText'
+  /breadth/indicators:
+    get:
+      tags: [Breadth]
+      summary: Get market breadth indicators
+      description: |
+        Supports either date range (`start`,`end`) or trailing count (`days`).
+        If `start` and `end` are present they are used; otherwise `days` (default `100`) is used.
+      parameters:
+        - name: start
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: end
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 100
+      responses:
+        '200':
+          description: Breadth indicators sorted by date
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BreadthIndicators'
+              examples:
+                sample:
+                  value:
+                    - date: '2026-02-24'
+                      day_4pct_up: 86
+                      day_4pct_down: 41
+                      qt_25pct_up: 312
+                      qt_25pct_down: 97
+                      monthly_25pct_up: 121
+                      monthly_25pct_down: 66
+                      monthly_50pct_up: 39
+                      monthly_50pct_down: 18
+                      bull_34_13: 211
+                      bear_34_13: 83
+        '400':
+          $ref: '#/components/responses/BadRequestText'
+        '500':
+          $ref: '#/components/responses/InternalErrorText'
+components:
+  parameters:
+    TickerParam:
+      name: ticker
+      in: path
+      required: true
+      schema:
+        type: string
+      example: AAPL
+  responses:
+    BadRequestText:
+      description: Validation error
+      content:
+        text/plain:
+          schema:
+            type: string
+          examples:
+            sample:
+              value: Missing required query parameter tickers
+    InternalErrorText:
+      description: Unexpected server error (stacktrace text)
+      content:
+        text/plain:
+          schema:
+            type: string
+  schemas:
+    Quote:
+      type: object
+      required: [day, o, h, l, c, v]
+      properties:
+        day:
+          type: string
+          format: date
+        o:
+          type: number
+          format: double
+        h:
+          type: number
+          format: double
+        l:
+          type: number
+          format: double
+        c:
+          type: number
+          format: double
+        v:
+          type: integer
+    DailyQuoteData:
+      type: object
+      required: [quotes]
+      properties:
+        quotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Quote'
+    AnnualFinancialData:
+      type: object
+      required: [year, revenuePerShare, basicEarningsPerShare, operatingMargin, netIncomeMargin]
+      properties:
+        year:
+          type: integer
+        revenuePerShare:
+          type: number
+          format: double
+        basicEarningsPerShare:
+          type: number
+          format: double
+        operatingMargin:
+          type: number
+          format: double
+        netIncomeMargin:
+          type: number
+          format: double
+    QuarterlyFinancialData:
+      type: object
+      required: [quarter, year, revenuePerShare, basicEarningsPerShare, netIncomeMargin, operatingMargin]
+      properties:
+        quarter:
+          type: integer
+        year:
+          type: integer
+        revenuePerShare:
+          type: number
+          format: double
+        basicEarningsPerShare:
+          type: number
+          format: double
+        netIncomeMargin:
+          type: number
+          format: double
+        operatingMargin:
+          type: number
+          format: double
+    StockFinancials:
+      type: object
+      required: [ticker, annual, quarterly]
+      properties:
+        ticker:
+          type: string
+        annual:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnnualFinancialData'
+        quarterly:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuarterlyFinancialData'
+    WatchlistSummary:
+      type: object
+      required: [name, symbolCount]
+      properties:
+        name:
+          type: string
+        symbolCount:
+          type: integer
+    WatchlistHistoryEntry:
+      type: object
+      required: [day, watchlists]
+      properties:
+        day:
+          type: string
+          format: date
+        watchlists:
+          type: array
+          items:
+            $ref: '#/components/schemas/WatchlistSummary'
+    ScreenStats:
+      type: object
+      required: [ticker, stats]
+      properties:
+        ticker:
+          type: string
+        stats:
+          type: object
+          additionalProperties:
+            type: string
+    Watchlist:
+      type: object
+      required: [day, screenName, tickers, stats]
+      properties:
+        day:
+          type: string
+          format: date
+        screenName:
+          type: string
+        tickers:
+          type: array
+          items:
+            type: string
+        stats:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScreenStats'
+    StockDescription:
+      type: object
+      required:
+        - symbol
+        - companyName
+        - ipoDate
+        - primaryExchange
+        - description
+        - totalEmployees
+        - sicCode
+        - sicDescription
+        - marketCap
+        - weightedSharesOutstanding
+      properties:
+        symbol:
+          type: string
+        companyName:
+          type: string
+        ipoDate:
+          type: string
+          format: date
+        primaryExchange:
+          type: string
+        description:
+          type: string
+        totalEmployees:
+          type: integer
+        sicCode:
+          type: string
+        sicDescription:
+          type: string
+        marketCap:
+          type: integer
+          format: int64
+        weightedSharesOutstanding:
+          type: integer
+          format: int64
+    BreadthIndicators:
+      type: object
+      required:
+        - date
+        - day_4pct_up
+        - day_4pct_down
+        - qt_25pct_up
+        - qt_25pct_down
+        - monthly_25pct_up
+        - monthly_25pct_down
+        - monthly_50pct_up
+        - monthly_50pct_down
+        - bull_34_13
+        - bear_34_13
+      properties:
+        date:
+          type: string
+          format: date
+        day_4pct_up:
+          type: integer
+        day_4pct_down:
+          type: integer
+        qt_25pct_up:
+          type: integer
+        qt_25pct_down:
+          type: integer
+        monthly_25pct_up:
+          type: integer
+        monthly_25pct_down:
+          type: integer
+        monthly_50pct_up:
+          type: integer
+        monthly_50pct_down:
+          type: integer
+        bull_34_13:
+          type: integer
+        bear_34_13:
+          type: integer
