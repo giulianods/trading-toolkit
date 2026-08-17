@@ -4,7 +4,7 @@ description: Temurin 21 plus the sbt 1.9.7 runner (no sbt/setup-sbt)
 runs:
   using: composite
   steps:
-    - uses: actions/setup-java@v4
+    - uses: actions/setup-java@v5
       with:
         java-version: "21"
         distribution: temurin
