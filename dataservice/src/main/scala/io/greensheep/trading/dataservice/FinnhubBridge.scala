@@ -24,10 +24,10 @@ object FinnhubBridge {
     }
 
     def translateAnnualFinancials(data: io.finnhub.client.types.BasicFinancials): Seq[AnnualFinancialData] = {
-        val epsMap = data.series.annual.eps.map(eps => eps.annualKey -> eps.v).toMap
-        val revenueMap = data.series.annual.salesPerShare.map(revenue => revenue.annualKey -> revenue.v).toMap
-        val operatingMarginMap = data.series.annual.operatingMargin.map(operatingMargin => operatingMargin.annualKey -> operatingMargin.v).toMap
-        val netIncomeMarginMap = data.series.annual.netMargin.map(netIncomeMargin => netIncomeMargin.annualKey -> netIncomeMargin.v).toMap
+        val epsMap = data.series.annual.eps.flatMap(eps => eps.v.map(eps.annualKey -> _)).toMap
+        val revenueMap = data.series.annual.salesPerShare.flatMap(revenue => revenue.v.map(revenue.annualKey -> _)).toMap
+        val operatingMarginMap = data.series.annual.operatingMargin.flatMap(value => value.v.map(value.annualKey -> _)).toMap
+        val netIncomeMarginMap = data.series.annual.netMargin.flatMap(value => value.v.map(value.annualKey -> _)).toMap
         val years = epsMap.keys.toSet ++ revenueMap.keys.toSet
         years.map(year => {
             val eps = epsMap.get(year).map(_.toDouble).getOrElse(0.0)
@@ -39,10 +39,10 @@ object FinnhubBridge {
     }
 
     def translateQuarterlyFinancials(data: io.finnhub.client.types.BasicFinancials): Seq[QuarterlyFinancialData] = {
-        val epsMap = data.series.quarterly.eps.map(eps => eps.quarterlyKey -> eps.v).toMap
-        val revenueMap = data.series.quarterly.salesPerShare.map(revenue => revenue.quarterlyKey -> revenue.v).toMap
-        val operatingMarginMap = data.series.quarterly.operatingMargin.map(operatingMargin => operatingMargin.quarterlyKey -> operatingMargin.v).toMap
-        val netIncomeMarginMap = data.series.quarterly.netMargin.map(netIncomeMargin => netIncomeMargin.quarterlyKey -> netIncomeMargin.v).toMap
+        val epsMap = data.series.quarterly.eps.flatMap(eps => eps.v.map(eps.quarterlyKey -> _)).toMap
+        val revenueMap = data.series.quarterly.salesPerShare.flatMap(revenue => revenue.v.map(revenue.quarterlyKey -> _)).toMap
+        val operatingMarginMap = data.series.quarterly.operatingMargin.flatMap(value => value.v.map(value.quarterlyKey -> _)).toMap
+        val netIncomeMarginMap = data.series.quarterly.netMargin.flatMap(value => value.v.map(value.quarterlyKey -> _)).toMap
         val quarters = epsMap.keys.toSet ++ revenueMap.keys.toSet
         quarters.map((year,quarter) => {
             val eps = epsMap.get((year,quarter)).map(_.toDouble).getOrElse(0.0)

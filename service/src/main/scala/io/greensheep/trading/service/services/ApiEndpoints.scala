@@ -139,6 +139,7 @@ object ApiEndpoints {
 
   val OtherRoutes: Routes[MongoDatabase & ChartServices, Response] = {
     Routes(
+      (Method.GET / "status") -> Handler.fromZIO(ZIO.succeed(Response.text("running"))),
       // This line works fine
       (Method.GET / "quotes" / string("ticker")) -> {
         Handler.fromFunctionZIO[(String, Request)] {

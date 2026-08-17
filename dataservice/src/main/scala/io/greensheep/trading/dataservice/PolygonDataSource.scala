@@ -3,9 +3,6 @@ package io.greensheep.trading.dataservice
 import io.greensheep.providers.polygon.datatypes.{Aggregate, Ticker}
 import io.greensheep.providers.polygon.{MarketClient, PolygonSettings, ReferenceClient}
 import io.greensheep.providers.polygon.requests.{AggregatesRequest, GroupedDailyRequest, StockFinancialsRequest, TickerDetailsRequest, TickersRequest}
-import io.polygon.kotlin.sdk.DefaultJvmHttpClientProvider
-import io.polygon.kotlin.sdk.rest.{AggregatesParameters, PolygonRestApiCallback, PolygonRestClient}
-import io.polygon.kotlin.sdk.rest.reference.{SupportedTickersParameters, SupportedTickersParametersBuilder, TickersDTO}
 import io.greensheep.trading.core.services.DataSource
 import io.greensheep.trading.core.types.{AnnualFinancialData, QuarterlyFinancialData, Quote, Stock}
 import io.greensheep.trading.dataservice.PolygonDataSource.layer
@@ -16,7 +13,6 @@ import zio.{IO, Schedule, Task, ULayer, ZIO, ZLayer}
 import java.time.{Instant, LocalDate, Month, ZonedDateTime}
 import java.time.format.DateTimeFormatter
 import scala.collection.mutable.ListBuffer
-import scala.jdk.CollectionConverters.{IteratorHasAsScala, ListHasAsScala}
 import scala.language.implicitConversions
 import zio.*
 
@@ -33,6 +29,8 @@ object PolygonDataSource{
 
 class PolygonDataSource(apiKey: String) extends DataSource{
 
+  private val settings = PolygonSettings(apiKey = apiKey)
+
   private def toCoreType(ticker: Ticker): Stock = {
     Stock(
       ticker.ticker,
@@ -42,8 +40,6 @@ class PolygonDataSource(apiKey: String) extends DataSource{
     )
   }
 
-  val polygonClient = new PolygonRestClient(apiKey)
-
   def getTickers: ZStream[Any, Throwable, Stock] = {
     val request = TickersRequest(
       _type = "CS",
@@ -51,7 +47,7 @@ class PolygonDataSource(apiKey: String) extends DataSource{
       limit = 1000
     )
     val referenceClient = new ReferenceClient(
-      PolygonSettings()
+      settings
     )
     referenceClient.getTickers(request).map(toCoreType)
   }
@@ -59,7 +55,7 @@ class PolygonDataSource(apiKey: String) extends DataSource{
   def getSnapshot(date: String): Task[Map[String, Aggregate]] = {
     println(s"Getting snapshot for $date at ${ZonedDateTime.now()}")
     val request = GroupedDailyRequest(date)
-    val marketClient = new MarketClient(PolygonSettings())
+    val marketClient = new MarketClient(settings)
     marketClient.getGroupedDaily(request).delay(16.seconds)
   }
 
@@ -69,7 +65,7 @@ class PolygonDataSource(apiKey: String) extends DataSource{
   }
 
   def getStock(symbol: String): Task[Stock]= {
-    val referenceClient = new ReferenceClient(PolygonSettings())
+    val referenceClient = new ReferenceClient(settings)
     referenceClient.getTickerDetails(TickerDetailsRequest(symbol)) map {
       details =>
         Stock(
@@ -100,7 +96,7 @@ class PolygonDataSource(apiKey: String) extends DataSource{
 
 
   def getDailyAggregates(ticker: String): ZIO[Client, Throwable, Seq[Aggregate]] = {
-    val marketClient = new MarketClient(PolygonSettings())
+    val marketClient = new MarketClient(settings)
     val request = AggregatesRequest(stocksTicker = ticker, from = "2022-01-01", to = "2024-05-12", sort = "desc")
     marketClient.getAggregates(request)
   }
@@ -110,29 +106,10 @@ class PolygonDataSource(apiKey: String) extends DataSource{
   def getQuotes(ticker: String): Task[Seq[Quote]] = {
     val from = LocalDate.now().minusDays(1000).format(DateTimeFormatter.ISO_LOCAL_DATE)
     val to = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
-    val params = new AggregatesParameters(ticker, 1, "day", from, to, false, 1000L)
-
-    ZIO attempt {
-      println(s"Getting quotes for $ticker")
-      val response = polygonClient.getAggregatesBlocking(params)
-      response.getStatus match {
-        case "OK" | "DELAYED" =>
-          response.getResults.iterator().asScala.toSeq map {
-            adt =>
-              val instance = java.time.Instant.ofEpochMilli(adt.getTimestampMillis)
-              val localDate = java.time.LocalDate
-                .ofInstant(instance, java.time.ZoneId.of("America/New_York"))
-              Quote(localDate, adt.getOpen, adt.getHigh, adt.getLow, adt.getClose, adt.getVolume.intValue())
-          }
-        case "ERROR" =>
-          println("failed")
-          throw new RuntimeException("got api error " + response.getStatus)
-        case _ =>
-          throw new RuntimeException(response.getStatus)
-
-      }
-
-    }
+    val request = AggregatesRequest(ticker, from = from, to = to, adjusted = false, limit = 1000)
+    new MarketClient(settings)
+      .getAggregates(request)
+      .map(_.map(PolygonBridge.aggregateToQuote))
   }
 
 }

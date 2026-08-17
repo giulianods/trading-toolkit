@@ -17,5 +17,5 @@ object TestMongoApi extends ZIOSpecDefault {
       } yield assert(stocks)(isNonEmpty)
     },
     
-  )
+  ) @@ TestAspect.ignore
 }

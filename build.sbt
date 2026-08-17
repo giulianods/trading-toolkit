@@ -5,21 +5,19 @@ import scala.collection.Seq
 ThisBuild / version := "0.1.0-SNAPSHOT"
 
 ThisBuild / scalaVersion := "3.7.1"
-resolvers += Resolver.file("Local Ivy", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
-
 lazy val root = (project in file("."))
   .settings(
     name := "trading-toolkit",
     idePackagePrefix := Some("io.greensheep.trading")
-  ).aggregate(dataservice, core, service, restApi)
-
-credentials += Credentials(Path.userHome / ".sbt" / ".credentials")
+  ).aggregate(dataservice, core, service, restApi, polygonClientZio, finnhubClientZio)
 
 
 scalacOptions += "-Yretain-trees"
 
-val zioVersion = "2.0.19"
+val zioVersion = "2.1.21"
 val zioLoggingVersion = "2.5.0"
+val zioHttpVersion = "3.0.0-RC4"
+val zioJsonVersion = "0.6.2"
 val zioLibraries = Seq(
   "dev.zio" %% "zio" % zioVersion,
   "dev.zio" %% "zio-test" % zioVersion,
@@ -41,12 +39,28 @@ val logbackLib = Seq(
   "ch.qos.logback" % "logback-classic" % "1.0.13"
 )
 
-val dataSourceLibraries = Seq(
-  "io.greensheep" %% "polygon-client-zio" % "0.1.0-SNAPSHOT",
-  "io.finnhub" %% "finnhub-client-zio" % "0.1.0-SNAPSHOT"
-)
-
 val zioTestFramework = new TestFramework("zio.test.sbt.ZTestFramework")
+
+lazy val polygonClientZio = (project in file("polygon-client-zio"))
+  .settings(
+    name := "polygon-client-zio",
+    libraryDependencies ++= zioLibraries ++ Seq(
+      "dev.zio" %% "zio-http" % zioHttpVersion,
+      "dev.zio" %% "zio-json" % zioJsonVersion
+    ),
+    testFrameworks := Seq(zioTestFramework)
+  )
+
+lazy val finnhubClientZio = (project in file("finnhub-client-zio"))
+  .settings(
+    name := "finnhub-client-zio",
+    scalacOptions ++= Seq("-Xmax-inlines", "64"),
+    libraryDependencies ++= zioLibraries ++ Seq(
+      "dev.zio" %% "zio-http" % zioHttpVersion,
+      "dev.zio" %% "zio-json" % zioJsonVersion
+    ),
+    testFrameworks := Seq(zioTestFramework)
+  )
 
 lazy val core = (project in file("core"))
   .settings(
@@ -54,10 +68,10 @@ lazy val core = (project in file("core"))
     testFrameworks := Seq(zioTestFramework)
   )
 
-lazy val dataservice = (project in file("dataservice")).dependsOn(core)
+lazy val dataservice = (project in file("dataservice")).dependsOn(core, polygonClientZio, finnhubClientZio)
   .settings(
 
-    libraryDependencies := Seq("dev.zio" %% "zio-json" % "0.4.2") ++ zioLibraries ++ mongoZioLibraries ++ dataSourceLibraries ++ logbackLib,
+    libraryDependencies := Seq("dev.zio" %% "zio-json" % zioJsonVersion) ++ zioLibraries ++ mongoZioLibraries ++ logbackLib,
     testFrameworks := Seq(zioTestFramework)
   )
 
@@ -70,7 +84,7 @@ lazy val restApi = (project in file("rest-api"))
 
 val cronScheduling = "com.github.tharwaninitin" %% "cron4zio" % "1.0.0"
 
-lazy val service = (project in file("service")).dependsOn(core, dataservice, restApi)
+lazy val service = (project in file("service")).dependsOn(core, dataservice, restApi, polygonClientZio, finnhubClientZio)
   .settings(
     libraryDependencies := zioLibraries ++ logbackLib :+ cronScheduling,
     testFrameworks := Seq(zioTestFramework)
@@ -82,5 +96,9 @@ lazy val service = (project in file("service")).dependsOn(core, dataservice, res
 libraryDependencies ++= (zioLibraries ++ logbackLib)
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
 
-Test / fork := true
-Test / envVars := sys.env
+ThisBuild / Test / fork := true
+ThisBuild / Test / envVars := sys.env
+ThisBuild / Test / javaOptions ++= Seq(
+  "-Djava.net.preferIPv4Stack=true",
+  "-Djava.net.preferIPv6Addresses=false"
+)

@@ -28,9 +28,11 @@ object TestValidation extends ZIOSpecDefault {
   def spec = suite("TestValidation")(
     test("basic arithmetic") {
       validatePerson("", -13) match {
-        case Validation.Failure(errs, _) =>
-          assert(errs)(equalTo("Name was empty")) &&
-          assert(errs)(equalTo("Age -13 was less than zero"))
+        case Validation.Failure(_, errs) =>
+          assertTrue(
+            errs.contains("Name was empty"),
+            errs.contains("Age -13 was less than zero")
+          )
         case Validation.Success(_,_) =>
           assertTrue(false)
       }

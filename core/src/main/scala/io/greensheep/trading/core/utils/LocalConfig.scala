@@ -10,25 +10,30 @@ object LocalConfig {
   private val defaultFileName = "local.properties"
 
   private lazy val properties: Properties = {
-    val file = findConfigFile().getOrElse {
-      throw new IllegalStateException(
-        s"Could not find $defaultFileName in the current directory or any parent directory"
-      )
-    }
-
     val props = new Properties()
-    val in = new FileInputStream(file.toFile)
-    try props.load(in)
-    finally in.close()
+    findConfigFile().foreach { file =>
+      val in = new FileInputStream(file.toFile)
+      try props.load(in)
+      finally in.close()
+    }
     props
   }
 
+  private def environmentName(key: String): String =
+    key.toUpperCase.replace('.', '_').replace('-', '_')
+
   def get(key: String): Option[String] =
-    Option(properties.getProperty(key)).map(_.trim).filter(_.nonEmpty)
+    sys.env
+      .get(environmentName(key))
+      .orElse(Option(properties.getProperty(key)))
+      .map(_.trim)
+      .filter(_.nonEmpty)
 
   def require(key: String): String =
     get(key).getOrElse {
-      throw new IllegalStateException(s"Missing required config key '$key' in $defaultFileName")
+      throw new IllegalStateException(
+        s"Missing required config key '$key' (environment: ${environmentName(key)}, file: $defaultFileName)"
+      )
     }
 
   private def findConfigFile(): Option[Path] = {

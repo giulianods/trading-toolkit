@@ -1,6 +1,7 @@
 package io.greensheep.trading.service.services
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
+import io.finnhub.client.FinnhubClient
 import io.greensheep.providers.polygon.PolygonAsyncApi
 import io.greensheep.trading.core.screens.BreadthIndicators as MarketBreadth
 import io.greensheep.trading.core.types.StockDescription
@@ -80,11 +81,11 @@ object InitializationService {
   }
 
 
-  private def initializeFinancials(): ZIO[MongoDatabase & FinnhubApiClient & Client & Scope, Throwable, Unit] = ZIO.logSpan("initialize-financials") {
+  private def initializeFinancials(): ZIO[MongoDatabase & FinnhubClient & Client & Scope, Throwable, Unit] = ZIO.logSpan("initialize-financials") {
     for{
       _ <- ZIO.logInfo("Initializing financials")
       universe <- MongoDataRepo.getStockUniverse
-      remoteApi <- ZIO.service[FinnhubApiClient]
+      remoteApi <- ZIO.service[FinnhubClient]
       _ <- ZIO.foreach(universe.symbols)(ticker => remoteApi.basicFinancials(ticker)
         .map(financials => MongoDataRepo.updateFinancials(ticker, FinnhubBridge.translateAnnualFinancials(financials), FinnhubBridge.translateQuarterlyFinancials(financials))))  
     } yield ()

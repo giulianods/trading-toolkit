@@ -1,6 +1,7 @@
 package io.greensheep.trading.service.services
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
+import io.finnhub.client.FinnhubClient
 import zio.{Scope, ZIO}
 import io.greensheep.trading.dataservice.MongoDataRepo
 import io.greensheep.trading.dataservice.FinnhubBridge
@@ -12,14 +13,14 @@ import io.greensheep.trading.dataservice.StockUniverse
 object FiancialsServices {
 
   def intializeUniverse()
-      : ZIO[MongoDatabase & FinnhubApiClient & Client & Scope, Throwable, StockUniverse] =
+      : ZIO[MongoDatabase & FinnhubClient & Client & Scope, Throwable, StockUniverse] =
     ZIO.logSpan("initialize-universe") {
       MongoDataRepo.getStockUniverse.catchSome {
         case e: NoSuchElementException =>
           ZIO.logInfo(s"No stock universe found, creating new one")
           for {
             _ <- ZIO.logInfo("Getting stock symbols from Finnhub")
-            client <- ZIO.service[FinnhubApiClient]
+            client <- ZIO.service[FinnhubClient]
             symbols <- client.stockSymbols().map(_.filter(_.`type` == "Common Stock").filter(s => Set("XNAS", "XNYS").contains(s.mic)))
             _ <- ZIO.logInfo(s"Found ${symbols.size} symbols")
             universe = StockUniverse(
@@ -38,11 +39,11 @@ object FiancialsServices {
 
   def updateFinancials(
       ticker: String
-  ): ZIO[MongoDatabase & FinnhubApiClient & Client & Scope, Throwable, Unit] =
+  ): ZIO[MongoDatabase & FinnhubClient & Client & Scope, Throwable, Unit] =
     ZIO.logSpan("update-financials") {
       for {
         _ <- ZIO.logInfo(s"Updating financials for $ticker")
-        remoteApi <- ZIO.service[FinnhubApiClient]
+        remoteApi <- ZIO.service[FinnhubClient]
         financials <- remoteApi.basicFinancials(ticker)
         _ <- MongoDataRepo.updateFinancials(
           ticker,
@@ -52,14 +53,14 @@ object FiancialsServices {
       } yield ()
     }
 
-  def updateFinancials(): ZIO[MongoDatabase & FinnhubApiClient & Client & Scope, Throwable, Unit] =
+  def updateFinancials(): ZIO[MongoDatabase & FinnhubClient & Client & Scope, Throwable, Unit] =
     ZIO.logSpan("update-financials") {
       for {
         _ <- ZIO.logInfo("Updating financials")
         universe <- intializeUniverse()
         present <- MongoDataRepo.presentFianancials()
         toUpdate = universe.symbols.filter(s => !present.exists(_.ticker == s))
-        remoteApi <- ZIO.service[FinnhubApiClient]
+        remoteApi <- ZIO.service[FinnhubClient]
         _ <- ZIO.foreach(toUpdate)(s => updateFinancials(s).catchAll(e => ZIO.logError(s"Error updating financials ${e.getMessage}")))
       } yield ()
     }

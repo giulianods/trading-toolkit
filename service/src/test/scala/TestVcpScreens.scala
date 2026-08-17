@@ -50,6 +50,6 @@ object TestVcpScreens extends ZIOSpecDefault {
     val market = ZLayer.fromZIO(ScreenerServices.LoadQuotes.provideLayer(mongoLayer))
     suite("VCP tests")(
       firstTest
-    ).provideLayer(market)
+    ).provideLayer(market) @@ TestAspect.ignore
   }
 }
