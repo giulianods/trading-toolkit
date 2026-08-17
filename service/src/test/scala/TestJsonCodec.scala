@@ -1,4 +1,4 @@
-import io.greensheep.trading.dataservice.{MongoDbDataRepo, StockUniverse}
+import io.greensheep.trading.dataservice.StockUniverse
 import zio.test.*
 import zio.test.Assertion.*
 import zio.*

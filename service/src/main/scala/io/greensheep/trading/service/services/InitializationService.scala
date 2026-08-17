@@ -1,7 +1,6 @@
 package io.greensheep.trading.service.services
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
-import io.finnhub.client.FinnhubClient
 import io.greensheep.providers.polygon.PolygonAsyncApi
 import io.greensheep.trading.core.screens.BreadthIndicators as MarketBreadth
 import io.greensheep.trading.core.types.StockDescription
@@ -10,10 +9,6 @@ import zio.ZIO
 
 import java.time.LocalDate
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
-import scala.jdk.CollectionConverters.*
-import io.greensheep.trading.dataservice.FinnhubBridge
-import zio.http.Client
-import zio.Scope
 
 object InitializationService {
 
@@ -81,17 +76,6 @@ object InitializationService {
   }
 
 
-  private def initializeFinancials(): ZIO[MongoDatabase & FinnhubClient & Client & Scope, Throwable, Unit] = ZIO.logSpan("initialize-financials") {
-    for{
-      _ <- ZIO.logInfo("Initializing financials")
-      universe <- MongoDataRepo.getStockUniverse
-      remoteApi <- ZIO.service[FinnhubClient]
-      _ <- ZIO.foreach(universe.symbols)(ticker => remoteApi.basicFinancials(ticker)
-        .map(financials => MongoDataRepo.updateFinancials(ticker, FinnhubBridge.translateAnnualFinancials(financials), FinnhubBridge.translateQuarterlyFinancials(financials))))  
-    } yield ()
-  }
-
-
   private def initializeQuotes(): ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] = ZIO.logSpan("initialize-quotes") {
     for {
       _ <- ZIO.logInfo("Initializing quotes")
@@ -99,14 +83,14 @@ object InitializationService {
       usCommonStocks <- QuotesServices.TickersUsCommonStocks  //TODO diff with existing symbols
       _ <- if(!alreadyRan) {
         val start = LocalDate.now().minusMonths(23)
-        val end = LocalDate.now()
+        val end = LocalDate.now().minusDays(1)
         for{
           _ <- ZIO.logInfo("First run - creating stock universe")
-          _ <- QuotesServices.getDailySnapshotService(start, end)
+          lastWritten <- QuotesServices.getDailySnapshotService(start, end)
           stockUniverse = StockUniverse(_id = "stock-universe",
             name = "stock-universe",
             dataSource = "polygon",
-            lastUpdateQuotes = end,
+            lastUpdateQuotes = lastWritten.getOrElse(end),
             lastUpdateFinancials = LocalDate.of(1970,1,1),
             timeZone = "America/New_York",
             symbols = usCommonStocks)
@@ -118,43 +102,49 @@ object InitializationService {
           stockUniverse <- MongoDataRepo.getStockUniverse
           start = stockUniverse.lastUpdateQuotes
           end = LocalDate.now().minusDays(1)
-          _ <- QuotesServices.getDailySnapshotService(start, end).when(start.isBefore(end))
-          _ <- MongoDataRepo.saveStockUniverse(stockUniverse.copy(lastUpdateQuotes = end, symbols = usCommonStocks))
+          lastWritten <- QuotesServices.getDailySnapshotService(start, end)
+          _ <- MongoDataRepo.saveStockUniverse(
+            stockUniverse.copy(
+              lastUpdateQuotes = lastWritten.getOrElse(stockUniverse.lastUpdateQuotes),
+              symbols = usCommonStocks
+            )
+          )
         } yield ()
       }
     } yield ()
   }
 
   private def initializeHistoricalWatchlists(): ZIO[MongoDatabase, Throwable, Unit] = {
-    val end = LocalDate.now()
+    val end = LocalDate.now().minusDays(1)
     val start = end.minusMonths(3)
-    val dates = start.datesUntil(end.plusDays(1)).iterator().asScala.toSeq
+    val dates = QuotesServices.datesBetweenInclusive(start, end)
 
     for {
       _ <- ZIO.logInfo(s"Initializing default watchlists from $start to $end")
-      _ <- ZIO.foreachDiscard(dates)(date =>
+      market <- ScreenerServices.LoadQuotes
+      _ <- ZIO.foreachDiscard(dates) { date =>
         for {
           alreadyExists <- MongoDataRepo.hasWatchlistsForDate(date)
           _ <- if (alreadyExists) {
             ZIO.logInfo(s"Watchlists already exist for date $date, skipping initialization")
           } else {
             ScreenerServices
-              .buildScreensForDate(date)
+              .buildScreensForMarket(date, market)
               .tapBoth(
                 err => ZIO.logError(s"Failed to build watchlists for date $date: ${err.getMessage}"),
                 _ => ZIO.logInfo(s"Saved watchlists for date $date")
               )
-              .unit
+              .ignore
           }
         } yield ()
-      )
+      }
     } yield ()
   }
 
   private def initializeMarketBreadthHistory(): ZIO[MongoDatabase, Throwable, Unit] = {
-    val end = LocalDate.now()
+    val end = LocalDate.now().minusDays(1)
     val start = end.minusMonths(3)
-    val dates = start.datesUntil(end.plusDays(1)).iterator().asScala.toSeq
+    val dates = QuotesServices.datesBetweenInclusive(start, end)
 
     for {
       _ <- ZIO.logInfo(s"Initializing market breadth indicators from $start to $end")
@@ -168,7 +158,7 @@ object InitializationService {
             val snapshot = stockMarket.historicalSnapshot(date)
             snapshot.stocks.get("AAPL") match {
               case Some(_) =>
-                val indicators = MarketBreadth.fromStockMarket(snapshot)
+                val indicators = MarketBreadth.fromStockMarket(snapshot).copy(date = date)
                 MongoDataRepo
                   .saveMarketBreadth(indicators)
                   .tapError(err => ZIO.logError(s"Failed to save market breadth indicators for date $date: ${err.getMessage}"))
@@ -186,9 +176,9 @@ object InitializationService {
     for{
       _ <- ZIO.logInfo("Performing quotes sanity check")
       universe <- MongoDataRepo.getStockUniverse
-      results <- ZIO.foreachPar(universe.symbols)(ticker =>
+      results <- ZIO.foreachPar(universe.symbols) { ticker =>
         QuotesServices.sanityCheck(ticker).either.map(res => (ticker, res))
-      )
+      }.withParallelism(8)
       errors = results.collect { case (t, Left(err)) => (t, err) }
     } yield errors
   }
@@ -215,7 +205,7 @@ object InitializationService {
       _ <- ZIO.logInfo(s"Faulty tickers: ${faults.size}")
       _ <- ZIO.foreachDiscard(faults)(fault => ZIO.logInfo(s"$fault"))
       faultyTickers = faults.map(_._1)
-      _ <- ZIO.foreach(faultyTickers)(resetQuotes)
+      _ <- ZIO.foreachPar(faultyTickers)(resetQuotes).withParallelism(4)
     } yield ()
   }
 
@@ -223,7 +213,7 @@ object InitializationService {
     for{
       _ <- ZIO.logInfo("Rectifying split data")
       universe <- MongoDataRepo.getStockUniverse
-      _ <- QuotesServices.rectifySplits(universe.lastUpdateSplits.minusDays(7), LocalDate.now())
+      _ <- QuotesServices.rectifySplits(universe.lastUpdateSplits.minusDays(7), LocalDate.now().minusDays(1))
 
     } yield ()
   }
@@ -232,10 +222,12 @@ object InitializationService {
   def initializeApp(): ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] =  {
     for {
       _ <- InitializeStockUniverse
-      //_ <- InitializeDescriptions
       _ <- initializeQuotes()
-      //_ <- rectifySplits
+      _ <- rectifySplits
       _ <- repairQuotes
+      _ <- InitializeDescriptions
+        .catchAll(error => ZIO.logWarning(s"Description initialization skipped: ${error.getMessage}"))
+        .forkDaemon
       _ <- initializeHistoricalWatchlists()
       _ <- initializeMarketBreadthHistory()
       _ <- ScreenerServices.ScreenerTask

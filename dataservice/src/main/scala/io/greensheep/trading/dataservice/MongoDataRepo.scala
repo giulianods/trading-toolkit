@@ -1,9 +1,11 @@
 package io.greensheep.trading.dataservice
 
-import io.github.zeal18.zio.mongodb.driver.model.{ReplaceOptions, UpdateOptions}
+import io.github.zeal18.zio.mongodb.bson.annotations.BsonId
+import io.github.zeal18.zio.mongodb.driver.model.ReplaceOptions
+import io.greensheep.trading.core.utils.TransientRetry
+import io.github.zeal18.zio.mongodb.driver.indexes
 import io.github.zeal18.zio.mongodb.driver.sorts.Sort
-import io.github.zeal18.zio.mongodb.driver.updates.{Update, addEachToSet}
-import io.github.zeal18.zio.mongodb.driver.{MongoClient, MongoClientSettings, MongoDatabase, filters, updates}
+import io.github.zeal18.zio.mongodb.driver.{MongoClient, MongoDatabase, filters, updates}
 import io.greensheep.trading.core.screens.{BreadthIndicators => MarketBreadth}
 import io.greensheep.trading.core.types.{DailyQuoteData, Quote, ScreenStats, Stock, StockDescription, Watchlist}
 import zio.*
@@ -25,6 +27,32 @@ import io.greensheep.trading.core.types.StockFinancials
 
 
 object MongoDataRepo {
+
+  final case class StoredDailyQuotes(@BsonId ticker: String, quotes: Seq[Quote])
+
+  final case class StoredFinancials(
+      @BsonId ticker: String,
+      annual: Seq[AnnualFinancialData],
+      quarterly: Seq[QuarterlyFinancialData]
+  ) {
+    def toDomain: StockFinancials = StockFinancials(ticker, annual, quarterly)
+  }
+
+  def mergeQuotes(existing: Seq[Quote], incoming: Seq[Quote]): Seq[Quote] = {
+    val byDay = scala.collection.mutable.LinkedHashMap.empty[LocalDate, Quote]
+    existing.sortBy(_.day.toEpochDay).foreach(quote => byDay.update(quote.day, quote))
+    incoming.foreach(quote => byDay.update(quote.day, quote))
+    byDay.values.toSeq.sortBy(_.day.toEpochDay)
+  }
+
+  def ensureIndexes: ZIO[MongoDatabase, Throwable, Unit] =
+    for {
+      db <- ZIO.service[MongoDatabase]
+      watchlists = db.getCollection[Watchlist]("watchlist")
+      breadth = db.getCollection[MarketBreadth]("market-breadth")
+      _ <- watchlists.createIndex(indexes.asc("screenName", "day")).retry(TransientRetry.mongo)
+      _ <- breadth.createIndex(indexes.asc("date")).retry(TransientRetry.mongo)
+    } yield ()
 
 
 
@@ -108,38 +136,46 @@ object MongoDataRepo {
   def updateFinancials(ticker: String, annual: Seq[AnnualFinancialData], quarterly: Seq[QuarterlyFinancialData]): ZIO[MongoDatabase, Throwable, Unit] = {
     for {
       db <- ZIO.service[MongoDatabase]
-      coll = db.getCollection[StockFinancials]("financials")
-      financials = StockFinancials(ticker, annual, quarterly)
-      _ <- coll.replaceOne(filters.eq("_id", ticker), financials, ReplaceOptions(upsert = true)).map(_.wasAcknowledged())
+      coll = db.getCollection[StoredFinancials]("financials")
+      financials = StoredFinancials(ticker, annual, quarterly)
+      _ <- coll
+        .replaceOne(filters.eq("_id", ticker), financials, ReplaceOptions(upsert = true))
+        .retry(TransientRetry.mongo)
+        .map(_.wasAcknowledged())
     } yield ()
   }
 
   def hasFinancials(ticker: String): ZIO[MongoDatabase, Throwable, Boolean] = {
     for {
       db <- ZIO.service[MongoDatabase]
-      coll = db.getCollection[StockFinancials]("financials")
-      count <- coll.countDocuments(filters.eq("_id", ticker)).map(_.toInt)
+      coll = db.getCollection[StoredFinancials]("financials")
+      count <- coll.countDocuments(filters.eq("_id", ticker)).retry(TransientRetry.mongo).map(_.toInt)
     } yield count > 0
   }
 
   def presentFianancials(): ZIO[MongoDatabase, Throwable, Seq[StockFinancials]] = {
     for {
       db <- ZIO.service[MongoDatabase]
-      coll = db.getCollection[StockFinancials]("financials")
+      coll = db.getCollection[StoredFinancials]("financials")
       financials <- coll.find().runToSeq
-    } yield financials
+    } yield financials.map(_.toDomain)
   }
 
 
   def getFinancials(ticker: String): ZIO[MongoDatabase, Throwable, StockFinancials] = {
     for {
       db <- ZIO.service[MongoDatabase]
-      coll = db.getCollection[StockFinancials]("financials")
-      financialsOpt <- coll.find(filters.eq("_id", ticker)).runHead
-      financials <- ZIO.fromOption(financialsOpt).orElseFail(new NoSuchElementException(s"No financials found for ticker $ticker"))
-    } yield financials
+      coll = db.getCollection[StoredFinancials]("financials")
+      financialsOpt <- coll.find(filters.eq("_id", ticker)).runHead.retry(TransientRetry.mongo)
+      stored <- ZIO.fromOption(financialsOpt).orElseFail(new NoSuchElementException(s"No financials found for ticker $ticker"))
+    } yield stored.toDomain
   }
   
+  def ping: ZIO[MongoDatabase, Throwable, Unit] =
+    ZIO.serviceWithZIO[MongoDatabase] { db =>
+      db.listCollectionNames().runHead.unit.retry(TransientRetry.mongo)
+    }
+
   def hasStockUniverse: ZIO[MongoDatabase, Throwable, Boolean] = {
     for {
       db <- ZIO.service[MongoDatabase]
@@ -152,17 +188,16 @@ object MongoDataRepo {
   def getStockUniverse: ZIO[MongoDatabase, Throwable, StockUniverse] = {
     for {
       db <- ZIO.service[MongoDatabase]
-      _ <- db.createCollection("stock-universe")
       coll = db.getCollection[StockUniverse]("stock-universe")
       su <- coll.find(filters.eq("_id", "stock-universe")).runHead
-      _ <- ZIO.cond(su.isDefined, (), new NoSuchElementException("No stock universe found"))
-    } yield su.get
+      universe <- ZIO.fromOption(su).orElseFail(new NoSuchElementException("No stock universe found"))
+    } yield universe
   }
 
   def clearQuotes(ticker: String): ZIO[MongoDatabase, Throwable, Unit] = {
     for {
       db <- ZIO.service[MongoDatabase]
-      coll = db.getCollection[DailyQuoteData]("daily-quotes")
+      coll = db.getCollection[StoredDailyQuotes]("daily-quotes")
       _ <- coll.updateOne(filters.eq("_id", ticker), updates.set("quotes", Seq.empty)).map(_.wasAcknowledged())
     } yield ()
   }
@@ -170,20 +205,23 @@ object MongoDataRepo {
   def updateDailyQuotes(ticker: String, quotes: Seq[Quote]): ZIO[MongoDatabase, Throwable, Unit] = {
     for {
       db <- ZIO.service[MongoDatabase]
-      coll = db.getCollection[Quote]("daily-quotes")
-      _ <- coll.updateOne(filters.eq("_id", ticker),
-          addEachToSet("quotes", quotes), UpdateOptions(upsert = true)).map(_.wasAcknowledged())
-
+      coll = db.getCollection[StoredDailyQuotes]("daily-quotes")
+      existing <- coll.find(filters.eq("_id", ticker)).runHead
+      merged = mergeQuotes(existing.map(_.quotes).getOrElse(Seq.empty), quotes)
+      _ <- coll
+        .replaceOne(filters.eq("_id", ticker), StoredDailyQuotes(ticker, merged), ReplaceOptions(upsert = true))
+        .retry(TransientRetry.mongo)
+        .map(_.wasAcknowledged())
     } yield ()
   }
 
   def getPriceData(ticker: String): ZIO[MongoDatabase, Throwable, DailyQuoteData] = {
     for {
       db <- ZIO.service[MongoDatabase]
-      coll = db.getCollection[DailyQuoteData]("daily-quotes")
-      quotesOpt <- coll.find(filters.eq("_id", ticker)).runHead
-      quotes <- ZIO.fromOption(quotesOpt).orElseFail(new NoSuchElementException(s"No quotes found for ticker $ticker"))
-    } yield quotes
+      coll = db.getCollection[StoredDailyQuotes]("daily-quotes")
+      stored <- coll.find(filters.eq("_id", ticker)).runHead
+      data <- ZIO.fromOption(stored).orElseFail(new NoSuchElementException(s"No quotes found for ticker $ticker"))
+    } yield DailyQuoteData(data.quotes)
   }
 
   def saveWatchlist(wl: Watchlist): ZIO[MongoDatabase, Throwable, Unit] = {

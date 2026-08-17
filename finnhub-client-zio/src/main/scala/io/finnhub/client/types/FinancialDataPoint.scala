@@ -6,14 +6,12 @@ import zio.json.*
 object FinancialDataPoint {
     implicit val decoder: JsonDecoder[FinancialDataPoint] =
       JsonDecoder[Map[String, zio.json.ast.Json]].map { fields =>
-        val period = fields.get("period").flatMap(_.asString).getOrElse(
-          throw new RuntimeException("Missing required field: period")
-        )
+        val period = fields.get("period").flatMap(_.asString).getOrElse("")
         val vValue: Option[BigDecimal] = fields.get("v") match {
           case None | Some(zio.json.ast.Json.Null) => None
           case Some(zio.json.ast.Json.Num(str))    => Some(BigDecimal(str))
-          case Some(zio.json.ast.Json.Str(str))    => Some(BigDecimal(str))
-          case Some(other)                         => throw new RuntimeException(s"Expected number for 'v', got $other")
+          case Some(zio.json.ast.Json.Str(str))    => scala.util.Try(BigDecimal(str)).toOption
+          case Some(_)                             => None
         }
         FinancialDataPoint(period, vValue)
       }

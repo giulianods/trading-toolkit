@@ -2,40 +2,16 @@ package io.greensheep.trading.service.services
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.finnhub.client.FinnhubClient
-import zio.{Scope, ZIO}
+import zio.{Duration, Scope, ZIO, durationInt}
 import io.greensheep.trading.dataservice.MongoDataRepo
 import io.greensheep.trading.dataservice.FinnhubBridge
 import zio.http.Client
 
 import java.time.LocalDate
-import io.greensheep.trading.dataservice.StockUniverse
 
 object FiancialsServices {
 
-  def intializeUniverse()
-      : ZIO[MongoDatabase & FinnhubClient & Client & Scope, Throwable, StockUniverse] =
-    ZIO.logSpan("initialize-universe") {
-      MongoDataRepo.getStockUniverse.catchSome {
-        case e: NoSuchElementException =>
-          ZIO.logInfo(s"No stock universe found, creating new one")
-          for {
-            _ <- ZIO.logInfo("Getting stock symbols from Finnhub")
-            client <- ZIO.service[FinnhubClient]
-            symbols <- client.stockSymbols().map(_.filter(_.`type` == "Common Stock").filter(s => Set("XNAS", "XNYS").contains(s.mic)))
-            _ <- ZIO.logInfo(s"Found ${symbols.size} symbols")
-            universe = StockUniverse(
-              _id = "stock-universe",
-              name = "stock-universe",
-              dataSource = "finnhub",
-              lastUpdateQuotes = LocalDate.of(1970, 1, 1),
-              lastUpdateFinancials = LocalDate.of(1970, 1, 1),
-              timeZone = "America/New_York",
-              symbols = symbols.map(_.symbol)
-            )
-            _ <- MongoDataRepo.saveStockUniverse(universe)
-          } yield universe
-      }
-    }
+  private val perTickerPause: Duration = 1100.millis
 
   def updateFinancials(
       ticker: String
@@ -57,12 +33,13 @@ object FiancialsServices {
     ZIO.logSpan("update-financials") {
       for {
         _ <- ZIO.logInfo("Updating financials")
-        universe <- intializeUniverse()
-        present <- MongoDataRepo.presentFianancials()
-        toUpdate = universe.symbols.filter(s => !present.exists(_.ticker == s))
-        remoteApi <- ZIO.service[FinnhubClient]
-        _ <- ZIO.foreach(toUpdate)(s => updateFinancials(s).catchAll(e => ZIO.logError(s"Error updating financials ${e.getMessage}")))
+        universe <- MongoDataRepo.getStockUniverse
+        _ <- ZIO.foreachDiscard(universe.symbols) { symbol =>
+          updateFinancials(symbol)
+            .catchAll(error => ZIO.logError(s"Error updating financials for $symbol: ${error.getMessage}"))
+            .zipRight(ZIO.sleep(perTickerPause))
+        }
+        _ <- MongoDataRepo.saveStockUniverse(universe.copy(lastUpdateFinancials = LocalDate.now()))
       } yield ()
     }
-
 }

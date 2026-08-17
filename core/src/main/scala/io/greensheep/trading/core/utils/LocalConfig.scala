@@ -36,6 +36,9 @@ object LocalConfig {
       )
     }
 
+  def configFileDirectory: Option[Path] =
+    findConfigFile().map(_.getParent)
+
   private def findConfigFile(): Option[Path] = {
     val configuredPath = sys.props.get("ttk.config.file").map(path => Paths.get(path).toAbsolutePath.normalize())
     configuredPath.filter(Files.exists(_)).orElse {

@@ -1,22 +1,15 @@
 <configuration>
-
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <!-- encoders are assigned the type
-             ch.qos.logback.classic.encoder.PatternLayoutEncoder by default -->
         <encoder>
             <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
 
-    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>ttk.log</file>
-        <append>true</append>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <!-- Daily rollover -->
-            <fileNamePattern>logs/app.%d{yyyy-MM-dd}.log</fileNamePattern>
-            <!-- Keep 30 days worth of history -->
+            <fileNamePattern>logs/ttk.%d{yyyy-MM-dd}.log</fileNamePattern>
             <maxHistory>30</maxHistory>
-            <!-- Optional: total size cap for all archived logs -->
             <totalSizeCap>1GB</totalSizeCap>
         </rollingPolicy>
         <encoder>
@@ -24,11 +17,10 @@
         </encoder>
     </appender>
 
-
-    <logger name = "org.mongodb" level="WARN"/>
-    <logger name = "io.netty" level="WARN"/>
-    <root level="debug">
-        <appender-ref ref="STDOUT" />
-        <appender-ref ref="FILE" />
+    <logger name="org.mongodb" level="WARN"/>
+    <logger name="io.netty" level="WARN"/>
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="FILE"/>
     </root>
 </configuration>

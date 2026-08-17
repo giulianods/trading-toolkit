@@ -23,16 +23,7 @@ case class SplitsRequest(
           "limit" -> maxResults.toString,
           "reverse_split" -> reverse.toString
         ))
-      resultString <- ZIO.scoped {
-        for {
-          res <- client.request(Request(url = url, method = Method.GET))
-          resultString <- res.body.asString
-          _ <- if (res.status.isError)
-            ZIO.fail(new RuntimeException(s"Error: ${res.status.code} - ${res.status.text} : $resultString"))
-          else ZIO.unit
-
-        } yield resultString
-      }
+      resultString <- PolygonHttp.get(url)
       decoded = resultString.fromJson[ApiResponse[Seq[SplitData]]]
       apiResponse <- ZIO.fromEither(decoded.left.map(RuntimeException(_)))
       _ <- ZIO.fail(new RuntimeException(apiResponse.errorMessage)).unless(apiResponse.isValid)

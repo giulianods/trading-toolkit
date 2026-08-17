@@ -1,7 +1,7 @@
 package io.greensheep.trading.service.services
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
-import io.greensheep.trading.core.screens.{SepaScreens, TrendScreens}
+import io.greensheep.trading.core.screens.{BreadthIndicators as MarketBreadth, TrendScreens}
 import io.greensheep.trading.core.types.{DailyAggregate, DailyQuoteData, ScreenStats, Stock, StockMarket, Watchlist}
 import io.greensheep.trading.dataservice.MongoDataRepo
 import zio.{Chunk, ZIO, ZLayer}
@@ -12,98 +12,88 @@ object ScreenerServices {
 
   val LoadQuotes: ZIO[MongoDatabase, Throwable, StockMarket] = for {
     universe <- MongoDataRepo.getStockUniverse
-    effects = universe.symbols.map(s => MongoDataRepo.getPriceData(s).map(pd => s -> pd))
-    allQuotes <- ZIO.foreach(effects)(_.either).map(_.foldLeft((Seq.empty[Throwable], Seq.empty[(String, DailyQuoteData)])) {
-      case ((ts, xs), Left(t)) => (ts :+ t, xs)
-      case ((ts, xs), Right(x)) => (ts, xs :+ x)
-    })
-    _ <- if (allQuotes._1.nonEmpty)
-      ZIO.logError(s"Errors while loading quotes: ${allQuotes._1.size}")
-    else
-      ZIO.unit
-    stocks = allQuotes._2.filter(_._2.quotes.nonEmpty).map(s => Stock(
-      symbol = s._1,
-      companyName = s._1,
-      description = "",
-      primaryExchange = "",
-      ipoDate = LocalDate.now(),
-      dailyAggregates = Chunk.fromIterable(s._2.quotes.map(DailyAggregate.apply))
-    ))
-  } yield StockMarket(stocks.map(s => s.symbol -> s).toMap)
+    allQuotes <- ZIO
+      .foreachPar(universe.symbols) { symbol =>
+        MongoDataRepo.getPriceData(symbol).map(price => symbol -> price).either
+      }
+      .withParallelism(8)
+    errors = allQuotes.collect { case Left(error) => error }
+    loaded = allQuotes.collect { case Right(pair) => pair }
+    _ <- ZIO.logError(s"Errors while loading quotes: ${errors.size}").when(errors.nonEmpty)
+    stocks = loaded.filter(_._2.quotes.nonEmpty).map { case (symbol, data) =>
+      Stock(
+        symbol = symbol,
+        companyName = symbol,
+        description = "",
+        primaryExchange = "",
+        ipoDate = LocalDate.now(),
+        dailyAggregates = Chunk.fromIterable(data.quotes.map(DailyAggregate.apply))
+      )
+    }
+  } yield StockMarket(stocks.map(stock => stock.symbol -> stock).toMap)
 
+  def buildWatchlist(name: String, date: LocalDate)(stocks: Seq[(Stock, ScreenStats)]): ZIO[Any, Throwable, Watchlist] =
+    ZIO.succeed {
+      Watchlist(
+        day = date,
+        screenName = name,
+        tickers = stocks.map(_._1.symbol),
+        stats = stocks.map(_._2)
+      )
+    }
 
-
-  def buildWatchlist(name: String)(stocks: Seq[(Stock, ScreenStats)]): ZIO[Any, Throwable, Watchlist] = ZIO.succeed {
-    Watchlist(
-      day = java.time.LocalDate.now(),
-      screenName = name,
-      tickers = stocks.map(_._1.symbol),
-      stats = stocks.map(_._2)
+  def buildScreens(date: LocalDate): ZIO[StockMarket, Throwable, Seq[Watchlist]] =
+    ZIO.collectAll(
+      Seq(
+        TrendScreens.SEPA.flatMap(buildWatchlist("SEPA", date)),
+        TrendScreens.VolatilityContractionPattern.flatMap(buildWatchlist("VCP", date)),
+        TrendScreens.SevenPctUp.flatMap(buildWatchlist("7_PCT_UP", date)),
+        TrendScreens.SevenPctDown.flatMap(buildWatchlist("7_PCT_DOWN", date)),
+        TrendScreens.New52WeekHigh.flatMap(buildWatchlist("NEW_52_WEEK_HIGH", date)),
+        TrendScreens.New52WeekLow.flatMap(buildWatchlist("NEW_52_WEEK_LOW", date)),
+        TrendScreens.NewIPOs.flatMap(buildWatchlist("NEW_IPOS", date))
+      )
     )
-  }
-
-  def buildWatchlist(name: String, date: LocalDate)(stocks: Seq[(Stock, ScreenStats)]): ZIO[Any, Throwable, Watchlist] = ZIO.succeed {
-    Watchlist(
-      day = date,
-      screenName = name,
-      tickers = stocks.map(_._1.symbol),
-      stats = stocks.map(_._2)
-    )
-  }
-
-  val Screens: ZIO[StockMarket, Throwable, Seq[Watchlist]] = {
-    ZIO.collectAll(Seq(
-      TrendScreens.SEPA.flatMap(buildWatchlist("SEPA")),
-      TrendScreens.VolatilityContractionPattern.flatMap(buildWatchlist("VCP")),
-      TrendScreens.SevenPctUp.flatMap(buildWatchlist("7_PCT_UP")),
-      TrendScreens.SevenPctDown.flatMap(buildWatchlist("7_PCT_DOWN")),
-      TrendScreens.New52WeekHigh.flatMap(buildWatchlist("NEW_52_WEEK_HIGH")),
-      TrendScreens.New52WeekLow.flatMap(buildWatchlist("NEW_52_WEEK_LOW")),
-      TrendScreens.NewIPOs.flatMap(buildWatchlist("NEW_IPOS")),
-    ))
-  }
-
-  def buildScreens(date: LocalDate): ZIO[StockMarket, Throwable, Seq[Watchlist]] = {
-    ZIO.collectAll(Seq(
-      TrendScreens.SEPA.flatMap(buildWatchlist("SEPA",date)),
-      TrendScreens.VolatilityContractionPattern.flatMap(buildWatchlist("VCP",date)),
-      TrendScreens.SevenPctUp.flatMap(buildWatchlist("7_PCT_UP",date)),
-      TrendScreens.SevenPctDown.flatMap(buildWatchlist("7_PCT_DOWN",date)),
-      TrendScreens.New52WeekHigh.flatMap(buildWatchlist("NEW_52_WEEK_HIGH",date)),
-      TrendScreens.New52WeekLow.flatMap(buildWatchlist("NEW_52_WEEK_LOW",date)),
-      TrendScreens.NewIPOs.flatMap(buildWatchlist("NEW_IPOS",date)),
-    ))
-  }
-
-  def getScreens: ZIO[MongoDatabase, Throwable, Seq[Watchlist]] = {
-    val stockMarket = ZLayer.fromZIO(LoadQuotes)
-    Screens.provideLayer(stockMarket)
-  }
-
 
   def getScreensForDate(date: LocalDate): ZIO[MongoDatabase, Throwable, Seq[Watchlist]] = {
     val stockMarket = ZLayer.fromZIO(LoadQuotes.map(_.historicalSnapshot(date)))
     buildScreens(date).provideLayer(stockMarket)
   }
 
-  def buildScreensForDate(date: LocalDate): ZIO[MongoDatabase, Throwable, Seq[Watchlist]] = {
+  def buildScreensForDate(date: LocalDate): ZIO[MongoDatabase, Throwable, Seq[Watchlist]] =
     for {
       _ <- ZIO.logInfo(s"Building screens for date: $date")
       watchlists <- getScreensForDate(date)
       _ <- ZIO.foreachDiscard(watchlists)(MongoDataRepo.saveWatchlist)
       _ <- ZIO.logInfo(s"Saved ${watchlists.size} watchlists for date: $date")
     } yield watchlists
-  }
 
+  def buildScreensForMarket(date: LocalDate, market: StockMarket): ZIO[MongoDatabase, Throwable, Seq[Watchlist]] = {
+    val snapshot = market.historicalSnapshot(date)
+    for {
+      watchlists <- buildScreens(date).provideLayer(ZLayer.succeed(snapshot))
+      _ <- ZIO.foreachDiscard(watchlists)(MongoDataRepo.saveWatchlist)
+    } yield watchlists
+  }
 
   val ScreenerTask: ZIO[MongoDatabase, Throwable, Unit] = ZIO.logSpan("screener-task") {
+    val asOf = LocalDate.now().minusDays(1)
     for {
-      _ <- ZIO.logInfo("Running screener task")
-      watchlists <- getScreens
-      _ <- ZIO.foreach(watchlists)(MongoDataRepo.saveWatchlist)
+      _ <- ZIO.logInfo(s"Running screener task for $asOf")
+      market <- LoadQuotes
+      snapshot = market.historicalSnapshot(asOf)
+      watchlists <- buildScreens(asOf).provideLayer(ZLayer.succeed(snapshot))
+      _ <- ZIO.foreachDiscard(watchlists)(MongoDataRepo.saveWatchlist)
       _ <- ZIO.logInfo(s"Saved ${watchlists.size} watchlists")
+      _ <- snapshot.stocks.get("AAPL") match {
+        case Some(_) =>
+          val indicators = MarketBreadth.fromStockMarket(snapshot).copy(date = asOf)
+          MongoDataRepo
+            .saveMarketBreadth(indicators)
+            .catchAll(error => ZIO.logError(s"Failed to save market breadth: ${error.getMessage}"))
+        case None =>
+          ZIO.logWarning("Skipping market breadth because AAPL snapshot is missing")
+      }
     } yield ()
   }
-
-
 }

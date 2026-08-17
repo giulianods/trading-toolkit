@@ -10,6 +10,7 @@ import scala.util.{Failure, Success}
 
 class PaginatedRequestExecutor[T](urlString: String, settings: PolygonSettings)
                                  (implicit val decoder: JsonDecoder[T]) {
+  // Legacy pagination helper used by ReferenceClient; live ingest uses PolygonAsyncApi.
 
   private val nextUrl = new java.util.concurrent.atomic.AtomicReference[String](urlString)
 

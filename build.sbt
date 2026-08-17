@@ -42,6 +42,7 @@ val logbackLib = Seq(
 val zioTestFramework = new TestFramework("zio.test.sbt.ZTestFramework")
 
 lazy val polygonClientZio = (project in file("polygon-client-zio"))
+  .dependsOn(core)
   .settings(
     name := "polygon-client-zio",
     libraryDependencies ++= zioLibraries ++ Seq(
@@ -52,6 +53,7 @@ lazy val polygonClientZio = (project in file("polygon-client-zio"))
   )
 
 lazy val finnhubClientZio = (project in file("finnhub-client-zio"))
+  .dependsOn(core)
   .settings(
     name := "finnhub-client-zio",
     scalacOptions ++= Seq("-Xmax-inlines", "64"),

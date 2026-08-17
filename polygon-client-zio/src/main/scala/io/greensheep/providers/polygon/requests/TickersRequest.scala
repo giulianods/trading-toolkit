@@ -44,8 +44,7 @@ case class TickersRequest(
   }
 
   def perform(): ZIO[Client, Throwable, ApiResponse[Seq[Ticker]]] = {
-    val result = for{
-      apiUrl <- ZIO.fromEither(URL.decode("https://api.polygon.io"))
+    for {
       client <- ZIO.service[Client]
       url = (client.url / "v3" / "reference" / "tickers")
         .addQueryParams(QueryParams(
@@ -54,28 +53,11 @@ case class TickersRequest(
           "order" -> order,
           "limit" -> limit.toString,
           "market" -> market.getOrElse("stocks"),
-          ))
-
-      theClient = client.copy(url = url)
-
-      decoded <- ZIO.scoped {
-        for{
-          reqRes <- client.request(Request(url = url, method = Method.GET)).map(_.body.asString)
-          resultString <- reqRes
-          decoded = resultString.fromJson[ApiResponse[Seq[Ticker]]]
-        } yield decoded
-      }
-
+        ))
+      resultString <- PolygonHttp.get(url)
+      decoded = resultString.fromJson[ApiResponse[Seq[Ticker]]]
       apiResponse <- ZIO.fromEither(decoded.left.map(RuntimeException(_)))
-      _ <- ZIO.fail({
-        println(s"Error: ${apiResponse.errorMessage}")
-        new RuntimeException(apiResponse.errorMessage)
-      }).unless(apiResponse.isValid)
-      resultEither = apiResponse.results.toRight(new RuntimeException(s"Missing result from json: $decoded"))
-      result <- ZIO.fromEither(resultEither)
+      _ <- ZIO.fail(new RuntimeException(apiResponse.errorMessage)).unless(apiResponse.isValid)
     } yield apiResponse
-    result.mapError(th => {
-      th
-    })
   }
 }

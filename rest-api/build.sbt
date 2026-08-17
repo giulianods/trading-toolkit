@@ -26,13 +26,6 @@ dependencyOverrides ++= Seq (
   "io.circe" %% "circe-yaml" % "0.15.1"
 )
 
-libraryDependencies ++= Seq(
-  "org.jfree" % "jfreechart" % "1.5.4",
-  "org.jfree" % "org.jfree.svg"   % "5.0.7",
-  "dev.zio"  %% "zio-cache"       % "0.2.3"
-)
-
-
 def settingsApp = Seq(
   name := "zio-http-start",
   Compile / run / mainClass := Option("io.greensheep.trading.api.Main"),

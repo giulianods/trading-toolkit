@@ -5,6 +5,7 @@ import zio.*
 import zio.http.*
 import zio.json.*
 import io.finnhub.client.types.*
+import io.greensheep.trading.core.utils.{HttpStatusException, TransientRetry}
 
 final class FinnhubClient private (private val apiKey: String) {
 
@@ -18,16 +19,19 @@ final class FinnhubClient private (private val apiKey: String) {
             }
 
     private def getAndDecode[A: JsonDecoder](url: URL, context: String): ZIO[Client & Scope, Throwable, A] =
-        for
+        val once =
+          for
             response <- requestFollowingRedirects(url, remaining = 3)
+              .timeoutFail(new RuntimeException(s"Finnhub $context timed out"))(30.seconds)
             body <- response.body.asString
-            _ <- ZIO
-                .fail(new RuntimeException(s"Finnhub $context failed with HTTP ${response.status.code}: $body"))
-                .when(response.status.isError)
+            _ <- ZIO.when(response.status.isError) {
+              ZIO.fail(HttpStatusException(response.status.code, body))
+            }
             result <- ZIO
-                .fromEither(body.fromJson[A])
-                .mapError(message => new RuntimeException(s"Failed to decode Finnhub $context response: $message"))
-        yield result
+              .fromEither(body.fromJson[A])
+              .mapError(message => new RuntimeException(s"Failed to decode Finnhub $context response: $message"))
+          yield result
+        once.retry(TransientRetry.http)
 
     private def requestFollowingRedirects(url: URL, remaining: Int): ZIO[Client & Scope, Throwable, Response] =
         Client.request(Request.get(url)).flatMap { response =>

@@ -21,26 +21,14 @@ case  class GroupedDailyRequest(
 
 
   override def perform(): ZIO[Client, Throwable, ApiResponse[Seq[Aggregate]]] = {
-    for{
+    for {
       client <- ZIO.service[Client]
-      _ = println(s"Performing request grouped daily $date")
+      _ <- ZIO.logInfo(s"Performing request grouped daily $date")
       url = (client.url / "v2/aggs/grouped/locale/us/market/stocks" / date)
-      resultString <- ZIO.scoped {
-        for{
-          res <- client.request(Request(url = url, method = Method.GET))
-          resultString <- res.body.asString
-          _ <- if(res.status.isError)
-            ZIO.fail(new RuntimeException(s"Error: ${res.status.code} - ${res.status.text} : $resultString"))
-          else ZIO.unit
-
-        } yield resultString
-      }
-
+      resultString <- PolygonHttp.get(url)
       decoded = resultString.fromJson[ApiResponse[Seq[Aggregate]]]
       apiResponse <- ZIO.fromEither(decoded.left.map(RuntimeException(_)))
       _ <- ZIO.fail(new RuntimeException(apiResponse.errorMessage)).unless(apiResponse.isValid)
-
     } yield apiResponse
-
   }
 }

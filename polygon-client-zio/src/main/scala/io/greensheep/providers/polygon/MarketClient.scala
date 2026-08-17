@@ -7,6 +7,7 @@ import zio.json.*
 
 import scala.util.{Failure, Success}
 
+/** Blocking/legacy Polygon client. The 24/7 service uses [[PolygonAsyncApi]] instead. */
 class MarketClient(settings: PolygonSettings) {
 
   private val authHeaders: Headers = settings.headers
