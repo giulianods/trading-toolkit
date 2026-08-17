@@ -19,15 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-java@v4
-        with:
-          java-version: "21"
-          distribution: temurin
-          cache: sbt
-
-      - uses: sbt/setup-sbt@v1
-
+      - uses: ./.github/actions/setup-jdk-sbt
       - name: Run tests
         run: sbt test
 
@@ -36,27 +28,17 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-java@v4
-        with:
-          java-version: "21"
-          distribution: temurin
-          cache: sbt
-
-      - uses: sbt/setup-sbt@v1
-
+      - uses: ./.github/actions/setup-jdk-sbt
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: web/package-lock.json
-
       - name: Build fat jar with UI
         env:
           # Create React App treats lint warnings as errors when CI=true.
           CI: "false"
         run: sbt "service/packageService"
-
       - uses: actions/upload-artifact@v4
         with:
           name: ttk-service
@@ -71,10 +53,5 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          java-version: "21"
-          distribution: temurin
-          cache: sbt
-      - uses: sbt/setup-sbt@v1
+      - uses: ./.github/actions/setup-jdk-sbt
       - uses: scalacenter/sbt-dependency-submission@v2

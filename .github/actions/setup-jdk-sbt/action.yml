@@ -1,0 +1,22 @@
+name: Setup JDK and sbt
+description: Temurin 21 plus the sbt 1.9.7 runner (no sbt/setup-sbt)
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v4
+      with:
+        java-version: "21"
+        distribution: temurin
+        cache: sbt
+
+    - name: Install sbt
+      shell: bash
+      run: |
+        set -euo pipefail
+        version=1.9.7
+        prefix="$HOME/.local/share/sbt-runner"
+        mkdir -p "$prefix"
+        curl -fsSL "https://github.com/sbt/sbt/releases/download/v${version}/sbt-${version}.tgz" \
+          | tar -xz -C "$prefix"
+        echo "$prefix/sbt/bin" >> "$GITHUB_PATH"
