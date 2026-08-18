@@ -54,6 +54,27 @@ object FinnhubJsonSpec extends ZIOSpecDefault {
         decoded.map(_.series.annual.bookValue) == Right(Nil),
         decoded.map(_.series.quarterly.eps) == Right(Nil)
       )
+    },
+    test("decodes when annual is omitted from series") {
+      val json =
+        """{"symbol":"VCX","metric":{},"series":{"quarterly":{"eps":[{"period":"2024-03-31","v":0.1}]}}}"""
+      val decoded = json.fromJson[BasicFinancials]
+      assertTrue(
+        decoded.map(_.symbol) == Right("VCX"),
+        decoded.map(_.series.annual.eps) == Right(Nil),
+        decoded.map(_.series.quarterly.eps.size) == Right(1)
+      )
+    },
+    test("decodes empty or missing series as empty financials") {
+      val emptySeries = """{"symbol":"VCX","series":{}}""".fromJson[BasicFinancials]
+      val missingSeries = """{"symbol":"VCX"}""".fromJson[BasicFinancials]
+      val nullSeries = """{"symbol":"VCX","series":null}""".fromJson[BasicFinancials]
+      assertTrue(
+        emptySeries.map(_.series.annual.eps) == Right(Nil),
+        emptySeries.map(_.series.quarterly.eps) == Right(Nil),
+        missingSeries.map(_.series.annual.eps) == Right(Nil),
+        nullSeries.map(_.series.quarterly.eps) == Right(Nil)
+      )
     }
   )
 }

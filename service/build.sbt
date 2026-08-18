@@ -97,8 +97,8 @@ deploy := {
   val localHosts = Set("localhost", "127.0.0.1", "::1")
 
   if (localHosts.contains(host)) {
-    log.info(s"Starting docker compose in $composeDir")
-    val code = Process(Seq("docker", "compose", "up", "-d", "--force-recreate"), composeDir).!
+    log.info(s"Starting docker compose in $composeDir (ttk only; mongo left running)")
+    val code = Process(Seq("bash", (composeDir / "up.sh").getAbsolutePath), composeDir).!
     if (code != 0) sys.error("docker compose up failed")
     log.info("App: http://127.0.0.1:7777   Mongo Express: http://127.0.0.1:8081")
   } else {

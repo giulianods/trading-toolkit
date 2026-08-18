@@ -22,6 +22,14 @@ object FinnhubBridgeSpec extends ZIOSpecDefault {
         quarterly.nonEmpty,
         quarterly.exists(row => row.year >= 2023 && row.basicEarningsPerShare != 0.0 || row.revenuePerShare != 0.0)
       )
+    },
+    test("translates quarterly-only Finnhub payloads") {
+      val json =
+        """{"symbol":"VCX","series":{"quarterly":{"eps":[{"period":"2024-03-31","v":0.25}],"salesPerShare":[{"period":"2024-03-31","v":1.5}]}}}"""
+      val financials = json.fromJson[BasicFinancials].toOption.get
+      val annual = FinnhubBridge.translateAnnualFinancials(financials)
+      val quarterly = FinnhubBridge.translateQuarterlyFinancials(financials)
+      assertTrue(annual.isEmpty, quarterly.size == 1, quarterly.head.year == 2024, quarterly.head.quarter == 1)
     }
   )
 }

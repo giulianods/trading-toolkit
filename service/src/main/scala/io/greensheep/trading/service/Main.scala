@@ -8,7 +8,8 @@ import io.greensheep.trading.dataservice.MongoDataRepo
 import io.greensheep.trading.service.app.{AppHealth, CronJobs, WebApp}
 import io.greensheep.trading.service.services.{ApiEndpoints, FiancialsServices, InitializationService}
 import zio.*
-import zio.http.{Client, QueryParams, Server, URL}
+import zio.http.{Client, DnsResolver, QueryParams, Server, URL, ZClient}
+import zio.http.netty.NettyConfig
 import zio.logging.backend.SLF4J
 
 object Main extends ZIOAppDefault {
@@ -27,7 +28,14 @@ object Main extends ZIOAppDefault {
     val skipCron = LocalConfig.get("ttk.skip.cron").exists(_.equalsIgnoreCase("true"))
     val mongoUrl = LocalConfig.get("mongodb.url").getOrElse("mongodb://127.0.0.1:27017")
 
-    val polygonClientLayer = Client.default.map(_.update { client =>
+    // Keep-alive sockets sit idle between Finnhub tickers (~1.1s) and overnight cron gaps.
+    // zio-http's default idle timeout fires ReadTimeoutException on the Netty event loop.
+    val outboundHttpClient =
+      (ZLayer.succeed(ZClient.Config.default.noIdleTimeout) ++
+        ZLayer.succeed(NettyConfig.default) ++
+        DnsResolver.default) >>> Client.live
+
+    val polygonClientLayer = outboundHttpClient.map(_.update { client =>
       client.url(
         URL
           .decode("https://api.polygon.io")
@@ -39,7 +47,7 @@ object Main extends ZIOAppDefault {
 
     val polygonLayer = ZLayer.fromZIO(PolygonAsyncApi.build())
     val environment = polygonClientLayer >>> polygonLayer
-    val finnhubClientLayer = Client.default
+    val finnhubClientLayer = outboundHttpClient
     val finnhubLayer = ZLayer.succeed(FinnhubClient.make(finnhubApiKey))
     val mongoClient = MongoClient.live(mongoUrl)
     val polygonMongoLayer = mongoClient >>> ZLayer.fromZIO(ZIO.serviceWith[MongoClient](_.getDatabase("polygon")))

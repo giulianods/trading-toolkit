@@ -21,11 +21,13 @@ object FiancialsServices {
         _ <- ZIO.logInfo(s"Updating financials for $ticker")
         remoteApi <- ZIO.service[FinnhubClient]
         financials <- remoteApi.basicFinancials(ticker)
-        _ <- MongoDataRepo.updateFinancials(
-          ticker,
-          FinnhubBridge.translateAnnualFinancials(financials),
-          FinnhubBridge.translateQuarterlyFinancials(financials)
-        )
+        annual = FinnhubBridge.translateAnnualFinancials(financials)
+        quarterly = FinnhubBridge.translateQuarterlyFinancials(financials)
+        _ <-
+          if annual.isEmpty && quarterly.isEmpty then
+            ZIO.unit
+          else
+            MongoDataRepo.updateFinancials(ticker, annual, quarterly)
       } yield ()
     }
 

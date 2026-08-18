@@ -9,8 +9,10 @@ object BasicFinancials {
       for
         symbolJson <- obj.get("symbol").toRight("missing symbol")
         symbol <- symbolJson.as[String]
-        seriesJson <- obj.get("series").toRight("missing series")
-        series <- seriesJson.as[BasicFinancialsSeries]
+        series <- obj.get("series") match {
+          case None | Some(Json.Null) => Right(BasicFinancialsSeries.empty)
+          case Some(json)             => json.as[BasicFinancialsSeries]
+        }
       yield BasicFinancials(symbol, series)
     }
 
