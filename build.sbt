@@ -8,7 +8,8 @@ ThisBuild / scalaVersion := "3.7.1"
 lazy val root = (project in file("."))
   .settings(
     name := "trading-toolkit",
-    idePackagePrefix := Some("io.greensheep.trading")
+    idePackagePrefix := Some("io.greensheep.trading"),
+    addCommandAlias("deploy", "service/deploy")
   ).aggregate(dataservice, core, service, restApi, polygonClientZio, finnhubClientZio)
 
 

@@ -1,0 +1,16 @@
+[Unit]
+Description=Trading Toolkit
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ttk
+ExecStart=/usr/bin/java -jar /opt/ttk/ttk.jar
+Restart=on-failure
+RestartSec=5
+# Limit heap on a small home server; raise if needed.
+Environment=JAVA_TOOL_OPTIONS=-Xms256m -Xmx1g
+
+[Install]
+WantedBy=multi-user.target

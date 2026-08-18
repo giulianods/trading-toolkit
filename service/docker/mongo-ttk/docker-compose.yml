@@ -25,11 +25,31 @@ services:
       - ME_CONFIG_MONGODB_ENABLE_ADMIN=true
       - ME_CONFIG_BASICAUTH_USERNAME=admin
       - ME_CONFIG_BASICAUTH_PASSWORD=pass
-      - ME_CONFIG_MONGODB_AUTH_ENABLED=false  # Disable authentication in mongo-express
+      - ME_CONFIG_MONGODB_AUTH_ENABLED=false
     networks:
       - mongo_network
     depends_on:
       - mongo
+
+  # Filled by `sbt service/deploy` (or copy the CI jar here as ttk.jar)
+  ttk:
+    image: eclipse-temurin:21-jre
+    container_name: ttk
+    restart: unless-stopped
+    working_dir: /app
+    command: ["java", "-jar", "/app/app.jar"]
+    ports:
+      - "7777:7777"
+    environment:
+      MONGODB_URL: mongodb://mongo:27017
+    volumes:
+      - ./app/ttk.jar:/app/app.jar:ro
+      - ./app/local.properties:/app/local.properties:ro
+      - ./app/logs:/app/logs
+    depends_on:
+      - mongo
+    networks:
+      - mongo_network
 
 volumes:
   mongo_data:

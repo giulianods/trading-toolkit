@@ -6,3 +6,7 @@ ttk.skip.initialization=false
 ttk.skip.cron=false
 # Optional local overlay of the React build. Packaged jars serve classpath:/web instead.
 # ttk.web.root=web/build
+# Home-server deploy: sbt "service/deploy" (SSH + docker compose). localhost = local Docker.
+ttk.deploy.host=192.168.0.156
+# ttk.deploy.user=gds
+# ttk.deploy.dir=ttk

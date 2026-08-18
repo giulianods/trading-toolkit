@@ -14,6 +14,7 @@ import zio.logging.backend.SLF4J
 object Main extends ZIOAppDefault {
   java.lang.System.setProperty("java.net.preferIPv4Stack", "true")
   java.lang.System.setProperty("java.net.preferIPv6Addresses", "false")
+  java.nio.file.Files.createDirectories(java.nio.file.Paths.get("logs"))
 
   private val logger: ZLayer[Any, Nothing, Unit] = SLF4J.slf4j
 
