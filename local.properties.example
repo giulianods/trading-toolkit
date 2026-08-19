@@ -1,7 +1,8 @@
 # Copy to local.properties and set your local secrets.
-polygon.api.key=
+massive.api.key=
 finnhub.api.key=
 mongodb.url=mongodb://127.0.0.1:27017
+ttk.markets=us-massive
 ttk.skip.initialization=false
 ttk.skip.cron=false
 # Optional local overlay of the React build. Packaged jars serve classpath:/web instead.

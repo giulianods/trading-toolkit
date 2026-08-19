@@ -3,21 +3,184 @@ info:
   title: Trading Toolkit Service API
   version: 1.0.0
   description: |
-    OpenAPI description for the HTTP routes mounted by `Main` on port 7777.
+    Canonical data routes are `/markets/{country}/{provider}/...`.
+    Unprefixed `/quotes`, `/financials`, `/watchlists`, `/description`, and `/breadth`
+    paths alias to the US Massive market (`us` / `massive`). `/status` is process-wide.
 servers:
   - url: http://localhost:7777
     description: Local development server
 tags:
+  - name: Status
   - name: Quotes
   - name: Financials
   - name: Watchlists
   - name: Metadata
   - name: Breadth
 paths:
+  /status:
+    get:
+      tags: [Status]
+      summary: Process health, Mongo ping, and cron job snapshots
+      responses:
+        '200':
+          description: Service status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppStatus'
+  /markets/{country}/{provider}/quotes/{ticker}:
+    get:
+      tags: [Quotes]
+      summary: Get daily quote data for a ticker
+      parameters:
+        - $ref: '#/components/parameters/CountryParam'
+        - $ref: '#/components/parameters/ProviderParam'
+        - $ref: '#/components/parameters/TickerParam'
+      responses:
+        '200':
+          $ref: '#/paths/~1quotes~1{ticker}/get/responses/200'
+        '400':
+          $ref: '#/components/responses/BadRequestText'
+        '404':
+          $ref: '#/components/responses/NotFoundText'
+        '500':
+          $ref: '#/components/responses/InternalErrorText'
+  /markets/{country}/{provider}/financials:
+    get:
+      tags: [Financials]
+      summary: Get financial data for one or more tickers
+      parameters:
+        - $ref: '#/components/parameters/CountryParam'
+        - $ref: '#/components/parameters/ProviderParam'
+        - name: tickers
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/paths/~1financials/get/responses/200'
+        '400':
+          $ref: '#/components/responses/BadRequestText'
+        '404':
+          $ref: '#/components/responses/NotFoundText'
+        '500':
+          $ref: '#/components/responses/InternalErrorText'
+  /markets/{country}/{provider}/watchlists/history:
+    get:
+      tags: [Watchlists]
+      summary: Get watchlist history by day
+      parameters:
+        - $ref: '#/components/parameters/CountryParam'
+        - $ref: '#/components/parameters/ProviderParam'
+        - name: start
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: end
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          $ref: '#/paths/~1watchlists~1history/get/responses/200'
+        '400':
+          $ref: '#/components/responses/BadRequestText'
+        '404':
+          $ref: '#/components/responses/NotFoundText'
+        '500':
+          $ref: '#/components/responses/InternalErrorText'
+  /markets/{country}/{provider}/watchlists/{name}:
+    get:
+      tags: [Watchlists]
+      summary: Get one watchlist by name
+      parameters:
+        - $ref: '#/components/parameters/CountryParam'
+        - $ref: '#/components/parameters/ProviderParam'
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          example: vcp
+        - name: day
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          $ref: '#/paths/~1watchlists~1{name}/get/responses/200'
+        '404':
+          $ref: '#/components/responses/NotFoundText'
+        '500':
+          $ref: '#/components/responses/InternalErrorText'
+  /markets/{country}/{provider}/description/{ticker}:
+    get:
+      tags: [Metadata]
+      summary: Get stock description metadata
+      parameters:
+        - $ref: '#/components/parameters/CountryParam'
+        - $ref: '#/components/parameters/ProviderParam'
+        - $ref: '#/components/parameters/TickerParam'
+      responses:
+        '200':
+          $ref: '#/paths/~1description~1{ticker}/get/responses/200'
+        '404':
+          $ref: '#/components/responses/NotFoundText'
+        '500':
+          $ref: '#/components/responses/InternalErrorText'
+  /markets/{country}/{provider}/breadth/indicators:
+    get:
+      tags: [Breadth]
+      summary: Get market breadth indicators
+      parameters:
+        - $ref: '#/components/parameters/CountryParam'
+        - $ref: '#/components/parameters/ProviderParam'
+        - name: start
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: end
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 100
+      responses:
+        '200':
+          $ref: '#/paths/~1breadth~1indicators/get/responses/200'
+        '400':
+          $ref: '#/components/responses/BadRequestText'
+        '404':
+          $ref: '#/components/responses/NotFoundText'
+        '500':
+          $ref: '#/components/responses/InternalErrorText'
   /quotes/{ticker}:
     get:
       tags: [Quotes]
       summary: Get daily quote data for a ticker
+      deprecated: true
+      description: Alias for `/markets/us/massive/quotes/{ticker}`.
       description: |
         Returns quote history as JSON by default.
         If request header `Content-Type: text/csv` is set, returns CSV text.
@@ -71,6 +234,8 @@ paths:
     get:
       tags: [Financials]
       summary: Get financial data for one or more tickers
+      deprecated: true
+      description: Alias for `/markets/us/massive/financials`.
       parameters:
         - name: tickers
           in: query
@@ -132,6 +297,8 @@ paths:
     get:
       tags: [Watchlists]
       summary: Get watchlist history by day
+      deprecated: true
+      description: Alias for `/markets/us/massive/watchlists/history`.
       parameters:
         - name: start
           in: query
@@ -175,6 +342,8 @@ paths:
     get:
       tags: [Watchlists]
       summary: Get one watchlist by name
+      deprecated: true
+      description: Alias for `/markets/us/massive/watchlists/{name}`.
       parameters:
         - name: name
           in: path
@@ -213,6 +382,8 @@ paths:
     get:
       tags: [Metadata]
       summary: Get stock description metadata
+      deprecated: true
+      description: Alias for `/markets/us/massive/description/{ticker}`.
       parameters:
         - $ref: '#/components/parameters/TickerParam'
       responses:
@@ -241,7 +412,9 @@ paths:
     get:
       tags: [Breadth]
       summary: Get market breadth indicators
+      deprecated: true
       description: |
+        Alias for `/markets/us/massive/breadth/indicators`.
         Supports either date range (`start`,`end`) or trailing count (`days`).
         If `start` and `end` are present they are used; otherwise `days` (default `100`) is used.
       parameters:
@@ -293,6 +466,20 @@ paths:
           $ref: '#/components/responses/InternalErrorText'
 components:
   parameters:
+    CountryParam:
+      name: country
+      in: path
+      required: true
+      schema:
+        type: string
+      example: us
+    ProviderParam:
+      name: provider
+      in: path
+      required: true
+      schema:
+        type: string
+      example: massive
     TickerParam:
       name: ticker
       in: path
@@ -310,6 +497,15 @@ components:
           examples:
             sample:
               value: Missing required query parameter tickers
+    NotFoundText:
+      description: Unknown market or missing resource
+      content:
+        text/plain:
+          schema:
+            type: string
+          examples:
+            sample:
+              value: Unknown market: ro-bvb
     InternalErrorText:
       description: Unexpected server error (stacktrace text)
       content:
@@ -317,6 +513,33 @@ components:
           schema:
             type: string
   schemas:
+    AppStatus:
+      type: object
+      required: [status, mongo, web, cron, jobs]
+      properties:
+        status:
+          type: string
+        mongo:
+          type: string
+        web:
+          type: string
+        cron:
+          type: string
+        jobs:
+          type: array
+          items:
+            type: object
+            required: [name, running]
+            properties:
+              name:
+                type: string
+                example: quotes:us-massive
+              running:
+                type: boolean
+              lastSuccess:
+                type: string
+              lastError:
+                type: string
     Quote:
       type: object
       required: [day, o, h, l, c, v]

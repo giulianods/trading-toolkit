@@ -5,9 +5,10 @@ import io.github.zeal18.zio.mongodb.driver.model.ReplaceOptions
 import io.greensheep.trading.core.utils.TransientRetry
 import io.github.zeal18.zio.mongodb.driver.indexes
 import io.github.zeal18.zio.mongodb.driver.sorts.Sort
+import io.github.zeal18.zio.mongodb.bson.BsonDocument
 import io.github.zeal18.zio.mongodb.driver.{MongoClient, MongoDatabase, filters, updates}
 import io.greensheep.trading.core.screens.{BreadthIndicators => MarketBreadth}
-import io.greensheep.trading.core.types.{DailyQuoteData, Quote, ScreenStats, Stock, StockDescription, Watchlist}
+import io.greensheep.trading.core.types.{DailyQuoteData, MarketId, Markets, Quote, ScreenStats, Stock, StockDescription, Watchlist}
 import zio.*
 import zio.stream.ZStream
 import zio.interop.reactivestreams.*
@@ -175,6 +176,57 @@ object MongoDataRepo {
     ZIO.serviceWithZIO[MongoDatabase] { db =>
       db.listCollectionNames().runHead.unit.retry(TransientRetry.mongo)
     }
+
+  def copyDatabase(source: MongoDatabase, dest: MongoDatabase): Task[Unit] =
+    for {
+      names <- source.listCollectionNames().runCollect
+      _ <- ZIO.foreachDiscard(names) { name =>
+        if (name.startsWith("system.") || name.contains('$')) ZIO.unit
+        else copyCollection(source, dest, name)
+      }
+    } yield ()
+
+  private def copyCollection(source: MongoDatabase, dest: MongoDatabase, name: String): Task[Unit] = {
+    val src = source.getCollection[BsonDocument](name)
+    val dst = dest.getCollection[BsonDocument](name)
+    for {
+      destCount <- dst.countDocuments()
+      _ <- if (destCount > 0) {
+        ZIO.logInfo(s"Skipping collection $name; destination already has $destCount documents")
+      } else {
+        src.find().run.toZIOStream().grouped(200).runForeach { chunk =>
+          if (chunk.isEmpty) ZIO.unit
+          else dst.insertMany(chunk.toSeq).unit
+        } *> ZIO.logInfo(s"Copied collection $name")
+      }
+    } yield ()
+  }
+
+  def migrateLegacyUsIfNeeded(client: MongoClient): Task[Unit] = {
+    val dest = client.getDatabase(MarketId.UsMassive.databaseName)
+    val source = client.getDatabase(Markets.LegacyUsDatabaseName)
+    for {
+      destHas <- hasStockUniverse.provide(ZLayer.succeed(dest))
+      _ <- if (destHas) {
+        ZIO.logInfo(s"${MarketId.UsMassive.databaseName} already has stock-universe; skipping legacy copy")
+      } else {
+        for {
+          sourceHas <- hasStockUniverse
+            .provide(ZLayer.succeed(source))
+            .catchAll { error =>
+              ZIO.logInfo(s"Legacy database ${Markets.LegacyUsDatabaseName} not usable: ${error.getMessage}").as(false)
+            }
+          _ <- if (sourceHas) {
+            ZIO.logInfo(
+              s"Copying collections from ${Markets.LegacyUsDatabaseName} to ${MarketId.UsMassive.databaseName}"
+            ) *> copyDatabase(source, dest)
+          } else {
+            ZIO.logInfo(s"No legacy ${Markets.LegacyUsDatabaseName} stock-universe to copy")
+          }
+        } yield ()
+      }
+    } yield ()
+  }
 
   def hasStockUniverse: ZIO[MongoDatabase, Throwable, Boolean] = {
     for {

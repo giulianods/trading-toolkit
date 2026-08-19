@@ -1,10 +1,10 @@
 package io.greensheep.trading.service.services
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
-import io.greensheep.providers.polygon.PolygonAsyncApi
+import io.greensheep.providers.massive.MassiveAsyncApi
 import io.greensheep.trading.core.screens.BreadthIndicators as MarketBreadth
-import io.greensheep.trading.core.types.StockDescription
-import io.greensheep.trading.dataservice.{MongoDataRepo, PolygonBridge, StockUniverse}
+import io.greensheep.trading.core.types.{MarketDefinition, StockDescription}
+import io.greensheep.trading.dataservice.{MongoDataRepo, MassiveBridge, StockUniverse}
 import zio.ZIO
 
 import java.time.LocalDate
@@ -14,9 +14,10 @@ object InitializationService {
 
   implicit val WriteExecutionContext: ExecutionContextExecutor = ExecutionContext.global
 
-  val InitializeStockUniverse: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] = ZIO.logSpan("initialize-stock-universe") {
+  def initializeStockUniverse(market: MarketDefinition): ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] =
+    ZIO.logSpan(s"initialize-stock-universe:${market.id.id}") {
     for {
-      _ <- ZIO.logInfo("Initializing stock universe")
+      _ <- ZIO.logInfo(s"Initializing stock universe for ${market.id.id}")
       alreadyRan <- MongoDataRepo.hasStockUniverse
       usCommonStocks <- QuotesServices.TickersUsCommonStocks  //TODO diff with existing symbols
       _ <- if(!alreadyRan) {
@@ -24,10 +25,10 @@ object InitializationService {
           _ <- ZIO.logInfo("First run - creating stock universe")
           stockUniverse = StockUniverse(_id = "stock-universe",
             name = "stock-universe",
-            dataSource = "polygon",
+            dataSource = market.dataSource,
             lastUpdateQuotes = LocalDate.now().minusMonths(23),
             lastUpdateFinancials = LocalDate.of(1970,1,1),
-            timeZone = "America/New_York",
+            timeZone = market.timeZone,
             symbols = usCommonStocks)
           _ <- MongoDataRepo.saveStockUniverse(stockUniverse)
         } yield ()
@@ -48,10 +49,10 @@ object InitializationService {
     } yield ()
   }
 
-  val InitializeDescriptions: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] = ZIO.logSpan("initialize-descriptions") {
+  val InitializeDescriptions: ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] = ZIO.logSpan("initialize-descriptions") {
     for{
       universe <- MongoDataRepo.getStockUniverse
-      remoteApi <- ZIO.service[PolygonAsyncApi]
+      remoteApi <- ZIO.service[MassiveAsyncApi]
       existing <- MongoDataRepo.getAllStockDescriptions.map(_.map(_.symbol).toSet)
       collectors  = universe.symbols.filterNot(existing.contains).map(s => remoteApi.getTickerDetails(s).map(td =>
       StockDescription(
@@ -76,9 +77,10 @@ object InitializationService {
   }
 
 
-  private def initializeQuotes(): ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] = ZIO.logSpan("initialize-quotes") {
+  private def initializeQuotes(market: MarketDefinition): ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] =
+    ZIO.logSpan(s"initialize-quotes:${market.id.id}") {
     for {
-      _ <- ZIO.logInfo("Initializing quotes")
+      _ <- ZIO.logInfo(s"Initializing quotes for ${market.id.id}")
       alreadyRan <- MongoDataRepo.hasStockUniverse
       usCommonStocks <- QuotesServices.TickersUsCommonStocks  //TODO diff with existing symbols
       _ <- if(!alreadyRan) {
@@ -89,10 +91,10 @@ object InitializationService {
           lastWritten <- QuotesServices.getDailySnapshotService(start, end)
           stockUniverse = StockUniverse(_id = "stock-universe",
             name = "stock-universe",
-            dataSource = "polygon",
+            dataSource = market.dataSource,
             lastUpdateQuotes = lastWritten.getOrElse(end),
             lastUpdateFinancials = LocalDate.of(1970,1,1),
-            timeZone = "America/New_York",
+            timeZone = market.timeZone,
             symbols = usCommonStocks)
           _ <- MongoDataRepo.saveStockUniverse(stockUniverse)
         } yield ()
@@ -171,7 +173,7 @@ object InitializationService {
     } yield ()
   }
 
-  private def quotesSanityCheck: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Seq[(String, String)]] = {
+  private def quotesSanityCheck: ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Seq[(String, String)]] = {
     for{
       _ <- ZIO.logInfo("Performing quotes sanity check")
       universe <- MongoDataRepo.getStockUniverse
@@ -182,14 +184,14 @@ object InitializationService {
     } yield errors
   }
 
-  private def resetQuotes(ticker: String): ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] = {
+  private def resetQuotes(ticker: String): ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] = {
     for{
       _ <- ZIO.logInfo(s"Resetting quotes for $ticker")
       _ <- MongoDataRepo.clearQuotes(ticker)
-      //Retrieve quotes from Polygon
-      remoteApi <- ZIO.service[PolygonAsyncApi]
+      //Retrieve quotes from Massive
+      remoteApi <- ZIO.service[MassiveAsyncApi]
       allQuotes <- remoteApi.getAggregates(ticker, LocalDate.now().minusMonths(23))
-      quotes = allQuotes.map(PolygonBridge.aggregateToQuote)
+      quotes = allQuotes.map(MassiveBridge.aggregateToQuote)
       //Save quotes to MongoDB
       _ <- MongoDataRepo.updateDailyQuotes(ticker, quotes)
       _ <- ZIO.logInfo(s"Reset quotes for $ticker completed, total quotes: ${quotes.size}")
@@ -197,7 +199,7 @@ object InitializationService {
   }
 
 
-  private def repairQuotes: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] = {
+  private def repairQuotes: ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] = {
     for{
       _ <- ZIO.logInfo("Repairing quote data")
       faults <- quotesSanityCheck
@@ -208,7 +210,7 @@ object InitializationService {
     } yield ()
   }
 
-  private def rectifySplits: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] = {
+  private def rectifySplits: ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] = {
     for{
       _ <- ZIO.logInfo("Rectifying split data")
       universe <- MongoDataRepo.getStockUniverse
@@ -218,10 +220,11 @@ object InitializationService {
   }
 
   //TODO add initialization for other services, see what can be done in parallel
-  def initializeApp(): ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] =  {
+  def initializeApp(market: MarketDefinition): ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] =  {
     for {
-      _ <- InitializeStockUniverse
-      _ <- initializeQuotes()
+      _ <- ZIO.logInfo(s"Initializing market ${market.id.id}")
+      _ <- initializeStockUniverse(market)
+      _ <- initializeQuotes(market)
       _ <- rectifySplits
       _ <- repairQuotes
       _ <- InitializeDescriptions

@@ -10,7 +10,7 @@ lazy val root = (project in file("."))
     name := "trading-toolkit",
     idePackagePrefix := Some("io.greensheep.trading"),
     addCommandAlias("deploy", "service/deploy")
-  ).aggregate(dataservice, core, service, restApi, polygonClientZio, finnhubClientZio)
+  ).aggregate(dataservice, core, service, restApi, massiveClientZio, finnhubClientZio)
 
 
 scalacOptions += "-Yretain-trees"
@@ -42,10 +42,10 @@ val logbackLib = Seq(
 
 val zioTestFramework = new TestFramework("zio.test.sbt.ZTestFramework")
 
-lazy val polygonClientZio = (project in file("polygon-client-zio"))
+lazy val massiveClientZio = (project in file("massive-client-zio"))
   .dependsOn(core)
   .settings(
-    name := "polygon-client-zio",
+    name := "massive-client-zio",
     libraryDependencies ++= zioLibraries ++ Seq(
       "dev.zio" %% "zio-http" % zioHttpVersion,
       "dev.zio" %% "zio-json" % zioJsonVersion
@@ -71,7 +71,7 @@ lazy val core = (project in file("core"))
     testFrameworks := Seq(zioTestFramework)
   )
 
-lazy val dataservice = (project in file("dataservice")).dependsOn(core, polygonClientZio, finnhubClientZio)
+lazy val dataservice = (project in file("dataservice")).dependsOn(core, massiveClientZio, finnhubClientZio)
   .settings(
 
     libraryDependencies := Seq("dev.zio" %% "zio-json" % zioJsonVersion) ++ zioLibraries ++ mongoZioLibraries ++ logbackLib,
@@ -87,7 +87,7 @@ lazy val restApi = (project in file("rest-api"))
 
 val cronScheduling = "com.github.tharwaninitin" %% "cron4zio" % "1.0.0"
 
-lazy val service = (project in file("service")).dependsOn(core, dataservice, restApi, polygonClientZio, finnhubClientZio)
+lazy val service = (project in file("service")).dependsOn(core, dataservice, restApi, massiveClientZio, finnhubClientZio)
   .settings(
     libraryDependencies := zioLibraries ++ logbackLib :+ cronScheduling,
     testFrameworks := Seq(zioTestFramework)

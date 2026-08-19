@@ -3,7 +3,8 @@ package io.greensheep.trading.service.app
 import cron4zio.*
 import io.finnhub.client.FinnhubClient
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
-import io.greensheep.providers.polygon.PolygonAsyncApi
+import io.greensheep.providers.massive.MassiveAsyncApi
+import io.greensheep.trading.core.types.MarketDefinition
 import io.greensheep.trading.service.services.{FiancialsServices, QuotesServices, ScreenerServices}
 import zio.*
 import zio.http.Client
@@ -39,19 +40,29 @@ object CronJobs {
       .forkDaemon
       .unit
 
-  def start: ZIO[MongoDatabase & PolygonAsyncApi & AppHealth & FinnhubClient & Client & Scope, Throwable, Unit] =
+  def start(
+      market: MarketDefinition
+  ): ZIO[MongoDatabase & MassiveAsyncApi & AppHealth & FinnhubClient & Client & Scope, Throwable, Unit] = {
+    val quotes = market.id.job("quotes")
+    val splits = market.id.job("splits")
+    val screens = market.id.job("screens")
+    val financials = market.id.job("financials")
     for {
       _ <- AppHealth.markCronStarted
-      _ <- ZIO.logInfo(s"Cron jobs scheduled in local zone $localZone")
-      // Polygon grouped-daily is still settling at 16:00 ET close; wait ~30 minutes.
-      // On UTC+3 that is 00:30 local (16:30 EST). Later under EDT; still after close.
-      _ <- supervised("quotes", "0 30 0 * * ?", QuotesServices.DailyQuotesRetrieval)
-      _ <- supervised("splits", "0 0 2 * * ?", rectifyRecentSplits)
-      _ <- supervised("financials", "0 15 0 ? * SAT", FiancialsServices.updateFinancials())
-      _ <- supervised("screens", "0 0 3 * * ?", ScreenerServices.ScreenerTask)
+      _ <- ZIO.logInfo(s"Cron jobs for ${market.id.id} scheduled in local zone $localZone")
+      _ <- supervised(quotes, market.cron.quotes, QuotesServices.DailyQuotesRetrieval)
+      _ <- supervised(splits, market.cron.splits, rectifyRecentSplits)
+      _ <- market.cron.financials match {
+        case Some(expr) if market.hasFinancials =>
+          supervised(financials, expr, FiancialsServices.updateFinancials())
+        case _ =>
+          ZIO.logInfo(s"Skipping financials cron for ${market.id.id}")
+      }
+      _ <- supervised(screens, market.cron.screens, ScreenerServices.ScreenerTask)
     } yield ()
+  }
 
-  private def rectifyRecentSplits: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] =
+  private def rectifyRecentSplits: ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] =
     ZIO.suspendSucceed {
       val today = java.time.LocalDate.now(localZone)
       QuotesServices.rectifySplits(today.minusDays(14), today.minusDays(1))

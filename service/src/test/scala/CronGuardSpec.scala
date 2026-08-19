@@ -1,5 +1,6 @@
 package io.greensheep.trading.service.app
 
+import io.greensheep.trading.core.types.Markets
 import zio.*
 import zio.test.*
 
@@ -23,6 +24,15 @@ object CronGuardSpec extends ZIOSpecDefault {
           succeeded.exists(!_.running)
         )
       }).provide(AppHealth.layer)
+    },
+    test("US Massive job names are scoped by market") {
+      val market = Markets.UsMassive
+      assertTrue(
+        market.id.job("quotes") == "quotes:us-massive",
+        market.id.job("splits") == "splits:us-massive",
+        market.id.job("screens") == "screens:us-massive",
+        market.id.job("financials") == "financials:us-massive"
+      )
     }
   )
 }

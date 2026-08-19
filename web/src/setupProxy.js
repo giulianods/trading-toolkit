@@ -1,18 +1,15 @@
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 module.exports = function (app) {
-  app.use(
-    '/watchlists',
-    createProxyMiddleware({
-      target: 'http://localhost:7777',
-      changeOrigin: true,
-    })
-  );
-  app.use(
-    '/quotes',
-    createProxyMiddleware({
-      target: 'http://localhost:7777',
-      changeOrigin: true,
-    })
-  );
+  const proxy = createProxyMiddleware({
+    target: 'http://localhost:7777',
+    changeOrigin: true,
+  });
+  app.use('/markets', proxy);
+  app.use('/watchlists', proxy);
+  app.use('/quotes', proxy);
+  app.use('/financials', proxy);
+  app.use('/description', proxy);
+  app.use('/breadth', proxy);
+  app.use('/status', proxy);
 };

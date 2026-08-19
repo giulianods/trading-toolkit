@@ -15,10 +15,10 @@ object FinnhubMongoLiveSpec extends ZIOSpecDefault {
     if (apiKey.isDefined) TestAspect.identity else TestAspect.ignore
 
   private val mongoLayer =
-    MongoClient.live(mongoUrl) >>> ZLayer.fromZIO(ZIO.serviceWith[MongoClient](_.getDatabase("polygon")))
+    MongoClient.live(mongoUrl) >>> ZLayer.fromZIO(ZIO.serviceWith[MongoClient](_.getDatabase("ttk-us-massive")))
 
   override def spec = suite("Finnhub live Mongo persist")(
-    test("persists AAPL financials into the polygon database") {
+    test("persists AAPL financials into the ttk-us-massive database") {
       ZIO.scoped {
         for {
           client <- ZIO.succeed(FinnhubClient.make(apiKey.get))

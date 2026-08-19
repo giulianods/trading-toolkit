@@ -1,9 +1,9 @@
 package io.greensheep.trading.service.services
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
-import io.greensheep.providers.polygon.PolygonAsyncApi
+import io.greensheep.providers.massive.MassiveAsyncApi
 import io.greensheep.trading.core.utils.QuotesValidation
-import io.greensheep.trading.dataservice.{MongoDataRepo, PolygonBridge}
+import io.greensheep.trading.dataservice.{MongoDataRepo, MassiveBridge}
 import zio.*
 import zio.prelude.ZValidation
 
@@ -21,10 +21,10 @@ object QuotesServices {
     else startDate.datesUntil(endDate.plusDays(1)).iterator().asScala.toSeq.filterNot(_.isAfter(today.minusDays(1)))
   }
 
-  val TickersUsCommonStocks: ZIO[PolygonAsyncApi, Throwable, Seq[String]] =
-    ZIO.service[PolygonAsyncApi].flatMap(_.getTickers.runCollect.map(_.map(_.ticker)))
+  val TickersUsCommonStocks: ZIO[MassiveAsyncApi, Throwable, Seq[String]] =
+    ZIO.service[MassiveAsyncApi].flatMap(_.getTickers.runCollect.map(_.map(_.ticker)))
 
-  val DailyQuotesRetrieval: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] =
+  val DailyQuotesRetrieval: ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] =
     for {
       _ <- ZIO.logInfo("Retrieving quotes from the last update through local yesterday")
       stockUniverse <- MongoDataRepo.getStockUniverse
@@ -52,9 +52,9 @@ object QuotesServices {
   def getDailySnapshotService(
       start: LocalDate,
       end: LocalDate
-  ): ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Option[LocalDate]] = ZIO.logSpan("get-daily-quotes") {
+  ): ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Option[LocalDate]] = ZIO.logSpan("get-daily-quotes") {
     for {
-      remoteApi <- ZIO.service[PolygonAsyncApi]
+      remoteApi <- ZIO.service[MassiveAsyncApi]
       datesToRetrieve = datesBetweenInclusive(start, end)
       _ <- ZIO.logInfo(s"Getting daily snapshots from $start to $end (${datesToRetrieve.size} days)")
       lastWritten <- ZIO.foldLeft(datesToRetrieve)(Option.empty[LocalDate] -> Option.empty[LocalDate]) {
@@ -90,31 +90,31 @@ object QuotesServices {
     }
 
   private def fetchAndStore(
-      remoteApi: PolygonAsyncApi,
+      remoteApi: MassiveAsyncApi,
       date: LocalDate
   ): ZIO[MongoDatabase, Throwable, Boolean] =
     for {
       aggregates <- remoteApi.getGroupedDaily(date)
       _ <- ZIO.logInfo(s"Retrieved ${aggregates.size} records for date $date")
       _ <- ZIO.when(aggregates.nonEmpty) {
-        val grouped = aggregates.map(agg => agg.T.getOrElse("?") -> PolygonBridge.aggregateToQuote(agg)).groupBy(_._1)
+        val grouped = aggregates.map(agg => agg.T.getOrElse("?") -> MassiveBridge.aggregateToQuote(agg)).groupBy(_._1)
         ZIO.foreachDiscard(grouped.toSeq) { case (ticker, pairs) =>
           MongoDataRepo.updateDailyQuotes(ticker, pairs.map(_._2))
         }
       }
     } yield aggregates.nonEmpty
 
-  def rectifySplits(start: LocalDate, end: LocalDate): ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] =
+  def rectifySplits(start: LocalDate, end: LocalDate): ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] =
     ZIO.logSpan("rectify-split-quotes") {
       val defaultHistory = LocalDate.now().minusDays(600)
       for {
-        remoteApi <- ZIO.service[PolygonAsyncApi]
+        remoteApi <- ZIO.service[MassiveAsyncApi]
         splits <- remoteApi.getSplits(start, end).map(_.map(_.ticker))
         reverseSplits <- remoteApi.getReverseSplits(start, end).map(_.map(_.ticker))
         _ <- ZIO.foreachDiscard((splits ++ reverseSplits).distinct) { ticker =>
           (for {
             quotes <- remoteApi.getAggregates(ticker, defaultHistory)
-            _ <- MongoDataRepo.updateDailyQuotes(ticker, quotes.map(PolygonBridge.aggregateToQuote))
+            _ <- MongoDataRepo.updateDailyQuotes(ticker, quotes.map(MassiveBridge.aggregateToQuote))
             _ <- ZIO.logInfo(s"Updated split data $ticker")
           } yield ()).catchAll(error => ZIO.logError(s"Failed split rectify for $ticker: ${error.getMessage}"))
         }

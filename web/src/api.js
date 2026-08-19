@@ -2,6 +2,7 @@
 const API_BASE = process.env.REACT_APP_API_URL || '';
 
 const DEFAULT_CHART_DAYS = 150;
+const MARKET_ROOT = '/markets/us/massive';
 
 function apiPath(path, searchParams = {}) {
   const params = new URLSearchParams(searchParams).toString();
@@ -15,7 +16,7 @@ function apiPath(path, searchParams = {}) {
  * @returns {Promise<{ day: string, screenName: string, tickers: string[] }>}
  */
 export async function fetchWatchlist(name, day) {
-  const url = apiPath(`/watchlists/${encodeURIComponent(name)}`, day ? { day } : {});
+  const url = apiPath(`${MARKET_ROOT}/watchlists/${encodeURIComponent(name)}`, day ? { day } : {});
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Watchlist ${name}: ${res.status}`);
   return res.json();
@@ -27,7 +28,7 @@ export async function fetchWatchlist(name, day) {
  * @returns {Promise<Array<{ day: string, o: number, h: number, l: number, c: number, v: number }>>}
  */
 export async function fetchQuotes(ticker) {
-  const url = apiPath(`/quotes/${encodeURIComponent(ticker)}`);
+  const url = apiPath(`${MARKET_ROOT}/quotes/${encodeURIComponent(ticker)}`);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Quotes ${ticker}: ${res.status}`);
   const data = await res.json();
