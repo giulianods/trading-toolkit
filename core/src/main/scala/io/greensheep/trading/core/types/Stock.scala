@@ -35,7 +35,8 @@ case class Stock(
   lazy val currentPrice: Double = dailyAggregates.last.c
 
   def performanceDays(days: Int): Double = {
-    100 * (currentPrice - dailyAggregates.takeRight(days).head.c) / currentPrice
+    val start = dailyAggregates.takeRight(days).head.c
+    100 * (currentPrice - start) / start
   }
 
   lazy val ma50: Double = ma(50)

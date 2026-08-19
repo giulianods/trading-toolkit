@@ -33,7 +33,7 @@ object QuotesValidation {
     Validation.validateWith(
       validateChronological(quotes),
       validateNoDuplicates(quotes),
-      //validateNoMissingDates(quotes)
+      validateNoMissingDates(quotes)
     ) { case _ => quotes }
   }
 }

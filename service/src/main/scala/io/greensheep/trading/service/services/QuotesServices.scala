@@ -62,21 +62,32 @@ object QuotesServices {
           fetchAndStore(remoteApi, date).foldZIO(
             error =>
               ZIO.logError(s"Failed grouped daily for $date: ${error.getMessage}") *>
-                ZIO.succeed((lastOk, firstFailure.orElse(Some(date)))),
+                ZIO.succeed(stepQuoteCursor(lastOk, firstFailure, date, Left(error))),
             written =>
-              firstFailure match {
-                case Some(_) =>
-                  ZIO.succeed((lastOk, firstFailure))
-                case None if written =>
-                  ZIO.succeed((Some(date), None))
-                case None =>
-                  ZIO.logInfo(s"No trading session for $date") *>
-                    ZIO.succeed((lastOk.orElse(Some(date)), None))
-              }
+              ZIO.logInfo(s"No trading session for $date").when(!written && firstFailure.isEmpty) *>
+                ZIO.succeed(stepQuoteCursor(lastOk, firstFailure, date, Right(written)))
           )
       }
     } yield lastWritten._1
   }
+
+  /** Empty sessions do not advance lastOk; a fetch error freezes the cursor after that date. */
+  def stepQuoteCursor(
+      lastOk: Option[LocalDate],
+      firstFailure: Option[LocalDate],
+      date: LocalDate,
+      outcome: Either[Throwable, Boolean]
+  ): (Option[LocalDate], Option[LocalDate]) =
+    outcome match {
+      case Left(_) =>
+        (lastOk, firstFailure.orElse(Some(date)))
+      case Right(_) if firstFailure.isDefined =>
+        (lastOk, firstFailure)
+      case Right(true) =>
+        (Some(date), None)
+      case Right(false) =>
+        (lastOk, None)
+    }
 
   private def fetchAndStore(
       remoteApi: PolygonAsyncApi,

@@ -8,7 +8,11 @@ import io.greensheep.trading.service.services.{FiancialsServices, QuotesServices
 import zio.*
 import zio.http.Client
 
+import java.time.ZoneId
+
 object CronJobs {
+
+  private val localZone: ZoneId = ZoneId.systemDefault()
 
   def guarded[R](name: String, job: ZIO[R, Throwable, Unit]): ZIO[R & AppHealth, Nothing, Unit] =
     AppHealth.tryStart(name).flatMap {
@@ -29,7 +33,7 @@ object CronJobs {
       cron: String,
       job: ZIO[R, Throwable, Unit]
   ): URIO[R & AppHealth, Unit] =
-    repeatEffectForCron(guarded(name, job), unsafeParse(cron))
+    repeatEffectForCron(guarded(name, job), unsafeParse(cron), zoneId = localZone)
       .catchAllCause(cause => ZIO.logErrorCause(s"Cron fiber $name stopped", cause).as(0L))
       .forever
       .forkDaemon
@@ -38,13 +42,18 @@ object CronJobs {
   def start: ZIO[MongoDatabase & PolygonAsyncApi & AppHealth & FinnhubClient & Client & Scope, Throwable, Unit] =
     for {
       _ <- AppHealth.markCronStarted
-      _ <- supervised("quotes", "0 0 0 * * ?", QuotesServices.DailyQuotesRetrieval)
-      _ <- supervised(
-        "splits",
-        "0 0 1 * * ?",
-        QuotesServices.rectifySplits(java.time.LocalDate.now().minusDays(14), java.time.LocalDate.now().minusDays(1))
-      )
-      _ <- supervised("financials", "0 15 0 * * ?", FiancialsServices.updateFinancials())
-      _ <- supervised("screens", "0 0 2 * * ?", ScreenerServices.ScreenerTask)
+      _ <- ZIO.logInfo(s"Cron jobs scheduled in local zone $localZone")
+      // Polygon grouped-daily is still settling at 16:00 ET close; wait ~30 minutes.
+      // On UTC+3 that is 00:30 local (16:30 EST). Later under EDT; still after close.
+      _ <- supervised("quotes", "0 30 0 * * ?", QuotesServices.DailyQuotesRetrieval)
+      _ <- supervised("splits", "0 0 2 * * ?", rectifyRecentSplits)
+      _ <- supervised("financials", "0 15 0 ? * SAT", FiancialsServices.updateFinancials())
+      _ <- supervised("screens", "0 0 3 * * ?", ScreenerServices.ScreenerTask)
     } yield ()
+
+  private def rectifyRecentSplits: ZIO[MongoDatabase & PolygonAsyncApi, Throwable, Unit] =
+    ZIO.suspendSucceed {
+      val today = java.time.LocalDate.now(localZone)
+      QuotesServices.rectifySplits(today.minusDays(14), today.minusDays(1))
+    }
 }

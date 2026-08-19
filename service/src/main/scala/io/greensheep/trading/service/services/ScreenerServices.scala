@@ -85,14 +85,13 @@ object ScreenerServices {
       watchlists <- buildScreens(asOf).provideLayer(ZLayer.succeed(snapshot))
       _ <- ZIO.foreachDiscard(watchlists)(MongoDataRepo.saveWatchlist)
       _ <- ZIO.logInfo(s"Saved ${watchlists.size} watchlists")
-      _ <- snapshot.stocks.get("AAPL") match {
-        case Some(_) =>
-          val indicators = MarketBreadth.fromStockMarket(snapshot).copy(date = asOf)
-          MongoDataRepo
-            .saveMarketBreadth(indicators)
-            .catchAll(error => ZIO.logError(s"Failed to save market breadth: ${error.getMessage}"))
-        case None =>
-          ZIO.logWarning("Skipping market breadth because AAPL snapshot is missing")
+      _ <- if (snapshot.stocks.nonEmpty) {
+        val indicators = MarketBreadth.fromStockMarket(snapshot).copy(date = asOf)
+        MongoDataRepo
+          .saveMarketBreadth(indicators)
+          .catchAll(error => ZIO.logError(s"Failed to save market breadth: ${error.getMessage}"))
+      } else {
+        ZIO.logWarning("Skipping market breadth because the snapshot has no stocks")
       }
     } yield ()
   }

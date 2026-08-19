@@ -46,6 +46,7 @@ services:
       - ./app/ttk.jar:/app/app.jar:ro
       - ./app/local.properties:/app/local.properties:ro
       - ./app/logs:/app/logs
+      - /etc/localtime:/etc/localtime:ro
     depends_on:
       - mongo
     networks:

@@ -23,7 +23,6 @@ The data is provided by a rest service and this app needs to define the front en
 How the front end looks is not strictly defined, however a few important considerations need to be made
  - I want to be able to browse watchlists (the default watchlist I want to  be displayed is 'SEPA')
  - I want to be able to see charts from the watchlist as barcharts (OHLC). This must be very  efficient since hundreds of charts can be in a watchlist
- - don't use the svg chart functionality from the rest service, create your own barcharts with the best library you see fir for the job
  - watchlists are a "per-day" basis, meaning they are a result of a screen , and so you can query historical watchlists, but this is a future task
  - a watchlist is an ordered set of tickers and I want to  be able to navigate using the (up arrow) and (down arrow) keys
  - depending on how large the generated chart is you might find it fit to arrange multiple charts per rows (in this case left and right arrows can navigate)

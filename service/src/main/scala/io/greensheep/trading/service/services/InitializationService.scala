@@ -156,15 +156,14 @@ object InitializationService {
             ZIO.logInfo(s"Market breadth indicators already exist for date $date, skipping initialization")
           } else {
             val snapshot = stockMarket.historicalSnapshot(date)
-            snapshot.stocks.get("AAPL") match {
-              case Some(_) =>
-                val indicators = MarketBreadth.fromStockMarket(snapshot).copy(date = date)
-                MongoDataRepo
-                  .saveMarketBreadth(indicators)
-                  .tapError(err => ZIO.logError(s"Failed to save market breadth indicators for date $date: ${err.getMessage}"))
-                  .flatMap(_ => ZIO.logInfo(s"Saved market breadth indicators for date $date"))
-              case None =>
-                ZIO.logWarning(s"Skipping market breadth initialization for date $date because benchmark data is missing")
+            if (snapshot.stocks.nonEmpty) {
+              val indicators = MarketBreadth.fromStockMarket(snapshot).copy(date = date)
+              MongoDataRepo
+                .saveMarketBreadth(indicators)
+                .tapError(err => ZIO.logError(s"Failed to save market breadth indicators for date $date: ${err.getMessage}"))
+                .flatMap(_ => ZIO.logInfo(s"Saved market breadth indicators for date $date"))
+            } else {
+              ZIO.logWarning(s"Skipping market breadth initialization for date $date because the snapshot has no stocks")
             }
           }
         } yield ()

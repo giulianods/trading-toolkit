@@ -10,15 +10,17 @@ import java.time.LocalDate
 
 object BreadthIndicators {
 
-  def buildHistory(mkt: StockMarket): Seq[BreadthIndicators] = {
-    val dates = mkt.stocks("AAPL").dailyAggregates.map(_.t).toSeq
-    dates.map(date => fromStockMarket(mkt.historicalSnapshot(date)))
-  }
+  def sessionDates(mkt: StockMarket): Seq[LocalDate] =
+    mkt.stocks.values
+      .maxByOption(_.dailyAggregates.length)
+      .map(_.dailyAggregates.map(_.t).toSeq)
+      .getOrElse(Seq.empty)
 
-  def buildHistory(mkt: StockMarket, noDays: Int): Seq[BreadthIndicators] = {
-    val dates = mkt.stocks("AAPL").dailyAggregates.map(_.t).toSeq.takeRight(noDays)
-    dates.map(date => fromStockMarket(mkt.historicalSnapshot(date)))
-  }
+  def buildHistory(mkt: StockMarket): Seq[BreadthIndicators] =
+    sessionDates(mkt).map(date => fromStockMarket(mkt.historicalSnapshot(date)))
+
+  def buildHistory(mkt: StockMarket, noDays: Int): Seq[BreadthIndicators] =
+    sessionDates(mkt).takeRight(noDays).map(date => fromStockMarket(mkt.historicalSnapshot(date)))
 
 
 
