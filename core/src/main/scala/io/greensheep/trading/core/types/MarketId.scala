@@ -8,6 +8,7 @@ final case class MarketId(country: String, provider: String) {
 
 object MarketId {
   val UsMassive: MarketId = MarketId("us", "massive")
+  val RoBvb: MarketId = MarketId("ro", "bvb")
 
   /** First segment is country; the rest is the provider (e.g. us-massive, ro-bvb). */
   def parse(raw: String): Either[String, MarketId] = {

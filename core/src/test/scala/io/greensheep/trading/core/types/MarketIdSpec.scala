@@ -34,11 +34,11 @@ object MarketIdSpec extends ZIOSpecDefault {
     test("enabled markets default to us-massive") {
       assertTrue(Markets.parseEnabled("us-massive") == Right(Seq(Markets.UsMassive)))
     },
+    test("ro-bvb is a registered catalog market") {
+      assertTrue(Markets.parseEnabled("ro-bvb") == Right(Seq(Markets.RoBvb)))
+    },
     test("unknown markets are rejected") {
-      assertTrue(
-        Markets.parseEnabled("ro-bvb").left.exists(_.contains("Unsupported market")),
-        Markets.parseEnabled("us-other").isLeft
-      )
+      assertTrue(Markets.parseEnabled("us-other").isLeft)
     }
   )
 }

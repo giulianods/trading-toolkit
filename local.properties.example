@@ -2,7 +2,7 @@
 massive.api.key=
 finnhub.api.key=
 mongodb.url=mongodb://127.0.0.1:27017
-ttk.markets=us-massive
+ttk.markets=us-massive,ro-bvb
 ttk.skip.initialization=false
 ttk.skip.cron=false
 # Optional local overlay of the React build. Packaged jars serve classpath:/web instead.
