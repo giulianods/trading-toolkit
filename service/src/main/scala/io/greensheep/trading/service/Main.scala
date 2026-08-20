@@ -4,11 +4,12 @@ import io.finnhub.client.FinnhubClient
 import io.github.zeal18.zio.mongodb.driver.MongoClient
 import io.greensheep.providers.bvb.BvbClient
 import io.greensheep.providers.massive.MassiveAsyncApi
+import io.greensheep.providers.xetra.XetraClient
 import io.greensheep.trading.core.types.{MarketDefinition, Markets}
 import io.greensheep.trading.core.utils.LocalConfig
 import io.greensheep.trading.dataservice.{MarketStore, MongoDataRepo}
 import io.greensheep.trading.service.app.{AppHealth, CronJobs, WebApp}
-import io.greensheep.trading.service.services.{ApiEndpoints, BvbInitialization, FiancialsServices, InitializationService}
+import io.greensheep.trading.service.services.{ApiEndpoints, BvbInitialization, FiancialsServices, InitializationService, XetraInitialization}
 import zio.*
 import zio.http.{Client, DnsResolver, Server, ZClient}
 import zio.http.netty.NettyConfig
@@ -47,7 +48,7 @@ object Main extends ZIOAppDefault {
       client <- ZIO.service[MongoClient]
       store <- ZIO.fromEither(MarketStore.live(client)).mapError(msg => new IllegalStateException(msg))
       _ <- ZIO.logInfo(s"Enabled markets: ${store.enabled.map(_.id.id).mkString(", ")}")
-      _ <- ZIO.foreachDiscard(store.enabled) { market =>
+      _ <- ZIO.foreachParDiscard(store.enabled) { market =>
         startMarket(client, store, market, skipInitialization, skipCron)
       }
       allApi = ApiEndpoints.routes(store).toHttpApp
@@ -71,7 +72,8 @@ object Main extends ZIOAppDefault {
       restServer,
       AppHealth.layer,
       finnhubLayer,
-      BvbClient.live
+      BvbClient.live,
+      XetraClient.live
     )
   }
 
@@ -81,7 +83,7 @@ object Main extends ZIOAppDefault {
       market: MarketDefinition,
       skipInitialization: Boolean,
       skipCron: Boolean
-  ): ZIO[MassiveAsyncApi & BvbClient & AppHealth & FinnhubClient & Client & Scope, Throwable, Unit] = {
+  ): ZIO[MassiveAsyncApi & BvbClient & XetraClient & AppHealth & FinnhubClient & Client & Scope, Throwable, Unit] = {
     val dbLayer = ZLayer.succeed(store.database(market))
     market.id.provider match {
       case "massive" =>
@@ -117,6 +119,22 @@ object Main extends ZIOAppDefault {
             .forkDaemon
             .unless(skipInitialization)
           _ <- CronJobs.startBvb(market).provideSomeLayer(dbLayer).unless(skipCron)
+          _ <- ZIO.logInfo(s"Cron jobs started for ${market.id.id}").unless(skipCron)
+        } yield ()
+      case "xetra" =>
+        for {
+          _ <- ZIO.logInfo(s"Opening market ${market.id.id} database ${market.id.databaseName}")
+          _ <- MongoDataRepo.ensureIndexes
+            .provideLayer(dbLayer)
+            .catchAll(error => ZIO.logWarning(s"Index creation skipped for ${market.id.id}: ${error.getMessage}"))
+          _ <- XetraInitialization.initializeApp(market)
+            .provideSomeLayer(dbLayer)
+            .catchAll { error =>
+              ZIO.logError(s"Background initialization for ${market.id.id} failed: ${error.getMessage}")
+            }
+            .forkDaemon
+            .unless(skipInitialization)
+          _ <- CronJobs.startXetra(market).provideSomeLayer(dbLayer).unless(skipCron)
           _ <- ZIO.logInfo(s"Cron jobs started for ${market.id.id}").unless(skipCron)
         } yield ()
       case other =>

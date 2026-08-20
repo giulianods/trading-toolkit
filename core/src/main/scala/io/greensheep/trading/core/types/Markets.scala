@@ -33,7 +33,24 @@ object Markets {
     hasFinancials = false
   )
 
-  val catalog: Map[MarketId, MarketDefinition] = Map(UsMassive.id -> UsMassive, RoBvb.id -> RoBvb)
+  val DeXetra: MarketDefinition = MarketDefinition(
+    id = MarketId.DeXetra,
+    timeZone = "Europe/Berlin",
+    dataSource = "xetra",
+    cron = MarketCron(
+      quotes = "0 30 0 * * ?",
+      splits = "0 0 2 * * ?",
+      screens = "0 0 3 * * ?",
+      financials = None
+    ),
+    hasFinancials = false
+  )
+
+  val catalog: Map[MarketId, MarketDefinition] = Map(
+    UsMassive.id -> UsMassive,
+    RoBvb.id -> RoBvb,
+    DeXetra.id -> DeXetra
+  )
 
   def parseEnabled(raw: String): Either[String, Seq[MarketDefinition]] = {
     val tokens = raw.split(",").map(_.trim).filter(_.nonEmpty).toSeq
