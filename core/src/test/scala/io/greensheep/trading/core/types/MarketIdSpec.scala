@@ -14,6 +14,9 @@ object MarketIdSpec extends ZIOSpecDefault {
     test("Germany Xetra database is ttk-de-xetra") {
       assertTrue(MarketId.DeXetra.databaseName == "ttk-de-xetra")
     },
+    test("Japan J-Quants database is ttk-jp-jquants") {
+      assertTrue(MarketId.JpJquants.databaseName == "ttk-jp-jquants")
+    },
     test("job names include the market id") {
       assertTrue(
         MarketId.UsMassive.job("quotes") == "quotes:us-massive",
@@ -42,6 +45,9 @@ object MarketIdSpec extends ZIOSpecDefault {
     },
     test("de-xetra is a registered catalog market") {
       assertTrue(Markets.parseEnabled("de-xetra") == Right(Seq(Markets.DeXetra)))
+    },
+    test("jp-jquants is a registered catalog market") {
+      assertTrue(Markets.parseEnabled("jp-jquants") == Right(Seq(Markets.JpJquants)))
     },
     test("unknown markets are rejected") {
       assertTrue(Markets.parseEnabled("us-other").isLeft)

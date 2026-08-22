@@ -1,0 +1,18 @@
+2026-08-21 00:30:00 INFO  i.g.t.s.services.XetraQuotesServices - Retrieving Xetra quotes from the last update through local yesterday
+2026-08-21 00:30:00 INFO  i.g.t.s.services.BvbQuotesServices - Retrieving BVB quotes from the last update through local yesterday
+2026-08-21 00:30:00 INFO  i.g.t.s.services.QuotesServices - Retrieving quotes from the last update through local yesterday
+2026-08-21 00:30:00 INFO  i.g.t.s.services.QuotesServices - Getting daily snapshots from 2024-09-16 to 2026-08-20 (704 days)
+2026-08-21 00:30:01 WARN  i.g.p.xetra.XetraTraceHeaders - Xetra salt scrape failed (Could not locate boerse-frankfurt main.js bundle); using fallback
+2026-08-21 00:30:25 INFO  i.g.trading.service.app.CronJobs - Job quotes:ro-bvb completed
+2026-08-21 00:31:54 INFO  i.g.trading.service.app.CronJobs - Job quotes:de-xetra completed
+2026-08-21 03:00:00 INFO  i.g.t.s.services.ScreenerServices - Running screener task for 2026-08-19
+2026-08-21 03:00:00 INFO  i.g.t.s.services.ScreenerServices - Running screener task for 2026-08-19
+2026-08-21 03:00:00 INFO  i.g.t.s.services.ScreenerServices - Running screener task for 2026-08-19
+2026-08-21 03:00:00 INFO  i.g.t.s.services.ScreenerServices - Saved 7 watchlists
+2026-08-21 03:00:00 INFO  i.g.trading.service.app.CronJobs - Job screens:ro-bvb completed
+2026-08-21 03:00:00 ERROR i.g.t.s.services.ScreenerServices - Errors while loading quotes: 4
+2026-08-21 03:00:00 INFO  i.g.t.s.services.ScreenerServices - Saved 7 watchlists
+2026-08-21 03:00:00 INFO  i.g.trading.service.app.CronJobs - Job screens:de-xetra completed
+2026-08-21 03:00:00 ERROR i.g.t.s.services.ScreenerServices - Errors while loading quotes: 442
+2026-08-21 03:00:00 INFO  i.g.t.s.services.ScreenerServices - Saved 7 watchlists
+2026-08-21 03:00:00 INFO  i.g.trading.service.app.CronJobs - Job screens:us-massive completed

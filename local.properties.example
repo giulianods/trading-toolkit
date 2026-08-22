@@ -1,8 +1,12 @@
 # Copy to local.properties and set your local secrets.
 massive.api.key=
 finnhub.api.key=
+# JPX J-Quants (required only when ttk.markets includes jp-jquants). Free plan: ~5 req/min, ~12w delay.
+jquants.api.key=
+# jquants.data.delay.days=84
+# jquants.min.interval.ms=12500
 mongodb.url=mongodb://127.0.0.1:27017
-ttk.markets=us-massive,ro-bvb,de-xetra
+ttk.markets=us-massive,ro-bvb,de-xetra,jp-jquants
 ttk.skip.initialization=false
 ttk.skip.cron=false
 # Optional local overlay of the React build. Packaged jars serve classpath:/web instead.

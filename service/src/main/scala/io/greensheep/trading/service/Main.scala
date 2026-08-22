@@ -3,13 +3,14 @@ package io.greensheep.trading.service
 import io.finnhub.client.FinnhubClient
 import io.github.zeal18.zio.mongodb.driver.MongoClient
 import io.greensheep.providers.bvb.BvbClient
+import io.greensheep.providers.jquants.JquantsClient
 import io.greensheep.providers.massive.MassiveAsyncApi
 import io.greensheep.providers.xetra.XetraClient
 import io.greensheep.trading.core.types.{MarketDefinition, Markets}
 import io.greensheep.trading.core.utils.LocalConfig
 import io.greensheep.trading.dataservice.{MarketStore, MongoDataRepo}
 import io.greensheep.trading.service.app.{AppHealth, CronJobs, WebApp}
-import io.greensheep.trading.service.services.{ApiEndpoints, BvbInitialization, FiancialsServices, InitializationService, XetraInitialization}
+import io.greensheep.trading.service.services.{ApiEndpoints, BvbInitialization, FiancialsServices, InitializationService, JquantsInitialization, XetraInitialization}
 import zio.*
 import zio.http.{Client, DnsResolver, Server, ZClient}
 import zio.http.netty.NettyConfig
@@ -27,8 +28,10 @@ object Main extends ZIOAppDefault {
   override def run: ZIO[Environment & ZIOAppArgs & Scope, Any, Any] = {
     val enabled = Markets.enabledFromConfig.fold(msg => throw new IllegalStateException(msg), identity)
     val needsMassive = enabled.exists(_.id.provider == "massive")
+    val needsJquants = enabled.exists(_.id.provider == "jquants")
     val needsFinnhub = enabled.exists(_.hasFinancials)
     if (needsMassive) LocalConfig.require("massive.api.key")
+    if (needsJquants) LocalConfig.require("jquants.api.key")
     val finnhubApiKey = if (needsFinnhub) LocalConfig.require("finnhub.api.key") else ""
     val skipInitialization = LocalConfig.get("ttk.skip.initialization").exists(_.equalsIgnoreCase("true"))
     val skipCron = LocalConfig.get("ttk.skip.cron").exists(_.equalsIgnoreCase("true"))
@@ -73,7 +76,8 @@ object Main extends ZIOAppDefault {
       AppHealth.layer,
       finnhubLayer,
       BvbClient.live,
-      XetraClient.live
+      XetraClient.live,
+      JquantsClient.live
     )
   }
 
@@ -83,7 +87,7 @@ object Main extends ZIOAppDefault {
       market: MarketDefinition,
       skipInitialization: Boolean,
       skipCron: Boolean
-  ): ZIO[MassiveAsyncApi & BvbClient & XetraClient & AppHealth & FinnhubClient & Client & Scope, Throwable, Unit] = {
+  ): ZIO[MassiveAsyncApi & BvbClient & XetraClient & JquantsClient & AppHealth & FinnhubClient & Client & Scope, Throwable, Unit] = {
     val dbLayer = ZLayer.succeed(store.database(market))
     market.id.provider match {
       case "massive" =>
@@ -135,6 +139,22 @@ object Main extends ZIOAppDefault {
             .forkDaemon
             .unless(skipInitialization)
           _ <- CronJobs.startXetra(market).provideSomeLayer(dbLayer).unless(skipCron)
+          _ <- ZIO.logInfo(s"Cron jobs started for ${market.id.id}").unless(skipCron)
+        } yield ()
+      case "jquants" =>
+        for {
+          _ <- ZIO.logInfo(s"Opening market ${market.id.id} database ${market.id.databaseName}")
+          _ <- MongoDataRepo.ensureIndexes
+            .provideLayer(dbLayer)
+            .catchAll(error => ZIO.logWarning(s"Index creation skipped for ${market.id.id}: ${error.getMessage}"))
+          _ <- JquantsInitialization.initializeApp(market)
+            .provideSomeLayer(dbLayer)
+            .catchAll { error =>
+              ZIO.logError(s"Background initialization for ${market.id.id} failed: ${error.getMessage}")
+            }
+            .forkDaemon
+            .unless(skipInitialization)
+          _ <- CronJobs.startJquants(market).provideSomeLayer(dbLayer).unless(skipCron)
           _ <- ZIO.logInfo(s"Cron jobs started for ${market.id.id}").unless(skipCron)
         } yield ()
       case other =>

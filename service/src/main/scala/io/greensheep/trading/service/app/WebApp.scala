@@ -74,6 +74,8 @@ object WebApp {
           payloadResponse(relative, payload, req.method)
         case None if fileExtension(relative).exists(assetExtensions.contains) =>
           ZIO.succeed(Response.status(Status.NotFound))
+        case None if isApiPath(relative) =>
+          ZIO.succeed(Response.status(Status.NotFound))
         case None =>
           resolve("index.html") match {
             case Some(payload) => payloadResponse("index.html", payload, req.method)
@@ -81,6 +83,11 @@ object WebApp {
           }
       }
     }
+  }
+
+  private def isApiPath(relative: String): Boolean = {
+    val first = relative.split('/').headOption.getOrElse("")
+    Set("markets", "watchlists", "quotes", "financials", "description", "breadth", "status").contains(first)
   }
 
   private def payloadResponse(name: String, payload: Either[Array[Byte], Path], method: Method): UIO[Response] =

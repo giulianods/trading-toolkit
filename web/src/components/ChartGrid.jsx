@@ -67,7 +67,7 @@ function ChartCell({ ticker, quotes, index, focusIndex, setFocusedIndex, pending
   );
 }
 
-function ChartGridInner({ tickers }) {
+function ChartGridInner({ market, tickers }) {
   const [quotesByTicker, setQuotesByTicker] = useState({});
   const [loading, setLoading] = useState(true);
   const [focusedIndex, setFocusedIndex] = useState(0);
@@ -82,6 +82,7 @@ function ChartGridInner({ tickers }) {
 
   const loadQuotes = useCallback(async () => {
     if (!tickers.length) {
+      setQuotesByTicker({});
       setLoading(false);
       return;
     }
@@ -90,7 +91,7 @@ function ChartGridInner({ tickers }) {
     await Promise.all(
       tickers.map(async (ticker) => {
         try {
-          const q = await fetchQuotes(ticker);
+          const q = await fetchQuotes(market, ticker);
           results[ticker] = q;
         } catch (e) {
           results[ticker] = [];
@@ -99,11 +100,15 @@ function ChartGridInner({ tickers }) {
     );
     setQuotesByTicker(results);
     setLoading(false);
-  }, [tickers.join(',')]);
+  }, [market, tickers.join(',')]);
 
   useEffect(() => {
     loadQuotes();
   }, [loadQuotes]);
+
+  useEffect(() => {
+    setFocusedIndex(0);
+  }, [market.id]);
 
   useEffect(() => {
     return () => {
@@ -222,8 +227,8 @@ function ChartGridInner({ tickers }) {
   );
 }
 
-const ChartGrid = React.memo(function ChartGrid({ tickers }) {
-  return <ChartGridInner tickers={tickers} />;
+const ChartGrid = React.memo(function ChartGrid({ market, tickers }) {
+  return <ChartGridInner market={market} tickers={tickers} />;
 });
 
 export default ChartGrid;

@@ -1,0 +1,50 @@
+2026-08-20 18:33:44 INFO  i.g.trading.service.Main.run - Enabled markets: us-massive
+2026-08-20 18:33:44 INFO  io.greensheep.trading.service.Main - Opening market us-massive database ttk-us-massive
+2026-08-20 18:33:44 INFO  i.g.t.dataservice.MongoDataRepo - Stock universe count: 0
+2026-08-20 18:33:44 INFO  i.g.t.dataservice.MongoDataRepo - Stock universe count: 1
+2026-08-20 18:33:44 INFO  i.g.t.dataservice.MongoDataRepo - Copying collections from polygon to ttk-us-massive
+2026-08-20 18:33:48 INFO  i.g.t.dataservice.MongoDataRepo - Copied collection daily-quotes
+2026-08-20 18:33:48 INFO  i.g.t.dataservice.MongoDataRepo - Copied collection financials
+2026-08-20 18:33:48 INFO  i.g.t.dataservice.MongoDataRepo - Copied collection stock-universe
+2026-08-20 18:33:48 INFO  i.g.t.s.s.InitializationService - Initializing market us-massive
+2026-08-20 18:33:48 INFO  i.g.t.s.s.InitializationService - Initializing stock universe for us-massive
+2026-08-20 18:33:48 INFO  i.g.trading.service.app.CronJobs - Cron jobs for us-massive scheduled in local zone Europe/Bucharest
+2026-08-20 18:33:48 INFO  i.g.t.dataservice.MongoDataRepo - Stock universe count: 1
+2026-08-20 18:33:48 INFO  io.greensheep.trading.service.Main - Cron jobs started for us-massive
+2026-08-20 18:33:48 INFO  i.g.trading.service.Main.run - Starting rest api
+2026-08-20 18:33:48 INFO  i.g.trading.service.Main.run - Serving web app from /home/giuli/proj/trading-toolkit/web/build
+2026-08-20 18:33:48 INFO  i.g.trading.service.Main.run - Rest api started on port 7777
+2026-08-20 18:35:35 INFO  i.g.trading.service.Main.run - Enabled markets: us-massive, ro-bvb, de-xetra
+2026-08-20 18:35:35 INFO  io.greensheep.trading.service.Main - Opening market us-massive database ttk-us-massive
+2026-08-20 18:35:35 INFO  io.greensheep.trading.service.Main - Opening market de-xetra database ttk-de-xetra
+2026-08-20 18:35:35 INFO  io.greensheep.trading.service.Main - Opening market ro-bvb database ttk-ro-bvb
+2026-08-20 18:35:35 INFO  i.g.t.dataservice.MongoDataRepo - Stock universe count: 1
+2026-08-20 18:35:35 INFO  i.g.t.dataservice.MongoDataRepo - ttk-us-massive already has stock-universe; skipping legacy copy
+2026-08-20 18:35:35 INFO  i.g.t.s.s.InitializationService - Initializing market us-massive
+2026-08-20 18:35:35 INFO  i.g.trading.service.app.CronJobs - Cron jobs for us-massive scheduled in local zone Europe/Bucharest
+2026-08-20 18:35:35 INFO  i.g.t.s.s.InitializationService - Initializing stock universe for us-massive
+2026-08-20 18:35:35 INFO  i.g.t.dataservice.MongoDataRepo - Stock universe count: 1
+2026-08-20 18:35:36 INFO  io.greensheep.trading.service.Main - Cron jobs started for us-massive
+2026-08-20 18:35:36 INFO  i.g.t.s.services.XetraInitialization - Initializing market de-xetra
+2026-08-20 18:35:36 INFO  i.g.trading.service.app.CronJobs - Cron jobs for de-xetra scheduled in local zone Europe/Bucharest
+2026-08-20 18:35:36 INFO  i.g.t.s.services.BvbInitialization - Initializing market ro-bvb
+2026-08-20 18:35:36 INFO  i.g.trading.service.app.CronJobs - Skipping splits cron for de-xetra
+2026-08-20 18:35:36 INFO  i.g.trading.service.app.CronJobs - Cron jobs for ro-bvb scheduled in local zone Europe/Bucharest
+2026-08-20 18:35:36 INFO  i.g.trading.service.app.CronJobs - Skipping financials cron for de-xetra
+2026-08-20 18:35:36 INFO  io.greensheep.trading.service.Main - Cron jobs started for de-xetra
+2026-08-20 18:35:36 INFO  i.g.trading.service.app.CronJobs - Skipping splits cron for ro-bvb
+2026-08-20 18:35:36 INFO  i.g.trading.service.app.CronJobs - Skipping financials cron for ro-bvb
+2026-08-20 18:35:36 INFO  io.greensheep.trading.service.Main - Cron jobs started for ro-bvb
+2026-08-20 18:35:36 INFO  i.g.trading.service.Main.run - Starting rest api
+2026-08-20 18:35:36 INFO  i.g.trading.service.Main.run - Serving web app from /home/giuli/proj/trading-toolkit/web/build
+2026-08-20 18:35:36 INFO  i.g.trading.service.Main.run - Rest api started on port 7777
+2026-08-20 18:35:36 INFO  i.g.t.dataservice.MongoDataRepo - Stock universe count: 0
+2026-08-20 18:35:37 INFO  i.g.t.dataservice.MongoDataRepo - Stock universe count: 0
+2026-08-20 18:35:38 WARN  i.g.p.xetra.XetraTraceHeaders - Xetra salt scrape failed (Could not locate boerse-frankfurt main.js bundle); using fallback
+2026-08-20 18:36:06 INFO  i.g.t.s.services.ScreenerServices - Running screener task for 2026-08-19
+2026-08-20 18:36:06 INFO  i.g.t.s.services.ScreenerServices - Saved 7 watchlists
+2026-08-20 18:38:36 ERROR i.g.t.s.services.ScreenerServices - Errors while loading quotes: 4
+2026-08-20 18:38:37 ERROR i.g.t.s.services.ScreenerServices - Errors while loading quotes: 4
+2026-08-20 18:38:38 INFO  i.g.t.s.services.ScreenerServices - Running screener task for 2026-08-19
+2026-08-20 18:38:38 ERROR i.g.t.s.services.ScreenerServices - Errors while loading quotes: 4
+2026-08-20 18:38:38 INFO  i.g.t.s.services.ScreenerServices - Saved 7 watchlists

@@ -10,6 +10,7 @@ object MarketId {
   val UsMassive: MarketId = MarketId("us", "massive")
   val RoBvb: MarketId = MarketId("ro", "bvb")
   val DeXetra: MarketId = MarketId("de", "xetra")
+  val JpJquants: MarketId = MarketId("jp", "jquants")
 
   /** First segment is country; the rest is the provider (e.g. us-massive, ro-bvb). */
   def parse(raw: String): Either[String, MarketId] = {

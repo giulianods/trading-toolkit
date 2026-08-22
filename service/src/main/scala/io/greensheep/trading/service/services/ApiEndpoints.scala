@@ -65,10 +65,11 @@ object ApiEndpoints {
       store: MarketStore,
       country: String,
       provider: String
-  )(effect: ZIO[MongoDatabase, Throwable, Response]): ZIO[Any, Response, Response] =
-    store.databaseZIO(country, provider).flatMap { db =>
-      effect.provide(ZLayer.succeed(db))
-    }.mapError(handleError)
+  )(effect: ZIO[MongoDatabase, Throwable, Response]): UIO[Response] =
+    store
+      .databaseZIO(country, provider)
+      .flatMap(db => effect.provide(ZLayer.succeed(db)))
+      .catchAll(error => ZIO.succeed(handleError(error)))
 
   private def pingEnabled(store: MarketStore): UIO[String] =
     ZIO

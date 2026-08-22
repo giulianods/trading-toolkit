@@ -4,10 +4,11 @@ import cron4zio.*
 import io.finnhub.client.FinnhubClient
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.providers.bvb.BvbClient
+import io.greensheep.providers.jquants.JquantsClient
 import io.greensheep.providers.massive.MassiveAsyncApi
 import io.greensheep.providers.xetra.XetraClient
 import io.greensheep.trading.core.types.MarketDefinition
-import io.greensheep.trading.service.services.{BvbQuotesServices, FiancialsServices, QuotesServices, ScreenerServices, XetraQuotesServices}
+import io.greensheep.trading.service.services.{BvbQuotesServices, FiancialsServices, JquantsQuotesServices, QuotesServices, ScreenerServices, XetraQuotesServices}
 import zio.*
 import zio.http.Client
 
@@ -88,6 +89,21 @@ object CronJobs {
       _ <- AppHealth.markCronStarted
       _ <- ZIO.logInfo(s"Cron jobs for ${market.id.id} scheduled in local zone $localZone")
       _ <- supervised(quotes, market.cron.quotes, XetraQuotesServices.dailyQuotesRetrieval)
+      _ <- ZIO.logInfo(s"Skipping splits cron for ${market.id.id}")
+      _ <- ZIO.logInfo(s"Skipping financials cron for ${market.id.id}")
+      _ <- supervised(screens, market.cron.screens, ScreenerServices.ScreenerTask)
+    } yield ()
+  }
+
+  def startJquants(
+      market: MarketDefinition
+  ): ZIO[MongoDatabase & JquantsClient & Client & AppHealth, Throwable, Unit] = {
+    val quotes = market.id.job("quotes")
+    val screens = market.id.job("screens")
+    for {
+      _ <- AppHealth.markCronStarted
+      _ <- ZIO.logInfo(s"Cron jobs for ${market.id.id} scheduled in local zone $localZone")
+      _ <- supervised(quotes, market.cron.quotes, JquantsQuotesServices.dailyQuotesRetrieval)
       _ <- ZIO.logInfo(s"Skipping splits cron for ${market.id.id}")
       _ <- ZIO.logInfo(s"Skipping financials cron for ${market.id.id}")
       _ <- supervised(screens, market.cron.screens, ScreenerServices.ScreenerTask)

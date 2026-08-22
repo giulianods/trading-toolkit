@@ -1,8 +1,10 @@
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-test('renders learn react link', () => {
+test('renders market switcher', () => {
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: 'US' })).toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: 'RO' })).toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: 'DE' })).toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: 'JP' })).toBeInTheDocument();
 });

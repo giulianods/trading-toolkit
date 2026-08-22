@@ -10,7 +10,7 @@ lazy val root = (project in file("."))
     name := "trading-toolkit",
     idePackagePrefix := Some("io.greensheep.trading"),
     addCommandAlias("deploy", "service/deploy")
-  ).aggregate(dataservice, core, service, restApi, massiveClientZio, finnhubClientZio, bvbClientZio, xetraClientZio)
+  ).aggregate(dataservice, core, service, restApi, massiveClientZio, finnhubClientZio, bvbClientZio, xetraClientZio, jquantsClientZio)
 
 
 scalacOptions += "-Yretain-trees"
@@ -75,6 +75,17 @@ lazy val xetraClientZio = (project in file("xetra-client-zio"))
     testFrameworks := Seq(zioTestFramework)
   )
 
+lazy val jquantsClientZio = (project in file("jquants-client-zio"))
+  .dependsOn(core)
+  .settings(
+    name := "jquants-client-zio",
+    libraryDependencies ++= zioLibraries ++ Seq(
+      "dev.zio" %% "zio-http" % zioHttpVersion,
+      "dev.zio" %% "zio-json" % zioJsonVersion
+    ),
+    testFrameworks := Seq(zioTestFramework)
+  )
+
 lazy val finnhubClientZio = (project in file("finnhub-client-zio"))
   .dependsOn(core)
   .settings(
@@ -93,7 +104,7 @@ lazy val core = (project in file("core"))
     testFrameworks := Seq(zioTestFramework)
   )
 
-lazy val dataservice = (project in file("dataservice")).dependsOn(core, massiveClientZio, finnhubClientZio, bvbClientZio, xetraClientZio)
+lazy val dataservice = (project in file("dataservice")).dependsOn(core, massiveClientZio, finnhubClientZio, bvbClientZio, xetraClientZio, jquantsClientZio)
   .settings(
 
     libraryDependencies := Seq("dev.zio" %% "zio-json" % zioJsonVersion) ++ zioLibraries ++ mongoZioLibraries ++ logbackLib,
@@ -109,7 +120,7 @@ lazy val restApi = (project in file("rest-api"))
 
 val cronScheduling = "com.github.tharwaninitin" %% "cron4zio" % "1.0.0"
 
-lazy val service = (project in file("service")).dependsOn(core, dataservice, restApi, massiveClientZio, finnhubClientZio, bvbClientZio, xetraClientZio)
+lazy val service = (project in file("service")).dependsOn(core, dataservice, restApi, massiveClientZio, finnhubClientZio, bvbClientZio, xetraClientZio, jquantsClientZio)
   .settings(
     libraryDependencies := zioLibraries ++ logbackLib :+ cronScheduling,
     testFrameworks := Seq(zioTestFramework)
