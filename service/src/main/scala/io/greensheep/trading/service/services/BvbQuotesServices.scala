@@ -17,10 +17,22 @@ object BvbQuotesServices {
       start = universe.lastUpdateQuotes.minusDays(1)
       end = LocalDate.now().minusDays(1)
       lastWritten <- fetchRange(universe.symbols, start, end)
-      _ <- lastWritten match {
-        case Some(date) => MongoDataRepo.saveStockUniverse(universe.copy(lastUpdateQuotes = date))
-        case None => ZIO.logWarning("No BVB quote dates were written; leaving lastUpdateQuotes unchanged")
+      refreshed <- MongoDataRepo.getStockUniverse
+      assessed <- ZIO.foreach(refreshed.symbols) { ticker =>
+        MongoDataRepo
+          .getPriceData(ticker)
+          .map(data => ticker -> BvbLiquidityFilter.assess(data.quotes))
+          .orElseSucceed(ticker -> BvbLiquidityFilter.assess(Seq.empty))
       }
+      liquid = assessed.collect { case (ticker, a) if a.liquid => ticker }.sorted
+      _ <- ZIO.logInfo(s"BVB liquidity filter after quotes: kept ${liquid.size}/${refreshed.symbols.size}")
+      nextQuotes = lastWritten.getOrElse(refreshed.lastUpdateQuotes)
+      _ <- MongoDataRepo.saveStockUniverse(
+        refreshed.copy(
+          lastUpdateQuotes = nextQuotes,
+          symbols = if (liquid.nonEmpty) liquid else refreshed.symbols
+        )
+      )
     } yield ()
 
   def fetchRange(

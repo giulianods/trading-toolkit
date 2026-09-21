@@ -12,11 +12,16 @@ import java.time.LocalDate
 
 object BvbInitialization {
 
+  private val HistoryLookbackMonths: Long = 23
+  /** Symbols at or below this bar count are treated as needing a full history backfill. */
+  private val ThinHistoryBars: Int = 50
+
   def initializeApp(market: MarketDefinition): ZIO[MongoDatabase & BvbClient & Client, Throwable, Unit] =
     for {
       _ <- ZIO.logInfo(s"Initializing market ${market.id.id}")
       _ <- initializeUniverse(market)
       _ <- initializeQuotes(market)
+      _ <- pruneIlliquidSymbols
       _ <- initializeDescriptions
         .catchAll(error => ZIO.logWarning(s"BVB description initialization skipped: ${error.getMessage}"))
         .forkDaemon
@@ -37,7 +42,7 @@ object BvbInitialization {
             _id = "stock-universe",
             name = "stock-universe",
             dataSource = market.dataSource,
-            lastUpdateQuotes = LocalDate.now().minusMonths(23),
+            lastUpdateQuotes = LocalDate.now().minusMonths(HistoryLookbackMonths),
             lastUpdateFinancials = LocalDate.of(1970, 1, 1),
             timeZone = market.timeZone,
             symbols = symbols
@@ -50,15 +55,58 @@ object BvbInitialization {
       }
     } yield ()
 
+  /**
+   * New or thinly-covered symbols (e.g. AeRO added after the market already existed) get a full
+   * lookback. Known symbols only catch up from `lastUpdateQuotes`, so restarts stay cheap.
+   */
   private def initializeQuotes(market: MarketDefinition): ZIO[MongoDatabase & BvbClient & Client, Throwable, Unit] =
     for {
       universe <- MongoDataRepo.getStockUniverse
-      start = universe.lastUpdateQuotes
       end = LocalDate.now().minusDays(1)
-      lastWritten <- BvbQuotesServices.fetchRange(universe.symbols, start, end)
-      _ <- MongoDataRepo.saveStockUniverse(
-        universe.copy(lastUpdateQuotes = lastWritten.getOrElse(universe.lastUpdateQuotes))
+      fullStart = end.minusMonths(HistoryLookbackMonths)
+      barCounts <- ZIO.foreach(universe.symbols) { ticker =>
+        MongoDataRepo
+          .getPriceData(ticker)
+          .map(_.quotes.size)
+          .orElseSucceed(0)
+          .map(ticker -> _)
+      }
+      thin = barCounts.collect { case (ticker, n) if n < ThinHistoryBars => ticker }
+      known = universe.symbols.diff(thin)
+      _ <- ZIO.logInfo(
+        s"BVB quotes init: ${thin.size} new/thin symbols (full ${HistoryLookbackMonths}m), " +
+          s"${known.size} known (from ${universe.lastUpdateQuotes})"
       )
+      _ <- BvbQuotesServices.fetchRange(thin, fullStart, end).unit
+      lastWritten <- BvbQuotesServices.fetchRange(known, universe.lastUpdateQuotes, end)
+      caughtUp = lastWritten.getOrElse(universe.lastUpdateQuotes)
+      nextUpdate =
+        if (thin.nonEmpty && end.isAfter(universe.lastUpdateQuotes)) end
+        else if (caughtUp.isAfter(universe.lastUpdateQuotes)) caughtUp
+        else universe.lastUpdateQuotes
+      _ <- MongoDataRepo.saveStockUniverse(universe.copy(lastUpdateQuotes = nextUpdate))
+    } yield ()
+
+  /** Drop names that almost never trade (sparse BVB history / tiny recent volume). */
+  private def pruneIlliquidSymbols: ZIO[MongoDatabase, Throwable, Unit] =
+    for {
+      universe <- MongoDataRepo.getStockUniverse
+      assessed <- ZIO.foreach(universe.symbols) { ticker =>
+        MongoDataRepo
+          .getPriceData(ticker)
+          .map(data => ticker -> BvbLiquidityFilter.assess(data.quotes))
+          .orElseSucceed(ticker -> BvbLiquidityFilter.assess(Seq.empty))
+      }
+      liquid = assessed.collect { case (ticker, a) if a.liquid => ticker }.sorted
+      dropped = assessed.collect { case (ticker, a) if !a.liquid => ticker -> a.reason.getOrElse("illiquid") }
+      _ <- ZIO.logInfo(s"BVB liquidity filter: kept ${liquid.size}/${universe.symbols.size}, dropped ${dropped.size}")
+      _ <- ZIO
+        .logInfo(s"BVB liquidity drops (sample): ${dropped.take(20).map { case (t, r) => s"$t($r)" }.mkString(", ")}")
+        .when(dropped.nonEmpty)
+      _ <- MongoDataRepo.saveStockUniverse(universe.copy(symbols = liquid)).when(liquid.nonEmpty)
+      _ <- ZIO
+        .fail(new IllegalStateException("BVB liquidity filter removed every symbol"))
+        .when(liquid.isEmpty)
     } yield ()
 
   private def initializeDescriptions: ZIO[MongoDatabase & BvbClient & Client, Throwable, Unit] =
@@ -68,9 +116,12 @@ object BvbInitialization {
       existing <- MongoDataRepo.getAllStockDescriptions.map(_.map(_.symbol).toSet)
       missing = universe.symbols.filterNot(existing.contains)
       _ <- ZIO.foreachDiscard(missing) { ticker =>
-        client.symbolInfo(ticker).flatMap { info =>
-          MongoDataRepo.saveStockDescription(BvbBridge.toDescription(info)).unit
-        }.catchAll(error => ZIO.logWarning(s"BVB description skipped for $ticker: ${error.getMessage}"))
+        client
+          .symbolInfo(ticker)
+          .flatMap { info =>
+            MongoDataRepo.saveStockDescription(BvbBridge.toDescription(info)).unit
+          }
+          .catchAll(error => ZIO.logWarning(s"BVB description skipped for $ticker: ${error.getMessage}"))
       }
     } yield ()
 
