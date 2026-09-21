@@ -86,6 +86,18 @@ object XetraModelSpec extends ZIOSpecDefault {
         limited.state.intervalMs >= 200,
         limited.waitMs >= 2000
       )
+    },
+    test("location header is case-insensitive") {
+      val headers = Map("Location" -> "https://example.com/next")
+      assertTrue(XetraHttp.locationHeader(headers).contains("https://example.com/next"))
+    },
+    test("resolveRedirect accepts absolute Deutsche Börse CSV locations") {
+      val location =
+        "https://www.cashmarket.deutsche-boerse.com/resource/blob/1528/8e34798266f78fe8811bd24387445b2b/data/t7-xetr-allTradableInstruments.csv"
+      val resolved = zio.Unsafe.unsafe { implicit u =>
+        zio.Runtime.default.unsafe.run(XetraHttp.resolveRedirect(location)).getOrThrow()
+      }
+      assertTrue(resolved.host.exists(_.contains("cashmarket.deutsche-boerse.com")))
     }
   )
 

@@ -9,7 +9,20 @@ object SharesPageParser {
   private val Isin: Regex = """[A-Z]{2}[A-Z0-9]{9}[0-9]""".r
   private val QueryTicker: Regex = """[?&]s=([A-Z0-9.]+)""".r
   private val TickerIsin: Regex = """\b([A-Z][A-Z0-9.]{0,15})\s+([A-Z]{2}[A-Z0-9]{9}[0-9])\b""".r
-  private val AllowedCategories: Set[String] = Set("Premium", "Standard", "Int'l", "Intl", "International")
+  private val AllowedCategories: Set[String] = Set(
+    "Premium",
+    "Standard",
+    "Int'l",
+    "Intl",
+    "International",
+    "AeRO",
+    "AeRO Premium",
+    "AeRO Standard",
+    "SMT Intl"
+  )
+
+  private def isCategory(value: String): Boolean =
+    AllowedCategories.contains(value) || value.startsWith("AeRO")
 
   def parse(html: String): Seq[BvbInstrument] = {
     val fromLinks = parseLinkRows(html)
@@ -35,9 +48,7 @@ object SharesPageParser {
         .filter(_.nonEmpty)
         .toSeq
       val name = cells.lift(1).getOrElse("")
-      val category = cells.lastOption.filter(AllowedCategories.contains).getOrElse {
-        cells.find(AllowedCategories.contains).getOrElse("")
-      }
+      val category = cells.lastOption.filter(isCategory).orElse(cells.find(isCategory)).getOrElse("")
       (ticker, isin) match {
         case (Some(sym), Some(code)) if sym.nonEmpty =>
           Some(BvbInstrument(sym, code, name, category))

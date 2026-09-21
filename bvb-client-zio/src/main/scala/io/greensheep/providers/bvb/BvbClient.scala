@@ -10,13 +10,25 @@ import java.time.LocalDate
 
 final class BvbClient(limiter: BvbRateLimiter) {
 
+  /** Regulated Main Market + AeRO common shares (merged, deduped by ticker). */
   def listMainShares: ZIO[Client, Throwable, Seq[BvbInstrument]] =
     for {
       url <- decode(BvbSettings.SharesUrl)
-      response <- limiter.execute(BvbHttp.get(url))
-      html <- BvbHttp.requireOk(response)
-      instruments = SharesPageParser.parse(html)
-      _ <- ZIO.fail(new NoSuchElementException("BVB shares page returned no instruments")).when(instruments.isEmpty)
+      mainResponse <- limiter.execute(BvbHttp.get(url))
+      mainHtml <- BvbHttp.requireOk(mainResponse)
+      main = SharesPageParser.parse(mainHtml)
+      aeroFields = BvbSharesForm.aeroPostFields(mainHtml)
+      aeroResponse <- limiter.execute(BvbHttp.postForm(url, aeroFields))
+      aeroHtml <- BvbHttp.requireOk(aeroResponse)
+      aero = SharesPageParser.parse(aeroHtml)
+      instruments = (main ++ aero).groupBy(_.ticker).values.map(_.head).toSeq.sortBy(_.ticker)
+      _ <- ZIO.logInfo(s"BVB universe: ${main.size} regulated + ${aero.size} AeRO => ${instruments.size} unique")
+      _ <- ZIO
+        .fail(new NoSuchElementException("BVB shares pages returned no instruments"))
+        .when(instruments.isEmpty)
+      _ <- ZIO
+        .logWarning(s"BVB AeRO tab returned no instruments (regulated=${main.size})")
+        .when(aero.isEmpty)
     } yield instruments
 
   def history(symbol: String, from: LocalDate, to: LocalDate): ZIO[Client, Throwable, Seq[BvbBar]] = {

@@ -76,23 +76,26 @@ object ScreenerServices {
     } yield watchlists
   }
 
-  val ScreenerTask: ZIO[MongoDatabase, Throwable, Unit] = ZIO.logSpan("screener-task") {
-    val asOf = LocalDate.now().minusDays(1)
-    for {
-      _ <- ZIO.logInfo(s"Running screener task for $asOf")
-      market <- LoadQuotes
-      snapshot = market.historicalSnapshot(asOf)
-      watchlists <- buildScreens(asOf).provideLayer(ZLayer.succeed(snapshot))
-      _ <- ZIO.foreachDiscard(watchlists)(MongoDataRepo.saveWatchlist)
-      _ <- ZIO.logInfo(s"Saved ${watchlists.size} watchlists")
-      _ <- if (snapshot.stocks.nonEmpty) {
-        val indicators = MarketBreadth.fromStockMarket(snapshot).copy(date = asOf)
-        MongoDataRepo
-          .saveMarketBreadth(indicators)
-          .catchAll(error => ZIO.logError(s"Failed to save market breadth: ${error.getMessage}"))
-      } else {
-        ZIO.logWarning("Skipping market breadth because the snapshot has no stocks")
+  val ScreenerTask: ZIO[MongoDatabase, Throwable, Unit] =
+    ZIO.suspendSucceed {
+      val asOf = LocalDate.now().minusDays(1)
+      ZIO.logSpan("screener-task") {
+        for {
+          _ <- ZIO.logInfo(s"Running screener task for $asOf")
+          market <- LoadQuotes
+          snapshot = market.historicalSnapshot(asOf)
+          watchlists <- buildScreens(asOf).provideLayer(ZLayer.succeed(snapshot))
+          _ <- ZIO.foreachDiscard(watchlists)(MongoDataRepo.saveWatchlist)
+          _ <- ZIO.logInfo(s"Saved ${watchlists.size} watchlists")
+          _ <- if (snapshot.stocks.nonEmpty) {
+            val indicators = MarketBreadth.fromStockMarket(snapshot).copy(date = asOf)
+            MongoDataRepo
+              .saveMarketBreadth(indicators)
+              .catchAll(error => ZIO.logError(s"Failed to save market breadth: ${error.getMessage}"))
+          } else {
+            ZIO.logWarning("Skipping market breadth because the snapshot has no stocks")
+          }
+        } yield ()
       }
-    } yield ()
-  }
+    }
 }

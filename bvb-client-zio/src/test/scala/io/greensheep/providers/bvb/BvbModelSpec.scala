@@ -44,6 +44,34 @@ object BvbModelSpec extends ZIOSpecDefault {
       val tickers = SharesPageParser.parse(html).map(_.ticker)
       assertTrue(tickers.contains("TLV"), tickers.contains("SNP"), tickers.contains("H2O"))
     },
+    test("AeRO table fragment includes HUNT with ISIN") {
+      val html =
+        """<tr>
+          |  <td><a href="/FinancialInstruments/Details/FinancialInstrumentsDetails.aspx?s=HUNT"><b>HUNT</b></a>
+          |  <p style="font-size: 11px">RODHRTKI5XP6</p></td>
+          |  <td>IHUNT TECHNOLOGY IMPORT-EXPORT S.A.</td>
+          |  <td align="center">AeRO Premium</td>
+          |</tr>""".stripMargin
+      val instruments = SharesPageParser.parse(html)
+      assertTrue(
+        instruments.exists(i => i.ticker == "HUNT" && i.isin == "RODHRTKI5XP6"),
+        instruments.head.category.contains("AeRO")
+      )
+    },
+    test("AeRO ASP.NET post fields target the ms3 update panel") {
+      val html =
+        """<input type="hidden" name="__VIEWSTATE" value="abc" />
+          |<input type="hidden" name="__VIEWSTATEGENERATOR" value="gen" />
+          |<input type="hidden" name="__EVENTVALIDATION" value="ev" />
+          |""".stripMargin
+      val fields = BvbSharesForm.aeroPostFields(html)
+      assertTrue(
+        fields("__VIEWSTATE") == "abc",
+        fields("__EVENTTARGET") == BvbSharesForm.AeroButton,
+        fields("__ASYNCPOST") == "true",
+        fields(BvbSharesForm.ScriptManager).contains(BvbSharesForm.AeroButton)
+      )
+    },
     test("Retry-After seconds becomes wait millis") {
       val parsed = RateLimitHeaders.parseRetryAfter("3", nowMs = 0)
       assertTrue(parsed.contains(3000L))
