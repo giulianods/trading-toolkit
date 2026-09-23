@@ -30,8 +30,10 @@ object CronGuardSpec extends ZIOSpecDefault {
       assertTrue(
         market.id.job("quotes") == "quotes:us-massive",
         market.id.job("splits") == "splits:us-massive",
+        market.id.job("clean") == "clean:us-massive",
         market.id.job("screens") == "screens:us-massive",
-        market.id.job("financials") == "financials:us-massive"
+        market.id.job("financials") == "financials:us-massive",
+        market.cron.clean.contains("0 30 2 * * ?")
       )
     }
   )

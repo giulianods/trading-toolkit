@@ -10,7 +10,7 @@ import io.greensheep.trading.core.types.{MarketDefinition, Markets}
 import io.greensheep.trading.core.utils.LocalConfig
 import io.greensheep.trading.dataservice.{MarketStore, MongoDataRepo}
 import io.greensheep.trading.service.app.{AppHealth, CronJobs, WebApp}
-import io.greensheep.trading.service.services.{ApiEndpoints, BvbInitialization, FiancialsServices, InitializationService, JquantsInitialization, XetraInitialization}
+import io.greensheep.trading.service.services.{ApiEndpoints, BvbInitialization, FiancialsServices, InitializationService, JquantsInitialization, QuotesServices, XetraInitialization}
 import zio.*
 import zio.http.{Client, DnsResolver, Server, ZClient}
 import zio.http.netty.NettyConfig
@@ -106,6 +106,14 @@ object Main extends ZIOAppDefault {
             }
             .forkDaemon
             .unless(skipInitialization)
+          // When full init is skipped, still run quote hygiene (ticker reuse / unadjusted jumps).
+          _ <- QuotesServices.nightlyHygiene
+            .provideSomeLayer(dbLayer)
+            .catchAll { error =>
+              ZIO.logError(s"Startup quote hygiene for ${market.id.id} failed: ${error.getMessage}")
+            }
+            .forkDaemon
+            .when(skipInitialization)
           _ <- CronJobs.start(market).provideSomeLayer(dbLayer).unless(skipCron)
           _ <- ZIO.logInfo(s"Cron jobs started for ${market.id.id}").unless(skipCron)
         } yield ()

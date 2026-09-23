@@ -14,6 +14,7 @@ object Markets {
     cron = MarketCron(
       quotes = "0 30 0 * * ?",
       splits = "0 0 2 * * ?",
+      clean = Some("0 30 2 * * ?"),
       screens = "0 0 3 * * ?",
       financials = Some("0 15 0 ? * SAT")
     ),
@@ -27,6 +28,7 @@ object Markets {
     cron = MarketCron(
       quotes = "0 30 0 * * ?",
       splits = "0 0 2 * * ?",
+      clean = None,
       screens = "0 0 3 * * ?",
       financials = None
     ),
@@ -40,6 +42,7 @@ object Markets {
     cron = MarketCron(
       quotes = "0 30 0 * * ?",
       splits = "0 0 2 * * ?",
+      clean = None,
       screens = "0 0 3 * * ?",
       financials = None
     ),
@@ -53,6 +56,7 @@ object Markets {
     cron = MarketCron(
       quotes = "0 30 0 * * ?",
       splits = "0 0 2 * * ?",
+      clean = None,
       screens = "0 0 3 * * ?",
       financials = None
     ),

@@ -4,7 +4,7 @@ import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.providers.massive.MassiveAsyncApi
 import io.greensheep.trading.core.screens.BreadthIndicators as MarketBreadth
 import io.greensheep.trading.core.types.{MarketDefinition, StockDescription}
-import io.greensheep.trading.dataservice.{MongoDataRepo, MassiveBridge, StockUniverse}
+import io.greensheep.trading.dataservice.{MongoDataRepo, StockUniverse}
 import zio.ZIO
 
 import java.time.LocalDate
@@ -173,43 +173,6 @@ object InitializationService {
     } yield ()
   }
 
-  private def quotesSanityCheck: ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Seq[(String, String)]] = {
-    for{
-      _ <- ZIO.logInfo("Performing quotes sanity check")
-      universe <- MongoDataRepo.getStockUniverse
-      results <- ZIO.foreachPar(universe.symbols) { ticker =>
-        QuotesServices.sanityCheck(ticker).either.map(res => (ticker, res))
-      }.withParallelism(8)
-      errors = results.collect { case (t, Left(err)) => (t, err) }
-    } yield errors
-  }
-
-  private def resetQuotes(ticker: String): ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] = {
-    for{
-      _ <- ZIO.logInfo(s"Resetting quotes for $ticker")
-      _ <- MongoDataRepo.clearQuotes(ticker)
-      //Retrieve quotes from Massive
-      remoteApi <- ZIO.service[MassiveAsyncApi]
-      allQuotes <- remoteApi.getAggregates(ticker, LocalDate.now().minusMonths(23))
-      quotes = allQuotes.map(MassiveBridge.aggregateToQuote)
-      //Save quotes to MongoDB
-      _ <- MongoDataRepo.updateDailyQuotes(ticker, quotes)
-      _ <- ZIO.logInfo(s"Reset quotes for $ticker completed, total quotes: ${quotes.size}")
-    } yield ()
-  }
-
-
-  private def repairQuotes: ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] = {
-    for{
-      _ <- ZIO.logInfo("Repairing quote data")
-      faults <- quotesSanityCheck
-      _ <- ZIO.logInfo(s"Faulty tickers: ${faults.size}")
-      _ <- ZIO.foreachDiscard(faults)(fault => ZIO.logInfo(s"$fault"))
-      faultyTickers = faults.map(_._1)
-      _ <- ZIO.foreachPar(faultyTickers)(resetQuotes).withParallelism(4)
-    } yield ()
-  }
-
   private def rectifySplits: ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] = {
     for{
       _ <- ZIO.logInfo("Rectifying split data")
@@ -226,7 +189,7 @@ object InitializationService {
       _ <- initializeStockUniverse(market)
       _ <- initializeQuotes(market)
       _ <- rectifySplits
-      _ <- repairQuotes
+      _ <- QuotesServices.nightlyHygiene
       _ <- InitializeDescriptions
         .catchAll(error => ZIO.logWarning(s"Description initialization skipped: ${error.getMessage}"))
         .forkDaemon

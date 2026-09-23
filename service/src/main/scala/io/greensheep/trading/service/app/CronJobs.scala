@@ -48,6 +48,7 @@ object CronJobs {
   ): ZIO[MongoDatabase & MassiveAsyncApi & AppHealth & FinnhubClient & Client & Scope, Throwable, Unit] = {
     val quotes = market.id.job("quotes")
     val splits = market.id.job("splits")
+    val clean = market.id.job("clean")
     val screens = market.id.job("screens")
     val financials = market.id.job("financials")
     for {
@@ -55,6 +56,12 @@ object CronJobs {
       _ <- ZIO.logInfo(s"Cron jobs for ${market.id.id} scheduled in local zone $localZone")
       _ <- supervised(quotes, market.cron.quotes, QuotesServices.DailyQuotesRetrieval)
       _ <- supervised(splits, market.cron.splits, rectifyRecentSplits)
+      _ <- market.cron.clean match {
+        case Some(expr) =>
+          supervised(clean, expr, QuotesServices.nightlyHygiene)
+        case None =>
+          ZIO.logInfo(s"Skipping clean cron for ${market.id.id}")
+      }
       _ <- market.cron.financials match {
         case Some(expr) if market.hasFinancials =>
           supervised(financials, expr, FiancialsServices.updateFinancials())
