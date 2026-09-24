@@ -9,37 +9,38 @@ object TrendScreens {
 
 
   val SEPA: ZIO[StockMarket, Throwable, Seq[(Stock, ScreenStats)]] = {
-    ZIO.serviceWith[StockMarket] {
-      stockMarket =>
-        stockMarket.stocks.values.toSeq filter {
-          stock =>
-            stock.currentPrice > stock.ma50 &&
-              stock.ma50 > stock.ma150 &&
-              stock.ma150 > stock.ma200 &&
-              stock.currentPrice > (stock.high52Week * 0.75) &&
-              stock.currentPrice > (stock.low52Week * 1.3) &&
-              stockMarket.ibdRelativeStrengthRanking(stock.symbol) > 70.0
-        } sortBy (s => (100 - stockMarket.ibdRelativeStrengthRanking(s.symbol))) map {
-          stock =>
-            (stock, ScreenStats(
-              ticker = stock.symbol,
-              stats = Map(
-                "currentPrice" -> f"${stock.currentPrice}%.2f",
-                "ma50" -> f"${stock.ma50}%.2f",
-                "ma150" -> f"${stock.ma150}%.2f",
-                "ma200" -> f"${stock.ma200}%.2f",
-                "52WeekHigh" -> f"${stock.high52Week}%.2f",
-                "52WeekLow" -> f"${stock.low52Week}%.2f",
-                "IBD strength" -> f"${stockMarket.ibdRelativeStrength(stock.symbol)}%.2f",
-                "IBD rank" -> f"${stockMarket.ibdRelativeStrengthRanking(stock.symbol)}%.2f",
-                "perf1q" -> f"${stock.perfQ1}%.2f",
-                "perf2q" -> f"${stock.perfQ2}%.2f",
-                "perf3q" -> f"${stock.perfQ3}%.2f",
-                "perf4q" -> f"${stock.perfQ4}%.2f"
-              )
-            ))
+    ZIO.serviceWith[StockMarket] { stockMarket =>
+      val candidates = stockMarket.stocks.values.toSeq.filter(TrendScreenQuality.eligible)
+      val eligibleMarket = StockMarket(candidates.map(s => s.symbol -> s).toMap)
+      candidates
+        .filter { stock =>
+          stock.currentPrice > stock.ma50 &&
+            stock.ma50 > stock.ma150 &&
+            stock.ma150 > stock.ma200 &&
+            stock.currentPrice > (stock.high52Week * 0.75) &&
+            stock.currentPrice > (stock.low52Week * 1.3) &&
+            eligibleMarket.ibdRelativeStrengthRanking.getOrElse(stock.symbol, 0.0) > 70.0
         }
-
+        .sortBy(s => 100 - eligibleMarket.ibdRelativeStrengthRanking.getOrElse(s.symbol, 0.0))
+        .map { stock =>
+          (stock, ScreenStats(
+            ticker = stock.symbol,
+            stats = Map(
+              "currentPrice" -> f"${stock.currentPrice}%.2f",
+              "ma50" -> f"${stock.ma50}%.2f",
+              "ma150" -> f"${stock.ma150}%.2f",
+              "ma200" -> f"${stock.ma200}%.2f",
+              "52WeekHigh" -> f"${stock.high52Week}%.2f",
+              "52WeekLow" -> f"${stock.low52Week}%.2f",
+              "IBD strength" -> f"${eligibleMarket.ibdRelativeStrength.getOrElse(stock.symbol, 0.0)}%.2f",
+              "IBD rank" -> f"${eligibleMarket.ibdRelativeStrengthRanking.getOrElse(stock.symbol, 0.0)}%.2f",
+              "perf1q" -> f"${stock.perfQ1}%.2f",
+              "perf2q" -> f"${stock.perfQ2}%.2f",
+              "perf3q" -> f"${stock.perfQ3}%.2f",
+              "perf4q" -> f"${stock.perfQ4}%.2f"
+            )
+          ))
+        }
     }
   }
 

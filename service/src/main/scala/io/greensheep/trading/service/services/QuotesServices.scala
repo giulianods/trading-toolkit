@@ -136,11 +136,23 @@ object QuotesServices {
           }
           .withParallelism(QuoteLoadParallelism)
         dirty = actions.filterNot(_._2 == QuoteHygiene.Ok)
-        _ <- ZIO.logInfo(s"Quote hygiene: ${dirty.size} tickers need repair of ${universe.symbols.size}")
-        _ <- ZIO.foreachParDiscard(dirty) { case (ticker, action) =>
+        localOnly = dirty.collect { case (t, a: QuoteHygiene.TruncateAndRefetch) => t -> a }
+        needApi = dirty.collect {
+          case (t, QuoteHygiene.FullReset) => t -> QuoteHygiene.FullReset
+        }
+        _ <- ZIO.logInfo(
+          s"Quote hygiene: ${dirty.size} dirty (${localOnly.size} local truncate, ${needApi.size} API reset) of ${universe.symbols.size}"
+        )
+        // Gap truncates are local Mongo writes — do not burn the 16s Massive queue.
+        _ <- ZIO.foreachParDiscard(localOnly) { case (ticker, action) =>
           applyHygiene(ticker, action)
             .catchAll(error => ZIO.logError(s"Hygiene failed for $ticker: ${error.getMessage}"))
-        }.withParallelism(HygieneParallelism)
+        }.withParallelism(QuoteLoadParallelism)
+        // Full resets share the rate-limited Massive queue; keep parallelism at 1.
+        _ <- ZIO.foreachDiscard(needApi) { case (ticker, action) =>
+          applyHygiene(ticker, action)
+            .catchAll(error => ZIO.logError(s"Hygiene failed for $ticker: ${error.getMessage}"))
+        }
       } yield ()
     }
 
@@ -158,12 +170,22 @@ object QuotesServices {
       case QuoteHygiene.Ok =>
         ZIO.unit
       case QuoteHygiene.TruncateAndRefetch(from) =>
-        ZIO.logInfo(s"Hygiene truncate+refetch $ticker from $from") *>
-          replaceQuotesFrom(ticker, from)
+        ZIO.logInfo(s"Hygiene local truncate $ticker from $from") *>
+          truncateQuotesLocally(ticker, from)
       case QuoteHygiene.FullReset =>
         ZIO.logInfo(s"Hygiene full reset $ticker") *>
           replaceQuotesFrom(ticker, LocalDate.now().minusMonths(DefaultHistoryMonths))
     }
+
+  /** Drop pre-gap bars in Mongo only (ticker-reuse). Avoids Massive rate limit. */
+  def truncateQuotesLocally(ticker: String, from: LocalDate): ZIO[MongoDatabase, Throwable, Unit] =
+    for {
+      data <- MongoDataRepo.getPriceData(ticker)
+      kept = data.quotes.filter(q => !q.day.isBefore(from))
+      _ <- MongoDataRepo.clearQuotes(ticker)
+      _ <- MongoDataRepo.updateDailyQuotes(ticker, kept)
+      _ <- ZIO.logInfo(s"Truncated quotes for $ticker from $from (${kept.size} bars kept)")
+    } yield ()
 
   def replaceQuotesFrom(
       ticker: String,
@@ -176,5 +198,13 @@ object QuotesServices {
       _ <- MongoDataRepo.clearQuotes(ticker)
       _ <- MongoDataRepo.updateDailyQuotes(ticker, quotes)
       _ <- ZIO.logInfo(s"Replaced quotes for $ticker from $from (${quotes.size} bars)")
+    } yield ()
+
+  /** Rescreen immediately (quality gates), then repair quotes, then rescreen again. */
+  def hygieneThenRescreen: ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] =
+    for {
+      _ <- ScreenerServices.ScreenerTask
+      _ <- nightlyHygiene
+      _ <- ScreenerServices.ScreenerTask
     } yield ()
 }

@@ -42,9 +42,14 @@ object QuoteHygiene {
     }
   }
 
+  /** Zero / negative prints break 52w lows and IBD (Infinity). */
+  def hasInvalidPrices(quotes: Seq[Quote]): Boolean =
+    quotes.exists(q => q.c <= 0 || q.h <= 0 || q.l < 0 || q.o < 0)
+
   def diagnose(data: DailyQuoteData): Action = {
     val quotes = data.quotes
     if (quotes.isEmpty) Ok
+    else if (hasInvalidPrices(quotes)) FullReset
     else {
       lastSeriesStartAfterGap(quotes) match {
         case Some(from) => TruncateAndRefetch(from)

@@ -58,7 +58,7 @@ object CronJobs {
       _ <- supervised(splits, market.cron.splits, rectifyRecentSplits)
       _ <- market.cron.clean match {
         case Some(expr) =>
-          supervised(clean, expr, QuotesServices.nightlyHygiene)
+          supervised(clean, expr, QuotesServices.hygieneThenRescreen)
         case None =>
           ZIO.logInfo(s"Skipping clean cron for ${market.id.id}")
       }

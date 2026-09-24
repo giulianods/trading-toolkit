@@ -48,6 +48,16 @@ object QuoteHygieneSpec extends ZIOSpecDefault {
       val d0 = LocalDate.of(2026, 8, 18)
       val data = DailyQuoteData(Seq(q(d0, 10.0), q(d0.plusDays(1), 25.0)))
       assertTrue(QuoteHygiene.diagnose(data) == QuoteHygiene.Ok)
+    },
+    test("full reset on zero-price junk bars") {
+      val d0 = LocalDate.of(2026, 3, 17)
+      val data = DailyQuoteData(
+        Seq(
+          Quote(d0, 0.0, 0.0, 0.0, 0.0, 100),
+          q(d0.plusDays(1), 1.1)
+        )
+      )
+      assertTrue(QuoteHygiene.diagnose(data) == QuoteHygiene.FullReset)
     }
   )
 }

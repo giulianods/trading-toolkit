@@ -106,14 +106,13 @@ object Main extends ZIOAppDefault {
             }
             .forkDaemon
             .unless(skipInitialization)
-          // When full init is skipped, still run quote hygiene (ticker reuse / unadjusted jumps).
-          _ <- QuotesServices.nightlyHygiene
+          // Rescreen first (SEPA quality gates), then repair quotes (local truncate + slow API resets).
+          _ <- QuotesServices.hygieneThenRescreen
             .provideSomeLayer(dbLayer)
             .catchAll { error =>
-              ZIO.logError(s"Startup quote hygiene for ${market.id.id} failed: ${error.getMessage}")
+              ZIO.logError(s"Startup quote hygiene/rescreen for ${market.id.id} failed: ${error.getMessage}")
             }
             .forkDaemon
-            .when(skipInitialization)
           _ <- CronJobs.start(market).provideSomeLayer(dbLayer).unless(skipCron)
           _ <- ZIO.logInfo(s"Cron jobs started for ${market.id.id}").unless(skipCron)
         } yield ()
