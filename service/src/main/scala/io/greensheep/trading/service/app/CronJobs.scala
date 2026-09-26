@@ -8,6 +8,7 @@ import io.greensheep.providers.jquants.JquantsClient
 import io.greensheep.providers.massive.MassiveAsyncApi
 import io.greensheep.providers.xetra.XetraClient
 import io.greensheep.trading.core.types.MarketDefinition
+import io.greensheep.trading.dataservice.MongoDataRepo
 import io.greensheep.trading.service.services.{BvbQuotesServices, FiancialsServices, JquantsQuotesServices, QuotesServices, ScreenerServices, XetraQuotesServices}
 import zio.*
 import zio.http.Client
@@ -120,6 +121,15 @@ object CronJobs {
   private def rectifyRecentSplits: ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] =
     ZIO.suspendSucceed {
       val today = java.time.LocalDate.now(localZone)
-      QuotesServices.rectifySplits(today.minusDays(14), today.minusDays(1))
+      for {
+        universe <- MongoDataRepo.getStockUniverse
+        lag = java.time.temporal.ChronoUnit.DAYS.between(universe.lastUpdateQuotes, today.minusDays(1))
+        _ <- if (lag > QuotesServices.ApiResetMaxQuoteLagDays)
+          ZIO.logWarning(
+            s"Skipping splits rectify while quotes are ${lag}d behind (lastUpdateQuotes=${universe.lastUpdateQuotes})"
+          )
+        else
+          QuotesServices.rectifySplits(today.minusDays(14), today.minusDays(1))
+      } yield ()
     }
 }

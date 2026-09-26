@@ -17,6 +17,10 @@ object QuotesServices {
   val HygieneParallelism = 4
   val DefaultHistoryMonths = 23
   val DefaultHistoryDays = 600
+  /** Cap Massive full-resets per hygiene pass so we don't starve the quotes catch-up queue. */
+  val MaxApiResetsPerPass = 20
+  /** If quote cursor is older than this many days, skip API resets entirely. */
+  val ApiResetMaxQuoteLagDays = 3
 
   def datesBetweenInclusive(startDate: LocalDate, endDate: LocalDate): Seq[LocalDate] = {
     val today = LocalDate.now()
@@ -137,20 +141,28 @@ object QuotesServices {
           .withParallelism(QuoteLoadParallelism)
         dirty = actions.filterNot(_._2 == QuoteHygiene.Ok)
         localOnly = dirty.collect { case (t, a: QuoteHygiene.TruncateAndRefetch) => t -> a }
-        needApi = dirty.collect {
-          case (t, QuoteHygiene.FullReset) => t -> QuoteHygiene.FullReset
-        }
+        needApi = dirty.collect { case (t, QuoteHygiene.FullReset) => t }
+        quoteLagDays =
+          java.time.temporal.ChronoUnit.DAYS.between(universe.lastUpdateQuotes, LocalDate.now().minusDays(1))
+        apiBudget =
+          if (quoteLagDays > ApiResetMaxQuoteLagDays) 0
+          else MaxApiResetsPerPass
+        apiBatch = needApi.take(apiBudget)
+        deferred = needApi.size - apiBatch.size
         _ <- ZIO.logInfo(
-          s"Quote hygiene: ${dirty.size} dirty (${localOnly.size} local truncate, ${needApi.size} API reset) of ${universe.symbols.size}"
+          s"Quote hygiene: ${dirty.size} dirty (${localOnly.size} local truncate, ${apiBatch.size} API reset, $deferred deferred; quoteLag=${quoteLagDays}d) of ${universe.symbols.size}"
         )
+        _ <- ZIO.logWarning(
+          s"Skipping ${needApi.size} Massive full-resets while quotes are ${quoteLagDays}d behind (lastUpdateQuotes=${universe.lastUpdateQuotes})"
+        ).when(apiBudget == 0 && needApi.nonEmpty)
         // Gap truncates are local Mongo writes — do not burn the 16s Massive queue.
         _ <- ZIO.foreachParDiscard(localOnly) { case (ticker, action) =>
           applyHygiene(ticker, action)
             .catchAll(error => ZIO.logError(s"Hygiene failed for $ticker: ${error.getMessage}"))
         }.withParallelism(QuoteLoadParallelism)
-        // Full resets share the rate-limited Massive queue; keep parallelism at 1.
-        _ <- ZIO.foreachDiscard(needApi) { case (ticker, action) =>
-          applyHygiene(ticker, action)
+        // Full resets share the rate-limited Massive queue; keep parallelism at 1 and cap count.
+        _ <- ZIO.foreachDiscard(apiBatch) { ticker =>
+          applyHygiene(ticker, QuoteHygiene.FullReset)
             .catchAll(error => ZIO.logError(s"Hygiene failed for $ticker: ${error.getMessage}"))
         }
       } yield ()
