@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { FixedSizeGrid as Grid } from 'react-window';
 import OhlcChart from './OhlcChart';
 import { useSelection } from '../context/SelectionContext';
-import { fetchQuotes } from '../api';
+import { fetchDescriptions, fetchQuotes } from '../api';
 
 const COLUMNS = 3;
 const CELL_GAP = 12;
@@ -20,10 +20,14 @@ function getViewportGridSize() {
   };
 }
 
-function ChartCell({ ticker, quotes, index, focusIndex, setFocusedIndex, pendingCheckRef }) {
+function ChartCell({ ticker, label, quotes, index, focusIndex, setFocusedIndex, pendingCheckRef }) {
   const { selectedTickers, onSelectionChange } = useSelection();
   const focused = index === focusIndex;
   const checked = selectedTickers.has(ticker);
+  const companyName = label?.companyName?.trim() ?? '';
+  const sector = label?.sector?.trim() ?? '';
+  const headerTitle = [companyName, sector].filter(Boolean).join(' · ');
+  const selectionLabel = companyName ? `${ticker}, ${companyName}` : ticker;
   return (
     <div
       className={`chart-wrapper${checked ? ' chart-wrapper--checked' : ''}`}
@@ -43,19 +47,29 @@ function ChartCell({ ticker, quotes, index, focusIndex, setFocusedIndex, pending
       }}
       role="button"
       tabIndex={-1}
-      aria-label={`Select ${ticker} for watchlist`}
+      aria-label={`Select ${selectionLabel} for watchlist`}
     >
-      <div className="chart-ticker" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="chart-ticker"
+        title={headerTitle || undefined}
+        onClick={(e) => e.stopPropagation()}
+      >
         <label className="chart-ticker-checkbox">
           <input
             type="checkbox"
             checked={selectedTickers.has(ticker)}
             onChange={(e) => onSelectionChange(ticker, e.target.checked)}
             onClick={(e) => e.stopPropagation()}
-            aria-label={`Include ${ticker} in watchlist`}
+            aria-label={`Include ${selectionLabel} in watchlist`}
           />
           <span className="chart-ticker-symbol">{ticker}</span>
         </label>
+        {(companyName || sector) && (
+          <span className="chart-ticker-details">
+            {companyName && <span className="chart-ticker-name">{companyName}</span>}
+            {sector && <span className="chart-ticker-sector">{sector}</span>}
+          </span>
+        )}
       </div>
       <OhlcChart
         ticker={ticker}
@@ -69,19 +83,21 @@ function ChartCell({ ticker, quotes, index, focusIndex, setFocusedIndex, pending
 
 function ChartGridInner({ market, tickers }) {
   const [quotesByTicker, setQuotesByTicker] = useState({});
+  const [labelsByTicker, setLabelsByTicker] = useState({});
   const [loading, setLoading] = useState(true);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [size, setSize] = useState(getViewportGridSize);
   const gridRef = useRef(null);
   const pendingCheckRef = useRef(null);
 
+  const tickerKey = tickers.join(',');
   const count = tickers.length;
   const cols = Math.min(COLUMNS, Math.max(1, count));
   const rows = Math.ceil(count / cols) || 1;
   const focusIndex = Math.max(0, Math.min(focusedIndex, count - 1));
 
   const loadQuotes = useCallback(async () => {
-    if (!tickers.length) {
+    if (!tickerKey) {
       setQuotesByTicker({});
       setLoading(false);
       return;
@@ -89,7 +105,7 @@ function ChartGridInner({ market, tickers }) {
     setLoading(true);
     const results = {};
     await Promise.all(
-      tickers.map(async (ticker) => {
+      tickerKey.split(',').map(async (ticker) => {
         try {
           const q = await fetchQuotes(market, ticker);
           results[ticker] = q;
@@ -100,11 +116,30 @@ function ChartGridInner({ market, tickers }) {
     );
     setQuotesByTicker(results);
     setLoading(false);
-  }, [market, tickers.join(',')]);
+  }, [market, tickerKey]);
 
   useEffect(() => {
     loadQuotes();
   }, [loadQuotes]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const symbols = tickerKey ? tickerKey.split(',') : [];
+    if (!symbols.length) {
+      setLabelsByTicker({});
+      return undefined;
+    }
+    fetchDescriptions(market, symbols)
+      .then((labels) => {
+        if (!cancelled) setLabelsByTicker(labels);
+      })
+      .catch(() => {
+        if (!cancelled) setLabelsByTicker({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [market, tickerKey]);
 
   useEffect(() => {
     setFocusedIndex(0);
@@ -169,7 +204,6 @@ function ChartGridInner({ market, tickers }) {
       if (index >= tickers.length) return <div key={`empty-${rowIndex}-${columnIndex}`} style={style} />;
       const ticker = tickers[index];
       const quotes = quotesByTicker[ticker] || [];
-      const focused = index === focusIndex;
       const cellStyle = {
         ...style,
         paddingRight: CELL_GAP,
@@ -180,6 +214,7 @@ function ChartGridInner({ market, tickers }) {
         <div key={ticker} style={cellStyle}>
           <ChartCell
             ticker={ticker}
+            label={labelsByTicker[ticker]}
             quotes={quotes}
             index={index}
             focusIndex={focusIndex}
@@ -189,7 +224,7 @@ function ChartGridInner({ market, tickers }) {
         </div>
       );
     },
-    [tickers, quotesByTicker, focusIndex, cols]
+    [tickers, quotesByTicker, labelsByTicker, focusIndex, cols]
   );
 
   if (loading) {

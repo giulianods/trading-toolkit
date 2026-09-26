@@ -87,7 +87,7 @@ object WebApp {
 
   private def isApiPath(relative: String): Boolean = {
     val first = relative.split('/').headOption.getOrElse("")
-    Set("markets", "watchlists", "quotes", "financials", "description", "breadth", "status").contains(first)
+    Set("markets", "watchlists", "quotes", "financials", "description", "descriptions", "breadth", "status").contains(first)
   }
 
   private def payloadResponse(name: String, payload: Either[Array[Byte], Path], method: Method): UIO[Response] =

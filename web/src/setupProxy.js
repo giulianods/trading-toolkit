@@ -10,6 +10,7 @@ module.exports = function (app) {
   app.use('/quotes', proxy);
   app.use('/financials', proxy);
   app.use('/description', proxy);
+  app.use('/descriptions', proxy);
   app.use('/breadth', proxy);
   app.use('/status', proxy);
 };

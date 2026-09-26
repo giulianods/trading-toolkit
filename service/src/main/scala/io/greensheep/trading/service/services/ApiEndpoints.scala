@@ -6,7 +6,7 @@ import io.greensheep.trading.dataservice.{MarketStore, MongoDataRepo}
 import io.greensheep.trading.service.app.{AppHealth, AppStatus}
 import zio.*
 import zio.http.*
-import zio.json.EncoderOps
+import zio.json.{DeriveJsonEncoder, EncoderOps, JsonEncoder}
 
 import java.lang
 import java.time.LocalDate
@@ -155,8 +155,33 @@ object ApiEndpoints {
         MongoDataRepo.getWatchlistLatest(name).map(watchlist => Response.json(watchlist.toJson))
     }
 
+  private final case class ChartLabel(companyName: String, sector: String)
+
+  private object ChartLabel {
+    implicit val encoder: JsonEncoder[ChartLabel] = DeriveJsonEncoder.gen[ChartLabel]
+  }
+
+  private val MaxDescriptionTickers = 500
+
   private def descriptionResponse(ticker: String): ZIO[MongoDatabase, Throwable, Response] =
     MongoDataRepo.getStockDescription(ticker).map(data => Response.json(data.toJson))
+
+  /** Company name and sector (SIC description) for the chart header. Missing tickers are omitted. */
+  private def descriptionsResponse(req: Request): ZIO[MongoDatabase, Throwable, Response] =
+    for {
+      tickersParam <- ZIO
+        .fromOption(req.url.queryParams.get("tickers"))
+        .orElseFail(new IllegalArgumentException("Missing required query parameter: tickers"))
+      tickers = tickersParam.split(",").map(_.trim).filter(_.nonEmpty).distinct.toSeq
+      _ <- ZIO.fail(new IllegalArgumentException("At least one ticker is required")).when(tickers.isEmpty)
+      _ <- ZIO
+        .fail(new IllegalArgumentException(s"at most $MaxDescriptionTickers tickers"))
+        .when(tickers.size > MaxDescriptionTickers)
+      descriptions <- MongoDataRepo.getStockDescriptions(tickers)
+      labels = descriptions.iterator.map { stock =>
+        stock.symbol -> ChartLabel(companyName = stock.companyName, sector = stock.sicDescription)
+      }.toMap
+    } yield Response.json(labels.toJson)
 
   private def breadthResponse(req: Request): ZIO[MongoDatabase, Throwable, Response] =
     (req.url.queryParams.get("start"), req.url.queryParams.get("end")) match {
@@ -215,6 +240,10 @@ object ApiEndpoints {
         Handler.fromFunctionZIO[(String, String, String, Request)] { case (country, provider, name, req) =>
           withMarket(store, country, provider)(watchlistResponse(name, req))
         },
+      (Method.GET / "markets" / string("country") / string("provider") / "descriptions") ->
+        Handler.fromFunctionZIO[(String, String, Request)] { case (country, provider, req) =>
+          withMarket(store, country, provider)(descriptionsResponse(req))
+        },
       (Method.GET / "markets" / string("country") / string("provider") / "description" / string("ticker")) ->
         Handler.fromFunctionZIO[(String, String, String, Request)] { case (country, provider, ticker, _) =>
           withMarket(store, country, provider)(descriptionResponse(ticker))
@@ -241,6 +270,10 @@ object ApiEndpoints {
       (Method.GET / "watchlists" / string("name")) ->
         Handler.fromFunctionZIO[(String, Request)] { case (name, req) =>
           withMarket(store, "us", "massive")(watchlistResponse(name, req))
+        },
+      (Method.GET / "descriptions") ->
+        Handler.fromFunctionZIO[Request] { req =>
+          withMarket(store, "us", "massive")(descriptionsResponse(req))
         },
       (Method.GET / "description" / string("ticker")) ->
         Handler.fromFunctionZIO[(String, Request)] { case (ticker, _) =>

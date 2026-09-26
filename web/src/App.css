@@ -197,7 +197,14 @@
 }
 
 .chart-ticker {
-  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  overflow: hidden;
+  white-space: nowrap;
   font-size: 0.9rem;
   font-weight: 600;
   color: #d1d5db;
@@ -213,6 +220,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
   cursor: pointer;
   margin: 0;
   user-select: none;
@@ -225,8 +233,33 @@
   accent-color: var(--green);
 }
 
-.chart-ticker-symbol {
-  flex: 1;
+.chart-ticker-details {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 400;
+}
+
+.chart-ticker-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.78rem;
+  color: #9ca3af;
+}
+
+.chart-ticker-sector {
+  flex: 0 1 auto;
+  max-width: 46%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.72rem;
+  color: #6b7280;
 }
 
 .chart-cell {

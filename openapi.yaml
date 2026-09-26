@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   description: |
     Canonical data routes are `/markets/{country}/{provider}/...`.
-    Unprefixed `/quotes`, `/financials`, `/watchlists`, `/description`, and `/breadth`
+    Unprefixed `/quotes`, `/financials`, `/watchlists`, `/description`, `/descriptions`, and `/breadth`
     paths alias to the US Massive market (`us` / `massive`). `/status` is process-wide.
 servers:
   - url: http://localhost:7777
@@ -121,6 +121,32 @@ paths:
       responses:
         '200':
           $ref: '#/paths/~1watchlists~1{name}/get/responses/200'
+        '404':
+          $ref: '#/components/responses/NotFoundText'
+        '500':
+          $ref: '#/components/responses/InternalErrorText'
+  /markets/{country}/{provider}/descriptions:
+    get:
+      tags: [Metadata]
+      summary: Get company name and sector for chart headers
+      description: |
+        Returns a map keyed by ticker. Tickers with no stored description are omitted.
+        `sector` is the SIC description when the provider supplies one, otherwise an empty string.
+        At most 500 tickers per request.
+      parameters:
+        - $ref: '#/components/parameters/CountryParam'
+        - $ref: '#/components/parameters/ProviderParam'
+        - name: tickers
+          in: query
+          required: true
+          description: Comma-separated tickers, e.g. `AAPL,MSFT`.
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/paths/~1descriptions/get/responses/200'
+        '400':
+          $ref: '#/components/responses/BadRequestText'
         '404':
           $ref: '#/components/responses/NotFoundText'
         '500':
@@ -376,6 +402,41 @@ paths:
                         stats:
                           breakoutScore: '78'
                           rsRank: '92'
+        '500':
+          $ref: '#/components/responses/InternalErrorText'
+  /descriptions:
+    get:
+      tags: [Metadata]
+      summary: Get company name and sector for chart headers
+      deprecated: true
+      description: Alias for `/markets/us/massive/descriptions`.
+      parameters:
+        - name: tickers
+          in: query
+          required: true
+          description: Comma-separated tickers, e.g. `AAPL,MSFT`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Labels keyed by ticker symbol
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/ChartLabel'
+              examples:
+                sample:
+                  value:
+                    AAPL:
+                      companyName: Apple Inc.
+                      sector: Electronic Computers
+                    MSFT:
+                      companyName: Microsoft Corporation
+                      sector: ''
+        '400':
+          $ref: '#/components/responses/BadRequestText'
         '500':
           $ref: '#/components/responses/InternalErrorText'
   /description/{ticker}:
@@ -667,6 +728,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ScreenStats'
+    ChartLabel:
+      type: object
+      required: [companyName, sector]
+      properties:
+        companyName:
+          type: string
+        sector:
+          type: string
+          description: SIC description when available; otherwise an empty string.
     StockDescription:
       type: object
       required:

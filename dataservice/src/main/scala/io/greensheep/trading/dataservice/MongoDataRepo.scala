@@ -396,6 +396,16 @@ object MongoDataRepo {
     } yield stock
   }
 
+  def getStockDescriptions(symbols: Seq[String]): ZIO[MongoDatabase, Throwable, Seq[StockDescription]] =
+    if (symbols.isEmpty) ZIO.succeed(Seq.empty)
+    else
+      for {
+        db <- ZIO.service[MongoDatabase]
+        coll = db.getCollection[StockDescription]("stocks-description")
+        pub = coll.find(filters.in("_id", symbols.distinct)).run
+        stocks <- pub.toZIOStream().runCollect.map(_.toSeq)
+      } yield stocks
+
   def getAllStockDescriptions: ZIO[MongoDatabase, Throwable, Seq[StockDescription]] = {
     for {
       db <- ZIO.service[MongoDatabase]

@@ -55,4 +55,32 @@ export async function fetchQuotes(market, ticker) {
   return quotes.slice(-DEFAULT_CHART_DAYS);
 }
 
+const DESCRIPTION_CHUNK = 200;
+
+/**
+ * Company name and sector for chart headers.
+ * Sector is the SIC description when the provider has one, otherwise "".
+ * Tickers with no stored description are omitted.
+ * @param {{ country: string, provider: string }} market
+ * @param {string[]} tickers
+ * @returns {Promise<Record<string, { companyName: string, sector: string }>>}
+ */
+export async function fetchDescriptions(market, tickers) {
+  const unique = [...new Set(tickers.filter(Boolean))];
+  if (!unique.length) return {};
+  const chunks = [];
+  for (let i = 0; i < unique.length; i += DESCRIPTION_CHUNK) {
+    chunks.push(unique.slice(i, i + DESCRIPTION_CHUNK));
+  }
+  const parts = await Promise.all(
+    chunks.map(async (chunk) => {
+      const url = apiPath(`${marketRoot(market)}/descriptions`, { tickers: chunk.join(',') });
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Descriptions: ${res.status}`);
+      return res.json();
+    })
+  );
+  return Object.assign({}, ...parts);
+}
+
 export { DEFAULT_CHART_DAYS };
