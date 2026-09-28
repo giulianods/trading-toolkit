@@ -38,9 +38,13 @@ object Main extends ZIOAppDefault {
     val mongoUrl = LocalConfig.get("mongodb.url").getOrElse("mongodb://127.0.0.1:27017")
 
     val outboundHttpClient =
-      (ZLayer.succeed(ZClient.Config.default.noIdleTimeout) ++
+      (ZLayer.succeed(
+        ZClient.Config.default
+          .connectionTimeout(20.seconds)
+          .idleTimeout(2.minutes)
+      ) ++
         ZLayer.succeed(NettyConfig.default) ++
-        DnsResolver.default) >>> Client.live
+        DnsResolver.system) >>> Client.live
 
     val massiveLayer = MassiveAsyncApi.buildLayer
     val finnhubLayer = ZLayer.succeed(FinnhubClient.make(if (finnhubApiKey.isEmpty) "unused" else finnhubApiKey))

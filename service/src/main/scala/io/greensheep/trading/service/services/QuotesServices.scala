@@ -73,7 +73,9 @@ object QuotesServices {
             written =>
               ZIO.logInfo(s"No trading session for $date").when(!written && firstFailure.isEmpty) *>
                 ZIO.succeed(stepQuoteCursor(lastOk, firstFailure, date, Right(written)))
-          )
+          ).tap { next =>
+            ZIO.whenDiscard(next._2.isEmpty && next._1.contains(date))(rememberQuoteDate(date))
+          }
       }
     } yield lastWritten._1
   }
@@ -95,6 +97,19 @@ object QuotesServices {
       case Right(false) =>
         (lastOk, None)
     }
+
+  /** Persist a completed session so a long catch-up is visible before the full range finishes. */
+  private def rememberQuoteDate(date: LocalDate): ZIO[MongoDatabase, Throwable, Unit] =
+    MongoDataRepo.hasStockUniverse.flatMap {
+      case false => ZIO.unit
+      case true =>
+        MongoDataRepo.getStockUniverse.flatMap { universe =>
+          MongoDataRepo
+            .saveStockUniverse(universe.copy(lastUpdateQuotes = date))
+            .when(date.isAfter(universe.lastUpdateQuotes))
+            .unit
+        }
+    }.catchAll(error => ZIO.logWarning(s"Could not advance lastUpdateQuotes to $date: ${error.getMessage}"))
 
   private def fetchAndStore(
       remoteApi: MassiveAsyncApi,

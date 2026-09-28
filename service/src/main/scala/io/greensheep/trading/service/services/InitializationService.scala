@@ -82,11 +82,11 @@ object InitializationService {
     for {
       _ <- ZIO.logInfo(s"Initializing quotes for ${market.id.id}")
       alreadyRan <- MongoDataRepo.hasStockUniverse
-      usCommonStocks <- QuotesServices.TickersUsCommonStocks  //TODO diff with existing symbols
       _ <- if(!alreadyRan) {
-        val start = LocalDate.now().minusMonths(23)
-        val end = LocalDate.now().minusDays(1)
-        for{
+        for {
+          usCommonStocks <- QuotesServices.TickersUsCommonStocks
+          start = LocalDate.now().minusMonths(23)
+          end = LocalDate.now().minusDays(1)
           _ <- ZIO.logInfo("First run - creating stock universe")
           lastWritten <- QuotesServices.getDailySnapshotService(start, end)
           stockUniverse = StockUniverse(_id = "stock-universe",
@@ -107,8 +107,7 @@ object InitializationService {
           lastWritten <- QuotesServices.getDailySnapshotService(start, end)
           _ <- MongoDataRepo.saveStockUniverse(
             stockUniverse.copy(
-              lastUpdateQuotes = lastWritten.getOrElse(stockUniverse.lastUpdateQuotes),
-              symbols = usCommonStocks
+              lastUpdateQuotes = lastWritten.getOrElse(stockUniverse.lastUpdateQuotes)
             )
           )
         } yield ()
@@ -186,8 +185,11 @@ object InitializationService {
   def initializeApp(market: MarketDefinition): ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] =  {
     for {
       _ <- ZIO.logInfo(s"Initializing market ${market.id.id}")
-      _ <- initializeStockUniverse(market)
+      // Catch quotes up before refreshing the ticker list. A hung ticker call must not block prices.
       _ <- initializeQuotes(market)
+      _ <- initializeStockUniverse(market).catchAll { error =>
+        ZIO.logError(s"Stock universe refresh failed, continuing with stored symbols: ${error.getMessage}")
+      }
       _ <- rectifySplits
       _ <- QuotesServices.nightlyHygiene
       _ <- InitializeDescriptions

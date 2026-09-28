@@ -13,10 +13,41 @@ import java.time.LocalDate
 
 object MassiveAsyncApi {
 
+  /** Backstop if Netty does not surface a stalled socket. Longer than the client idle timeout. */
+  val RequestTimeout: Duration = 3.minutes
+
   case class JobHandler[X](
       request: ApiRequest[X],
       promise: Promise[Throwable, ApiResponse[X]]
   )
+
+  /**
+   * Wait for `effect`, but do not let a non-interruptible socket read freeze the caller.
+   * A daemon timer completes the wait; the in-flight fiber is abandoned in the background.
+   * `timeoutFail` is not used: its implementation waits for the loser to finish interrupting,
+   * which never happens when Netty channel setup is uninterruptible.
+   */
+  def runBounded[R, A](effect: ZIO[R, Throwable, A], timeout: Duration): ZIO[R, Throwable, A] =
+    for {
+      done <- Promise.make[Throwable, A]
+      // Start the timer before the call. A defect or a blocking socket must not
+      // skip the timer, and a died child must complete this promise as a failure
+      // so the queue worker is not killed by Promise.done(Exit.die).
+      timer <- (ZIO.sleep(timeout) *>
+        done.fail(new RuntimeException(s"Massive request timed out after ${timeout.toSeconds}s")) *>
+        ZIO.logWarning(s"Massive request timed out after ${timeout.toSeconds}s")).forkDaemon
+      fiber <- effect.forkDaemon
+      _ <- fiber.await.flatMap { exit =>
+        val complete = exit.foldExit(
+          cause => done.fail(cause.squash),
+          value => done.succeed(value)
+        )
+        complete.unit
+      }.forkDaemon
+      result <- done.await
+      _ <- timer.interruptFork
+      _ <- fiber.interruptFork
+    } yield result
 
   def buildLayer: RLayer[Client, MassiveAsyncApi] =
     ZLayer.fromZIO(build())
@@ -28,15 +59,19 @@ object MassiveAsyncApi {
         .fromQueue(queue)
         .schedule(Schedule.spaced(16.seconds))
         .mapZIO { job =>
-          job.request
-            .perform()
-            .timeoutFail(new RuntimeException("Massive request timed out"))(30.seconds)
-            .retry(TransientRetry.http)
-            .flatMap(result => job.promise.succeed(result).unit)
-            .catchAll { error =>
-              ZIO.logError(s"Massive job failed: ${error.getMessage}") *>
-                job.promise.fail(error).unit
-            }
+          val name = job.request.getClass.getSimpleName
+          ZIO.logInfo(s"Massive request $name") *>
+            runBounded(job.request.perform(), RequestTimeout)
+              .retry(TransientRetry.http)
+              .flatMap(result => job.promise.succeed(result).unit)
+              .catchAllCause { cause =>
+                if (cause.isInterrupted) ZIO.failCause(cause)
+                else {
+                  val error = cause.squash
+                  ZIO.logError(s"Massive job $name failed: ${error.getMessage}") *>
+                    job.promise.fail(error).unit
+                }
+              }
         }
       _ <- stream.runDrain.forkDaemon
     } yield MassiveAsyncApi(queue)

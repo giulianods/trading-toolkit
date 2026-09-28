@@ -4,7 +4,7 @@ import io.greensheep.providers.massive.MarketClient
 import io.greensheep.providers.massive.datatypes.{Aggregate, ApiResponse}
 import io.greensheep.providers.massive.requests.ApiRequest.MassiveClient
 import zio.ZIO
-import zio.http.{Client, Method, Request}
+import zio.http.{Client, QueryParams}
 import zio.json.*
 
 
@@ -25,6 +25,10 @@ case  class GroupedDailyRequest(
       client <- ZIO.service[Client]
       _ <- ZIO.logInfo(s"Performing request grouped daily $date")
       url = (client.url / "v2/aggs/grouped/locale/us/market/stocks" / date)
+        .addQueryParams(QueryParams(
+          "adjusted" -> adjusted.toString,
+          "include_otc" -> includeOtc.toString
+        ))
       resultString <- MassiveHttp.get(url)
       decoded = resultString.fromJson[ApiResponse[Seq[Aggregate]]]
       apiResponse <- ZIO.fromEither(decoded.left.map(RuntimeException(_)))

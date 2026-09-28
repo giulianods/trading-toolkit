@@ -1,7 +1,8 @@
 package io.greensheep.providers.massive
 
 import io.greensheep.providers.massive.datatypes.{Aggregate, ApiResponse}
-import io.greensheep.providers.massive.requests.AggregatesRequest
+import io.greensheep.providers.massive.requests.{AggregatesRequest, MassiveHttp}
+import zio.*
 import zio.json.*
 import zio.http.URL
 import zio.test.*
@@ -36,6 +37,39 @@ object MassiveModelSpec extends ZIOSpecDefault {
 
       assertTrue(requestUrl.queryParams.get("apiKey").contains("dummy-token"))
     },
+    test("relative Massive paths resolve against api.massive.com") {
+      val relative = URL.empty / "v2" / "aggs" / "grouped" / "locale" / "us" / "market" / "stocks" / "2026-08-21"
+      val resolved = MassiveHttp.absolute(relative)
+      assertTrue(
+        resolved.host.contains("api.massive.com"),
+        resolved.encode.startsWith("https://api.massive.com/v2/aggs/grouped/locale/us/market/stocks/2026-08-21")
+      )
+    },
+    test("bounded run returns a completed result") {
+      for {
+        value <- MassiveAsyncApi.runBounded(ZIO.succeed(7), 5.seconds)
+      } yield assertTrue(value == 7)
+    },
+    test("bounded run turns a defect into a failure") {
+      for {
+        exit <- MassiveAsyncApi.runBounded(ZIO.die(new IllegalArgumentException("Absolute URL is required")), 5.seconds).exit
+      } yield assertTrue(
+        exit match {
+          case Exit.Failure(cause) => cause.failureOption.exists(_.getMessage.contains("Absolute URL"))
+          case Exit.Success(_)     => false
+        }
+      )
+    },
+    test("bounded run abandons a hung effect") {
+      for {
+        started <- Clock.instant
+        exit <- MassiveAsyncApi.runBounded(ZIO.never, 200.millis).exit
+        finished <- Clock.instant
+      } yield assertTrue(
+        exit.isFailure,
+        finished.toEpochMilli - started.toEpochMilli < 5000L
+      )
+    } @@ TestAspect.withLiveClock,
     test("API key config maps massive.api.key to MASSIVE_API_KEY") {
       assertTrue("massive.api.key".toUpperCase.replace('.', '_') == "MASSIVE_API_KEY")
     },
