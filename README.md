@@ -110,3 +110,7 @@ sbt "service/deploy"           # jar + local.properties → Docker (local or SSH
 ```
 
 `scripts/package.sh` and `scripts/deploy.sh` wrap the same sbt tasks.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
