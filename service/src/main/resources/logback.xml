@@ -6,9 +6,9 @@
     </appender>
 
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/ttk.log</file>
+        <file>${TTK_LOG_DIR:-logs}/ttk.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/ttk.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <fileNamePattern>${TTK_LOG_DIR:-logs}/ttk.%d{yyyy-MM-dd}.log</fileNamePattern>
             <maxHistory>30</maxHistory>
             <totalSizeCap>1GB</totalSizeCap>
         </rollingPolicy>
