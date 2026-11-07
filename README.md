@@ -2,7 +2,56 @@
 
 Multi-market quotes toolkit (US Massive, Romania BVB, Germany Xetra, Japan J-Quants). The service talks to MongoDB, initializes each enabled market’s universe and quotes at startup, then refreshes them on a nightly cron. HTTP API + UI listen on port **7777**.
 
-## Prerequisites
+## Develop with Docker
+
+Install Docker with the Compose plugin (Docker Desktop on Windows). The
+containers provide the JDK, Scala, sbt, Node.js, and MongoDB.
+
+1. From the repository root, copy `local.properties.example` to
+   `local.properties` if it doesn't already exist.
+2. Set `ttk.markets=ro-bvb` to try the app without API keys, or keep the
+   markets you want and fill in their keys using the config table below.
+   Compose sets `MONGODB_URL` to use its own MongoDB container.
+3. Start the stack:
+
+   ```sh
+   docker compose up --build
+   ```
+
+Open the React UI at http://localhost:3000 and select an enabled market.
+The backend status is at http://localhost:7777/status. The first start
+downloads dependencies and can take longer while the backend backfills quotes.
+
+Frontend edits reload automatically. After a Scala edit or a change to
+`local.properties`, run `docker compose restart backend` to recompile and restart.
+
+```sh
+docker compose run --rm --no-deps backend sbt -batch test
+docker compose down
+```
+
+The test command runs the sbt suite in a separate container. MongoDB data
+and dependency caches persist across `docker compose down`.
+
+### Open in IntelliJ IDEA
+
+With Docker Desktop running and IntelliJ IDEA's Dev Containers plugin enabled,
+open `.devcontainer/devcontainer.json`. Use the gutter action **Create Dev
+Container → Create Dev Container and Mount Sources**. This opens the local
+checkout inside the backend container with JDK 21 and sbt. Stop any separate
+`docker compose up` session first so the IDE can use the same local ports.
+
+The Dev Container starts MongoDB and the React dev server alongside the IDE
+container. Once `local.properties` is configured, run `sbt service/run` in
+IntelliJ's container terminal or launch `Main` from the IDE.
+
+For Git on a Windows checkout, run `git config --local core.autocrlf true`
+in the repository if Windows Git uses CRLF. The host and container share
+the repository's Git config, including the commit author. To use an SSH
+remote from IntelliJ, start the Windows OpenSSH agent, add your GitHub key
+with `ssh-add`, and reconnect with SSH agent forwarding enabled.
+
+## Prerequisites for running outside Docker
 
 - JDK 21+
 - [sbt](https://www.scala-sbt.org/)

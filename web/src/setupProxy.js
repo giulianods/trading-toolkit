@@ -2,7 +2,7 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 
 module.exports = function (app) {
   const proxy = createProxyMiddleware({
-    target: 'http://localhost:7777',
+    target: process.env.TTK_API_PROXY_TARGET || 'http://localhost:7777',
     changeOrigin: true,
   });
   app.use('/markets', proxy);

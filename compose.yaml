@@ -1,0 +1,58 @@
+services:
+  mongo:
+    image: mongo:8.0
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ ping: 1 })"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ./project
+      dockerfile: Dockerfile.dev
+    init: true
+    working_dir: /workspace
+    command: ["sbt", "-batch", "service/run"]
+    environment:
+      MONGODB_URL: mongodb://mongo:27017
+      TTK_LOG_DIR: /var/log/ttk
+    volumes:
+      - .:/workspace
+      - backend-logs:/var/log/ttk
+      - sbt-cache:/root/.sbt
+      - coursier-cache:/root/.cache/coursier
+    ports:
+      - "127.0.0.1:7777:7777"
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  frontend:
+    image: node:22-bookworm-slim
+    init: true
+    working_dir: /workspace
+    command: ["sh", "-c", "npm ci --no-audit --no-fund && exec npm start"]
+    environment:
+      HOST: 0.0.0.0
+      BROWSER: none
+      WATCHPACK_POLLING: "true"
+      TTK_API_PROXY_TARGET: http://backend:7777
+    volumes:
+      - ./web:/workspace
+      - node-modules:/workspace/node_modules
+      - npm-cache:/root/.npm
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  mongo-data:
+  backend-logs:
+  sbt-cache:
+  coursier-cache:
+  node-modules:
+  npm-cache:

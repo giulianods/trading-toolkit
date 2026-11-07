@@ -1,0 +1,15 @@
+FROM eclipse-temurin:21-jdk-noble
+
+COPY build.properties /tmp/sbt-build.properties
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        curl git openssh-client procps unzip \
+        libfreetype6 libxext6 libxi6 libxrender1 libxtst6 \
+    && rm -rf /var/lib/apt/lists/* \
+    && sbt_version="$(sed -n 's/^sbt\.version[[:space:]]*=[[:space:]]*//p' /tmp/sbt-build.properties | tr -d '\r')" \
+    && test -n "$sbt_version" \
+    && curl -fsSL "https://github.com/sbt/sbt/releases/download/v${sbt_version}/sbt-${sbt_version}.tgz" -o /tmp/sbt.tgz \
+    && tar -xzf /tmp/sbt.tgz -C /opt \
+    && rm /tmp/sbt.tgz /tmp/sbt-build.properties
+
+ENV PATH="/opt/sbt/bin:${PATH}"

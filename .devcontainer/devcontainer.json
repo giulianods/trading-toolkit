@@ -1,0 +1,13 @@
+{
+  "name": "Trading Toolkit",
+  "dockerComposeFile": ["../compose.yaml", "compose.ide.yaml"],
+  "service": "backend",
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "stopCompose",
+  "customizations": {
+    "jetbrains": {
+      "backend": "IntelliJ",
+      "plugins": ["org.intellij.scala"]
+    }
+  }
+}
