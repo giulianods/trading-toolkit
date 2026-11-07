@@ -146,8 +146,7 @@ class MassiveAsyncApi(queue: Queue[MassiveAsyncApi.JobHandler[?]]) {
     } yield results.getOrElse(Seq.empty)
   }
 
-  def getAggregates(ticker: String, fromDate: LocalDate): ZIO[Any, Throwable, Seq[Aggregate]] = {
-    val to = LocalDate.now().minusDays(1)
+  def getAggregates(ticker: String, fromDate: LocalDate, to: LocalDate): ZIO[Any, Throwable, Seq[Aggregate]] = {
     val request = AggregatesRequest(stocksTicker = ticker, from = fromDate.toString, to = to.toString)
     for {
       promise <- doRequest(request)

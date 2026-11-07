@@ -4,7 +4,7 @@ import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.trading.core.screens.{BreadthIndicators as MarketBreadth, TrendScreens}
 import io.greensheep.trading.core.types.{DailyAggregate, DailyQuoteData, ScreenStats, Stock, StockMarket, Watchlist}
 import io.greensheep.trading.dataservice.MongoDataRepo
-import zio.{Chunk, ZIO, ZLayer}
+import zio.{Chunk, Clock, ZIO, ZLayer}
 
 import java.time.LocalDate
 
@@ -33,12 +33,13 @@ object ScreenerServices {
   } yield StockMarket(stocks.map(stock => stock.symbol -> stock).toMap)
 
   def buildWatchlist(name: String, date: LocalDate)(stocks: Seq[(Stock, ScreenStats)]): ZIO[Any, Throwable, Watchlist] =
-    ZIO.succeed {
+    Clock.instant.map { generatedAt =>
       Watchlist(
         day = date,
         screenName = name,
         tickers = stocks.map(_._1.symbol),
-        stats = stocks.map(_._2)
+        stats = stocks.map(_._2),
+        generatedAt = Some(generatedAt)
       )
     }
 
@@ -77,25 +78,31 @@ object ScreenerServices {
   }
 
   val ScreenerTask: ZIO[MongoDatabase, Throwable, Unit] =
-    ZIO.suspendSucceed {
-      val asOf = LocalDate.now().minusDays(1)
+    ZIO.suspendSucceed(runScreener(LocalDate.now().minusDays(1)))
+
+  val massiveScreenerTask: ZIO[MongoDatabase, Throwable, Unit] =
+    MongoDataRepo.getStockUniverse.flatMap(universe => runScreener(universe.lastUpdateQuotes, requireSession = true))
+
+  private def runScreener(asOf: LocalDate, requireSession: Boolean = false): ZIO[MongoDatabase, Throwable, Unit] =
       ZIO.logSpan("screener-task") {
         for {
           _ <- ZIO.logInfo(s"Running screener task for $asOf")
           market <- LoadQuotes
           snapshot = market.historicalSnapshot(asOf)
-          watchlists <- buildScreens(asOf).provideLayer(ZLayer.succeed(snapshot))
-          _ <- ZIO.foreachDiscard(watchlists)(MongoDataRepo.saveWatchlist)
-          _ <- ZIO.logInfo(s"Saved ${watchlists.size} watchlists")
-          _ <- if (snapshot.stocks.nonEmpty) {
+          hasSession = snapshot.stocks.valuesIterator.exists(_.dailyAggregates.last.t == asOf)
+          _ <- (for {
+            watchlists <- buildScreens(asOf).provideLayer(ZLayer.succeed(snapshot))
+            _ <- ZIO.foreachDiscard(watchlists)(MongoDataRepo.saveWatchlist)
+            _ <- ZIO.logInfo(s"Saved ${watchlists.size} watchlists")
+          } yield ()).when(!requireSession || hasSession)
+          _ <- if (snapshot.stocks.nonEmpty && (!requireSession || hasSession)) {
             val indicators = MarketBreadth.fromStockMarket(snapshot).copy(date = asOf)
             MongoDataRepo
               .saveMarketBreadth(indicators)
               .catchAll(error => ZIO.logError(s"Failed to save market breadth: ${error.getMessage}"))
           } else {
-            ZIO.logWarning("Skipping market breadth because the snapshot has no stocks")
+            ZIO.logWarning(s"Skipping market breadth because there is no usable snapshot for $asOf")
           }
         } yield ()
       }
-    }
 }

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { DEFAULT_MARKET_ID, MARKETS, fetchWatchlist, marketById } from './api';
+import { DEFAULT_MARKET_ID, MARKETS, fetchMarketDataStatus, fetchWatchlist, marketById } from './api';
 import ChartGrid from './components/ChartGrid';
 import { SelectionContext } from './context/SelectionContext';
 import './App.css';
@@ -33,6 +33,7 @@ function App() {
   const [marketId, setMarketId] = useState(readStoredMarketId);
   const market = useMemo(() => marketById(marketId), [marketId]);
   const [watchlist, setWatchlist] = useState(null);
+  const [latestQuoteDate, setLatestQuoteDate] = useState(undefined);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedTickers, setSelectedTickers] = useState(() => new Set());
@@ -73,24 +74,21 @@ function App() {
     URL.revokeObjectURL(url);
   }, [selectedTickers, watchlist?.screenName, watchlist?.day, watchlist?.tickers, market.label]);
 
-  const loadWatchlist = useCallback(async (name = DEFAULT_WATCHLIST) => {
+  useEffect(() => {
+    let active = true;
     setLoading(true);
     setError(null);
     setWatchlist(null);
-    try {
-      const data = await fetchWatchlist(market, name);
-      setWatchlist(data);
-    } catch (e) {
-      setError(e.message);
-      setWatchlist(null);
-    } finally {
-      setLoading(false);
-    }
+    setLatestQuoteDate(undefined);
+    fetchWatchlist(market, DEFAULT_WATCHLIST)
+      .then((data) => { if (active) setWatchlist(data); })
+      .catch((e) => { if (active) setError(e.message); })
+      .finally(() => { if (active) setLoading(false); });
+    fetchMarketDataStatus(market)
+      .then((data) => { if (active) setLatestQuoteDate(data.latestQuoteDate ?? null); })
+      .catch(() => { if (active) setLatestQuoteDate(null); });
+    return () => { active = false; };
   }, [market]);
-
-  useEffect(() => {
-    loadWatchlist();
-  }, [loadWatchlist]);
 
   const tickers = watchlist?.tickers ?? [];
   const hasSelection = selectedTickers.size > 0;
@@ -123,12 +121,21 @@ function App() {
           {error && (
             <p className="app-error">{error}</p>
           )}
+          <p className="watchlist-info">
+            Latest market data: {latestQuoteDate ?? (latestQuoteDate === undefined ? 'Loading…' : 'Unavailable')}
+          </p>
           {watchlist && !error && (
             <p className="watchlist-info">
               <span className="market-title">{market.title}</span>
               {' · '}
               Watchlist: <strong>{watchlist.screenName ?? DEFAULT_WATCHLIST}</strong>
               {watchlist.day && ` (${watchlist.day})`} — {tickers.length} tickers
+              {' · Generated: '}
+              {watchlist.generatedAt ? (
+                <time dateTime={watchlist.generatedAt}>
+                  {new Date(watchlist.generatedAt).toLocaleString(undefined, { timeZoneName: 'short' })}
+                </time>
+              ) : 'Unavailable'}
             </p>
           )}
         </div>

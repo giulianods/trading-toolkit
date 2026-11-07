@@ -86,7 +86,7 @@ object InitializationService {
         for {
           usCommonStocks <- QuotesServices.TickersUsCommonStocks
           start = LocalDate.now().minusMonths(23)
-          end = LocalDate.now().minusDays(1)
+          end = QuotesServices.latestMassiveDate()
           _ <- ZIO.logInfo("First run - creating stock universe")
           lastWritten <- QuotesServices.getDailySnapshotService(start, end)
           stockUniverse = StockUniverse(_id = "stock-universe",
@@ -103,7 +103,7 @@ object InitializationService {
           _ <- ZIO.logInfo("Stock universe found retrieving quotes from the last update")
           stockUniverse <- MongoDataRepo.getStockUniverse
           start = stockUniverse.lastUpdateQuotes
-          end = LocalDate.now().minusDays(1)
+          end = QuotesServices.latestMassiveDate()
           lastWritten <- QuotesServices.getDailySnapshotService(start, end)
           _ <- MongoDataRepo.saveStockUniverse(
             stockUniverse.copy(
@@ -116,14 +116,15 @@ object InitializationService {
   }
 
   private def initializeHistoricalWatchlists(): ZIO[MongoDatabase, Throwable, Unit] = {
-    val end = LocalDate.now().minusDays(1)
+    val end = QuotesServices.latestMassiveDate()
     val start = end.minusMonths(3)
-    val dates = QuotesServices.datesBetweenInclusive(start, end)
+    val dates = QuotesServices.datesBetweenInclusive(start, end, end)
 
     for {
       _ <- ZIO.logInfo(s"Initializing default watchlists from $start to $end")
       market <- ScreenerServices.LoadQuotes
-      _ <- ZIO.foreachDiscard(dates) { date =>
+      sessions = market.stocks.valuesIterator.flatMap(_.dailyAggregates.iterator.map(_.t)).toSet
+      _ <- ZIO.foreachDiscard(dates.filter(sessions.contains)) { date =>
         for {
           alreadyExists <- MongoDataRepo.hasWatchlistsForDate(date)
           _ <- if (alreadyExists) {
@@ -143,9 +144,9 @@ object InitializationService {
   }
 
   private def initializeMarketBreadthHistory(): ZIO[MongoDatabase, Throwable, Unit] = {
-    val end = LocalDate.now().minusDays(1)
+    val end = QuotesServices.latestMassiveDate()
     val start = end.minusMonths(3)
-    val dates = QuotesServices.datesBetweenInclusive(start, end)
+    val dates = QuotesServices.datesBetweenInclusive(start, end, end)
 
     for {
       _ <- ZIO.logInfo(s"Initializing market breadth indicators from $start to $end")
@@ -176,7 +177,7 @@ object InitializationService {
     for{
       _ <- ZIO.logInfo("Rectifying split data")
       universe <- MongoDataRepo.getStockUniverse
-      _ <- QuotesServices.rectifySplits(universe.lastUpdateSplits.minusDays(7), LocalDate.now().minusDays(1))
+      _ <- QuotesServices.rectifySplits(universe.lastUpdateSplits.minusDays(7), QuotesServices.latestMassiveDate())
 
     } yield ()
   }
@@ -197,7 +198,7 @@ object InitializationService {
         .forkDaemon
       _ <- initializeHistoricalWatchlists()
       _ <- initializeMarketBreadthHistory()
-      _ <- ScreenerServices.ScreenerTask
+      _ <- ScreenerServices.massiveScreenerTask
     } yield ()
   }
 

@@ -36,9 +36,10 @@ object CronJobs {
   private def supervised[R](
       name: String,
       cron: String,
-      job: ZIO[R, Throwable, Unit]
+      job: ZIO[R, Throwable, Unit],
+      zone: ZoneId = localZone
   ): URIO[R & AppHealth, Unit] =
-    repeatEffectForCron(guarded(name, job), unsafeParse(cron), zoneId = localZone)
+    repeatEffectForCron(guarded(name, job), unsafeParse(cron), zoneId = zone)
       .catchAllCause(cause => ZIO.logErrorCause(s"Cron fiber $name stopped", cause).as(0L))
       .forever
       .forkDaemon
@@ -52,14 +53,20 @@ object CronJobs {
     val clean = market.id.job("clean")
     val screens = market.id.job("screens")
     val financials = market.id.job("financials")
+    val marketZone = ZoneId.of(market.timeZone)
     for {
       _ <- AppHealth.markCronStarted
-      _ <- ZIO.logInfo(s"Cron jobs for ${market.id.id} scheduled in local zone $localZone")
-      _ <- supervised(quotes, market.cron.quotes, QuotesServices.DailyQuotesRetrieval)
-      _ <- supervised(splits, market.cron.splits, rectifyRecentSplits)
+      _ <- ZIO.logInfo(s"Quote maintenance for ${market.id.id} scheduled in $marketZone")
+      _ <- supervised(
+        quotes,
+        market.cron.quotes,
+        QuotesServices.DailyQuotesRetrieval *> guarded(screens, ScreenerServices.massiveScreenerTask),
+        marketZone
+      )
+      _ <- supervised(splits, market.cron.splits, rectifyRecentSplits, marketZone)
       _ <- market.cron.clean match {
         case Some(expr) =>
-          supervised(clean, expr, QuotesServices.hygieneThenRescreen)
+          supervised(clean, expr, QuotesServices.nightlyHygiene *> guarded(screens, ScreenerServices.massiveScreenerTask), marketZone)
         case None =>
           ZIO.logInfo(s"Skipping clean cron for ${market.id.id}")
       }
@@ -69,7 +76,6 @@ object CronJobs {
         case _ =>
           ZIO.logInfo(s"Skipping financials cron for ${market.id.id}")
       }
-      _ <- supervised(screens, market.cron.screens, ScreenerServices.ScreenerTask)
     } yield ()
   }
 
@@ -120,16 +126,16 @@ object CronJobs {
 
   private def rectifyRecentSplits: ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] =
     ZIO.suspendSucceed {
-      val today = java.time.LocalDate.now(localZone)
+      val end = QuotesServices.latestMassiveDate()
       for {
         universe <- MongoDataRepo.getStockUniverse
-        lag = java.time.temporal.ChronoUnit.DAYS.between(universe.lastUpdateQuotes, today.minusDays(1))
+        lag = java.time.temporal.ChronoUnit.DAYS.between(universe.lastUpdateQuotes, end)
         _ <- if (lag > QuotesServices.ApiResetMaxQuoteLagDays)
           ZIO.logWarning(
             s"Skipping splits rectify while quotes are ${lag}d behind (lastUpdateQuotes=${universe.lastUpdateQuotes})"
           )
         else
-          QuotesServices.rectifySplits(today.minusDays(14), today.minusDays(1))
+          QuotesServices.rectifySplits(end.minusDays(13), end)
       } yield ()
     }
 }

@@ -115,6 +115,11 @@ That runs `io.greensheep.trading.service.Main`. On startup it:
 3. Schedules nightly quote/screen crons (unless `ttk.skip.cron=true`)
 4. Serves the API (and packaged web UI if present) on http://localhost:7777
 
+US Massive quotes refresh at 00:30 New York time, after the Basic plan releases
+the previous trading day's bars. The US screener runs after the quote refresh
+and uses the latest completed quote session. Other markets use the server's
+local timezone for their nightly schedules.
+
 Useful flags while iterating:
 
 ```properties

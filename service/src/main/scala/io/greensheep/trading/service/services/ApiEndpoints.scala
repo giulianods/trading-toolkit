@@ -1,7 +1,7 @@
 package io.greensheep.trading.service.services
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
-import io.greensheep.trading.core.types.{WatchlistHistoryEntry, WatchlistSummary}
+import io.greensheep.trading.core.types.{MarketId, WatchlistHistoryEntry, WatchlistSummary}
 import io.greensheep.trading.dataservice.{MarketStore, MongoDataRepo}
 import io.greensheep.trading.service.app.{AppHealth, AppStatus}
 import zio.*
@@ -144,7 +144,7 @@ object ApiEndpoints {
         }
     } yield Response.json(history.toJson)
 
-  private def watchlistResponse(name: String, req: Request): ZIO[MongoDatabase, Throwable, Response] =
+  private def watchlistResponse(name: String, req: Request, massive: Boolean): ZIO[MongoDatabase, Throwable, Response] =
     req.url.queryParams.get("day") match {
       case Some(dayParam) =>
         for {
@@ -152,7 +152,10 @@ object ApiEndpoints {
           watchlist <- MongoDataRepo.getWatchlist(name, day)
         } yield Response.json(watchlist.toJson)
       case None =>
-        MongoDataRepo.getWatchlistLatest(name).map(watchlist => Response.json(watchlist.toJson))
+        for {
+          through <- if (massive) MongoDataRepo.latestQuoteDate else ZIO.none
+          watchlist <- MongoDataRepo.getWatchlistLatest(name, through)
+        } yield Response.json(watchlist.toJson)
     }
 
   private final case class ChartLabel(companyName: String, sector: String)
@@ -224,6 +227,12 @@ object ApiEndpoints {
     )
 
     val marketData = Routes(
+      (Method.GET / "markets" / string("country") / string("provider") / "data-status") ->
+        Handler.fromFunctionZIO[(String, String, Request)] { case (country, provider, _) =>
+          withMarket(store, country, provider)(
+            MongoDataRepo.latestQuoteDate.map(day => Response.json(s"""{"latestQuoteDate":${day.toJson}}"""))
+          )
+        },
       (Method.GET / "markets" / string("country") / string("provider") / "quotes" / string("ticker")) ->
         Handler.fromFunctionZIO[(String, String, String, Request)] { case (country, provider, ticker, req) =>
           withMarket(store, country, provider)(quotesResponse(ticker, req))
@@ -238,7 +247,7 @@ object ApiEndpoints {
         },
       (Method.GET / "markets" / string("country") / string("provider") / "watchlists" / string("name")) ->
         Handler.fromFunctionZIO[(String, String, String, Request)] { case (country, provider, name, req) =>
-          withMarket(store, country, provider)(watchlistResponse(name, req))
+          withMarket(store, country, provider)(watchlistResponse(name, req, MarketId.fromPath(country, provider) == MarketId.UsMassive))
         },
       (Method.GET / "markets" / string("country") / string("provider") / "descriptions") ->
         Handler.fromFunctionZIO[(String, String, Request)] { case (country, provider, req) =>
@@ -269,7 +278,7 @@ object ApiEndpoints {
         },
       (Method.GET / "watchlists" / string("name")) ->
         Handler.fromFunctionZIO[(String, Request)] { case (name, req) =>
-          withMarket(store, "us", "massive")(watchlistResponse(name, req))
+          withMarket(store, "us", "massive")(watchlistResponse(name, req, massive = true))
         },
       (Method.GET / "descriptions") ->
         Handler.fromFunctionZIO[Request] { req =>

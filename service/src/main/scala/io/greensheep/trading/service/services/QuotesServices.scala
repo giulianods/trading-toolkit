@@ -2,13 +2,14 @@ package io.greensheep.trading.service.services
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.providers.massive.MassiveAsyncApi
+import io.greensheep.trading.core.types.Markets
 import io.greensheep.trading.core.utils.{QuoteHygiene, QuotesValidation}
 import io.greensheep.trading.dataservice.{MongoDataRepo, MassiveBridge}
 import zio.*
 import zio.prelude.ZValidation
 
 import scala.jdk.CollectionConverters.*
-import java.time.LocalDate
+import java.time.{Instant, LocalDate, ZoneId}
 
 object QuotesServices {
 
@@ -22,10 +23,17 @@ object QuotesServices {
   /** If quote cursor is older than this many days, skip API resets entirely. */
   val ApiResetMaxQuoteLagDays = 3
 
-  def datesBetweenInclusive(startDate: LocalDate, endDate: LocalDate): Seq[LocalDate] = {
-    val today = LocalDate.now()
-    if (endDate.isBefore(startDate)) Seq.empty
-    else startDate.datesUntil(endDate.plusDays(1)).iterator().asScala.toSeq.filterNot(_.isAfter(today.minusDays(1)))
+  def latestMassiveDate(now: Instant = Instant.now()): LocalDate =
+    now.atZone(ZoneId.of(Markets.UsMassive.timeZone)).toLocalDate.minusDays(1)
+
+  def datesBetweenInclusive(
+      startDate: LocalDate,
+      endDate: LocalDate,
+      latestAllowed: LocalDate = LocalDate.now().minusDays(1)
+  ): Seq[LocalDate] = {
+    val end = if (endDate.isAfter(latestAllowed)) latestAllowed else endDate
+    if (end.isBefore(startDate)) Seq.empty
+    else startDate.datesUntil(end.plusDays(1)).iterator().asScala.toSeq
   }
 
   val TickersUsCommonStocks: ZIO[MassiveAsyncApi, Throwable, Seq[String]] =
@@ -33,14 +41,14 @@ object QuotesServices {
 
   val DailyQuotesRetrieval: ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] =
     for {
-      _ <- ZIO.logInfo("Retrieving quotes from the last update through local yesterday")
+      _ <- ZIO.logInfo("Retrieving Massive quotes through yesterday in New York")
       stockUniverse <- MongoDataRepo.getStockUniverse
       start = stockUniverse.lastUpdateQuotes.minusDays(1)
-      end = LocalDate.now().minusDays(1)
+      end = latestMassiveDate()
       lastWritten <- getDailySnapshotService(start, end)
       _ <- lastWritten match {
         case Some(date) =>
-          MongoDataRepo.saveStockUniverse(stockUniverse.copy(lastUpdateQuotes = date))
+          rememberQuoteDate(date)
         case None =>
           ZIO.logWarning("No quote dates were written; leaving lastUpdateQuotes unchanged")
       }
@@ -62,7 +70,7 @@ object QuotesServices {
   ): ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Option[LocalDate]] = ZIO.logSpan("get-daily-quotes") {
     for {
       remoteApi <- ZIO.service[MassiveAsyncApi]
-      datesToRetrieve = datesBetweenInclusive(start, end)
+      datesToRetrieve = datesBetweenInclusive(start, end, latestMassiveDate())
       _ <- ZIO.logInfo(s"Getting daily snapshots from $start to $end (${datesToRetrieve.size} days)")
       lastWritten <- ZIO.foldLeft(datesToRetrieve)(Option.empty[LocalDate] -> Option.empty[LocalDate]) {
         case ((lastOk, firstFailure), date) =>
@@ -74,7 +82,10 @@ object QuotesServices {
               ZIO.logInfo(s"No trading session for $date").when(!written && firstFailure.isEmpty) *>
                 ZIO.succeed(stepQuoteCursor(lastOk, firstFailure, date, Right(written)))
           ).tap { next =>
-            ZIO.whenDiscard(next._2.isEmpty && next._1.contains(date))(rememberQuoteDate(date))
+            ZIO.whenDiscard(next._2.isEmpty && next._1.contains(date)) {
+              rememberQuoteDate(date)
+                .catchAll(error => ZIO.logWarning(s"Could not advance lastUpdateQuotes to $date: ${error.getMessage}"))
+            }
           }
       }
     } yield lastWritten._1
@@ -109,7 +120,7 @@ object QuotesServices {
             .when(date.isAfter(universe.lastUpdateQuotes))
             .unit
         }
-    }.catchAll(error => ZIO.logWarning(s"Could not advance lastUpdateQuotes to $date: ${error.getMessage}"))
+    }
 
   private def fetchAndStore(
       remoteApi: MassiveAsyncApi,
@@ -158,7 +169,7 @@ object QuotesServices {
         localOnly = dirty.collect { case (t, a: QuoteHygiene.TruncateAndRefetch) => t -> a }
         needApi = dirty.collect { case (t, QuoteHygiene.FullReset) => t }
         quoteLagDays =
-          java.time.temporal.ChronoUnit.DAYS.between(universe.lastUpdateQuotes, LocalDate.now().minusDays(1))
+          java.time.temporal.ChronoUnit.DAYS.between(universe.lastUpdateQuotes, latestMassiveDate())
         apiBudget =
           if (quoteLagDays > ApiResetMaxQuoteLagDays) 0
           else MaxApiResetsPerPass
@@ -220,7 +231,7 @@ object QuotesServices {
   ): ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] =
     for {
       remoteApi <- ZIO.service[MassiveAsyncApi]
-      aggregates <- remoteApi.getAggregates(ticker, from)
+      aggregates <- remoteApi.getAggregates(ticker, from, latestMassiveDate())
       quotes = aggregates.map(MassiveBridge.aggregateToQuote)
       _ <- MongoDataRepo.clearQuotes(ticker)
       _ <- MongoDataRepo.updateDailyQuotes(ticker, quotes)
@@ -229,9 +240,5 @@ object QuotesServices {
 
   /** Rescreen immediately (quality gates), then repair quotes, then rescreen again. */
   def hygieneThenRescreen: ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] =
-    for {
-      _ <- ScreenerServices.ScreenerTask
-      _ <- nightlyHygiene
-      _ <- ScreenerServices.ScreenerTask
-    } yield ()
+    ScreenerServices.massiveScreenerTask *> nightlyHygiene *> ScreenerServices.massiveScreenerTask
 }

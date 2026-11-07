@@ -14,8 +14,8 @@ import zio.stream.ZStream
 import zio.interop.reactivestreams.*
 import io.github.zeal18.zio.mongodb.bson.codecs.Codec.*
 import io.github.zeal18.zio.mongodb.bson.codecs.{CaseClassCodec, Codec, Decoder, Encoder}
-import org.bson.BsonWriter
-import org.bson.codecs.EncoderContext
+import org.bson.{BsonDocumentReader, BsonNull, BsonWriter}
+import org.bson.codecs.{BsonDocumentCodec, EncoderContext}
 import org.bson.codecs.configuration.CodecRegistries
 
 import java.time.LocalDate
@@ -49,7 +49,7 @@ object MongoDataRepo {
   def ensureIndexes: ZIO[MongoDatabase, Throwable, Unit] =
     for {
       db <- ZIO.service[MongoDatabase]
-      watchlists = db.getCollection[Watchlist]("watchlist")
+      watchlists = watchlistCollection(db)
       breadth = db.getCollection[MarketBreadth]("market-breadth")
       _ <- watchlists.createIndex(indexes.asc("screenName", "day")).retry(TransientRetry.mongo)
       _ <- breadth.createIndex(indexes.asc("date")).retry(TransientRetry.mongo)
@@ -78,6 +78,25 @@ object MongoDataRepo {
       map.toMap
     }
   )
+
+  private val watchlistCodec: Codec[Watchlist] = {
+    val derived = Codec.derived[Watchlist]
+    val documentCodec = new BsonDocumentCodec
+    Codec[Watchlist](
+      (writer, watchlist, context) => derived.encode(writer, watchlist, context),
+      (reader, context) => {
+        val document = documentCodec.decode(reader, context)
+        // Old watchlist documents predate the generation timestamp.
+        if (!document.containsKey("generatedAt")) document.put("generatedAt", BsonNull.VALUE)
+        derived.decode(new BsonDocumentReader(document), context)
+      }
+    )
+  }
+
+  private def watchlistCollection(db: MongoDatabase) = {
+    implicit val codec: Codec[Watchlist] = watchlistCodec
+    db.getCollection[Watchlist]("watchlist")
+  }
 
   def build(url: String, dbName: String): ZLayer[Any, Throwable, MongoDataRepo] = ZLayer.succeed {
     val mongoLayer = MongoClient.live(url) >>> ZLayer.fromZIO(ZIO.serviceWith[MongoClient](_.getDatabase(dbName)))
@@ -279,17 +298,24 @@ object MongoDataRepo {
   def saveWatchlist(wl: Watchlist): ZIO[MongoDatabase, Throwable, Unit] = {
     for {
       db <- ZIO.service[MongoDatabase]
-      coll = db.getCollection[Watchlist]("watchlist")
+      coll = watchlistCollection(db)
       _ <- coll.replaceOne(filters.eq("_id", wl.uuid),
         wl,
         ReplaceOptions(upsert = true)).map(_.wasAcknowledged())
     } yield ()
   }
 
+  def latestQuoteDate: ZIO[MongoDatabase, Throwable, Option[LocalDate]] =
+    for {
+      db <- ZIO.service[MongoDatabase]
+      coll = db.getCollection[StoredDailyQuotes]("daily-quotes")
+      latest <- coll.find().sort(Sort.Desc("quotes.day")).limit(1).runHead
+    } yield latest.flatMap(_.quotes.map(_.day).maxOption)
+
   def hasWatchlistsForDate(day: LocalDate): ZIO[MongoDatabase, Throwable, Boolean] = {
     for {
       db <- ZIO.service[MongoDatabase]
-      coll = db.getCollection[Watchlist]("watchlist")
+      coll = watchlistCollection(db)
       count <- coll.countDocuments(filters.eq("day", day)).map(_.toInt)
     } yield count > 0
   }
@@ -297,7 +323,7 @@ object MongoDataRepo {
   def getWatchlistsBetween(start: LocalDate, end: LocalDate): ZIO[MongoDatabase, Throwable, Seq[Watchlist]] = {
     for {
       db <- ZIO.service[MongoDatabase]
-      coll = db.getCollection[Watchlist]("watchlist")
+      coll = watchlistCollection(db)
       publisher = coll
         .find(filters.and(
           filters.gte("day", start),
@@ -356,11 +382,13 @@ object MongoDataRepo {
     } yield breadth
   }
 
-  def getWatchlistLatest(name: String) : ZIO[MongoDatabase, Throwable, Watchlist] = {
+  def getWatchlistLatest(name: String, through: Option[LocalDate] = None): ZIO[MongoDatabase, Throwable, Watchlist] = {
     for {
       db <- ZIO.service[MongoDatabase]
-      coll = db.getCollection[Watchlist]("watchlist")
-      watchlistOpt <- coll.find(filters.eq("screenName", name)).sort(Sort.Desc("day")).runHead
+      coll = watchlistCollection(db)
+      byName = filters.eq("screenName", name)
+      query = through.fold(byName)(day => filters.and(byName, filters.lte("day", day)))
+      watchlistOpt <- coll.find(query).sort(Sort.Desc("day")).runHead
       watchlist <- ZIO.fromOption(watchlistOpt).orElseFail(new NoSuchElementException(s"No watchlist found for name $name"))
     } yield watchlist
   }
@@ -368,7 +396,7 @@ object MongoDataRepo {
   def getWatchlist(name: String, day: LocalDate) : ZIO[MongoDatabase, Throwable, Watchlist] = {
     for {
       db <- ZIO.service[MongoDatabase]
-      coll = db.getCollection[Watchlist]("watchlist")
+      coll = watchlistCollection(db)
       watchlistOpt <- coll.find(filters.and(
         filters.eq("screenName", name),
         filters.eq("day", day)

@@ -25,6 +25,12 @@ function apiPath(path, searchParams = {}) {
   return `${API_BASE}${path}${params ? `?${params}` : ''}`;
 }
 
+export async function fetchMarketDataStatus(market) {
+  const res = await fetch(apiPath(`${marketRoot(market)}/data-status`));
+  if (!res.ok) throw new Error(`Market data status: ${res.status}`);
+  return res.json();
+}
+
 /**
  * Fetch a watchlist by name for a market.
  * @param {{ country: string, provider: string }} market

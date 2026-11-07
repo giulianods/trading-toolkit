@@ -2,11 +2,19 @@ package io.greensheep.trading.service.services
 
 import zio.test.*
 
-import java.time.LocalDate
+import java.time.{Instant, LocalDate}
 
 object QuotesWindowSpec extends ZIOSpecDefault {
 
   override def spec = suite("quote fetch window")(
+    test("Massive releases the previous session at New York midnight in both seasons") {
+      assertTrue(
+        QuotesServices.latestMassiveDate(Instant.parse("2026-01-06T04:59:59Z")) == LocalDate.parse("2026-01-04"),
+        QuotesServices.latestMassiveDate(Instant.parse("2026-01-06T05:00:00Z")) == LocalDate.parse("2026-01-05"),
+        QuotesServices.latestMassiveDate(Instant.parse("2026-08-04T03:59:59Z")) == LocalDate.parse("2026-08-02"),
+        QuotesServices.latestMassiveDate(Instant.parse("2026-08-04T04:00:00Z")) == LocalDate.parse("2026-08-03")
+      )
+    },
     test("includes yesterday and excludes today") {
       val today = LocalDate.now()
       val yesterday = today.minusDays(1)

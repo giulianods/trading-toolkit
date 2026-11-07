@@ -2,7 +2,7 @@ package io.greensheep.trading.core.types
 
 import zio.json.{DeriveJsonDecoder, DeriveJsonEncoder, JsonDecoder, JsonEncoder}
 
-import java.time.LocalDate
+import java.time.{Instant, LocalDate}
 
 
 object Watchlist {
@@ -17,7 +17,8 @@ case class Watchlist(
                       day: LocalDate,
                       screenName: String,
                       tickers: Seq[String],
-                      stats: Seq[ScreenStats]
+                      stats: Seq[ScreenStats],
+                      generatedAt: Option[Instant] = None
                        ) {
 
   lazy val uuid: String = screenName + "-" + day
