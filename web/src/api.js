@@ -4,7 +4,8 @@ const API_BASE = process.env.REACT_APP_API_URL || '';
 const DEFAULT_CHART_DAYS = 150;
 
 export const MARKETS = [
-  { id: 'us-massive', country: 'us', provider: 'massive', label: 'US', title: 'US · Massive' },
+  { id: 'us-massive', country: 'us', provider: 'massive', label: 'US Massive', title: 'US · Massive' },
+  { id: 'us-alpaca', country: 'us', provider: 'alpaca', label: 'US Alpaca', title: 'US · Alpaca' },
   { id: 'ro-bvb', country: 'ro', provider: 'bvb', label: 'RO', title: 'Romania · BVB' },
   { id: 'de-xetra', country: 'de', provider: 'xetra', label: 'DE', title: 'Germany · Xetra' },
   { id: 'jp-jquants', country: 'jp', provider: 'jquants', label: 'JP', title: 'Japan · J-Quants' },

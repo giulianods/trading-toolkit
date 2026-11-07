@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import ChartGrid from './ChartGrid';
 import { fetchDescriptions, fetchQuotes } from '../api';
+import { SelectionContext } from '../context/SelectionContext';
 
 jest.mock('../api', () => ({
   __esModule: true,
@@ -39,4 +40,22 @@ test('shows company name and sector in the chart header', async () => {
 
   expect(fetchDescriptions).toHaveBeenCalledWith(market, ['AAPL', 'XYZ']);
   expect(fetchQuotes).toHaveBeenCalled();
+});
+
+test('ticker text is separate from the watchlist checkbox', async () => {
+  const onSelectionChange = jest.fn();
+  render(
+    <SelectionContext.Provider value={{ selectedTickers: new Set(), onSelectionChange }}>
+      <ChartGrid market={market} tickers={['AAPL']} />
+    </SelectionContext.Provider>
+  );
+
+  const symbol = await screen.findByText('AAPL');
+  fireEvent.click(symbol);
+  fireEvent.doubleClick(symbol);
+  expect(symbol.closest('label')).toBeNull();
+  expect(onSelectionChange).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole('checkbox', { name: /Include AAPL/ }));
+  expect(onSelectionChange).toHaveBeenCalledWith('AAPL', true);
 });

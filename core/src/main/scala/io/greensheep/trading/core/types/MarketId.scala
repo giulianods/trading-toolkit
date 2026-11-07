@@ -8,6 +8,7 @@ final case class MarketId(country: String, provider: String) {
 
 object MarketId {
   val UsMassive: MarketId = MarketId("us", "massive")
+  val UsAlpaca: MarketId = MarketId("us", "alpaca")
   val RoBvb: MarketId = MarketId("ro", "bvb")
   val DeXetra: MarketId = MarketId("de", "xetra")
   val JpJquants: MarketId = MarketId("jp", "jquants")

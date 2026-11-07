@@ -80,7 +80,7 @@ object ScreenerServices {
   val ScreenerTask: ZIO[MongoDatabase, Throwable, Unit] =
     ZIO.suspendSucceed(runScreener(LocalDate.now().minusDays(1)))
 
-  val massiveScreenerTask: ZIO[MongoDatabase, Throwable, Unit] =
+  val latestSessionScreenerTask: ZIO[MongoDatabase, Throwable, Unit] =
     MongoDataRepo.getStockUniverse.flatMap(universe => runScreener(universe.lastUpdateQuotes, requireSession = true))
 
   private def runScreener(asOf: LocalDate, requireSession: Boolean = false): ZIO[MongoDatabase, Throwable, Unit] =

@@ -9,7 +9,7 @@ import io.greensheep.providers.massive.MassiveAsyncApi
 import io.greensheep.providers.xetra.XetraClient
 import io.greensheep.trading.core.types.MarketDefinition
 import io.greensheep.trading.dataservice.MongoDataRepo
-import io.greensheep.trading.service.services.{BvbQuotesServices, FiancialsServices, JquantsQuotesServices, QuotesServices, ScreenerServices, XetraQuotesServices}
+import io.greensheep.trading.service.services.{AlpacaQuotesServices, BvbQuotesServices, FiancialsServices, JquantsQuotesServices, QuotesServices, ScreenerServices, XetraQuotesServices}
 import zio.*
 import zio.http.Client
 
@@ -60,13 +60,13 @@ object CronJobs {
       _ <- supervised(
         quotes,
         market.cron.quotes,
-        QuotesServices.DailyQuotesRetrieval *> guarded(screens, ScreenerServices.massiveScreenerTask),
+        QuotesServices.DailyQuotesRetrieval *> guarded(screens, ScreenerServices.latestSessionScreenerTask),
         marketZone
       )
       _ <- supervised(splits, market.cron.splits, rectifyRecentSplits, marketZone)
       _ <- market.cron.clean match {
         case Some(expr) =>
-          supervised(clean, expr, QuotesServices.nightlyHygiene *> guarded(screens, ScreenerServices.massiveScreenerTask), marketZone)
+          supervised(clean, expr, QuotesServices.nightlyHygiene *> guarded(screens, ScreenerServices.latestSessionScreenerTask), marketZone)
         case None =>
           ZIO.logInfo(s"Skipping clean cron for ${market.id.id}")
       }
@@ -75,6 +75,18 @@ object CronJobs {
           supervised(financials, expr, FiancialsServices.updateFinancials())
         case _ =>
           ZIO.logInfo(s"Skipping financials cron for ${market.id.id}")
+      }
+    } yield ()
+  }
+
+  def startAlpaca(market: MarketDefinition, financialsEnabled: Boolean)
+      : ZIO[MongoDatabase & AppHealth & FinnhubClient & Client & MassiveAsyncApi & Scope, Nothing, Unit] = {
+    val zone = ZoneId.of(market.timeZone)
+    for {
+      _ <- AppHealth.markCronStarted
+      _ <- supervised(market.id.job("quotes"), market.cron.quotes, AlpacaQuotesServices.refresh(market), zone)
+      _ <- ZIO.foreachDiscard(market.cron.financials.filter(_ => financialsEnabled)) { expr =>
+        supervised(market.id.job("financials"), expr, FiancialsServices.updateFinancials(), zone)
       }
     } yield ()
   }

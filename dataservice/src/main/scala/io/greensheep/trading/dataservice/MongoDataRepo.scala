@@ -153,6 +153,21 @@ object MongoDataRepo {
     } yield ()
   }
 
+  def updateUniverseQuotes(symbols: Seq[String], day: LocalDate): ZIO[MongoDatabase, Throwable, Unit] =
+    ZIO.serviceWithZIO[MongoDatabase] { db =>
+      db.getCollection[StockUniverse]("stock-universe").updateOne(
+        filters.eq("_id", "stock-universe"),
+        updates.combine(updates.set("symbols", symbols), updates.max("lastUpdateQuotes", day))
+      ).unit
+    }
+
+  def updateUniverseFinancialsDate(day: LocalDate): ZIO[MongoDatabase, Throwable, Unit] =
+    ZIO.serviceWithZIO[MongoDatabase] { db =>
+      db.getCollection[StockUniverse]("stock-universe")
+        .updateOne(filters.eq("_id", "stock-universe"), updates.set("lastUpdateFinancials", day))
+        .unit
+    }
+
   def updateFinancials(ticker: String, annual: Seq[AnnualFinancialData], quarterly: Seq[QuarterlyFinancialData]): ZIO[MongoDatabase, Throwable, Unit] = {
     for {
       db <- ZIO.service[MongoDatabase]
@@ -311,6 +326,14 @@ object MongoDataRepo {
       coll = db.getCollection[StoredDailyQuotes]("daily-quotes")
       latest <- coll.find().sort(Sort.Desc("quotes.day")).limit(1).runHead
     } yield latest.flatMap(_.quotes.map(_.day).maxOption)
+
+  def replaceDailyQuotes(ticker: String, quotes: Seq[Quote]): ZIO[MongoDatabase, Throwable, Unit] =
+    ZIO.serviceWithZIO[MongoDatabase] { db =>
+      db.getCollection[StoredDailyQuotes]("daily-quotes")
+        .replaceOne(filters.eq("_id", ticker), StoredDailyQuotes(ticker, mergeQuotes(Seq.empty, quotes)), ReplaceOptions(upsert = true))
+        .retry(TransientRetry.mongo)
+        .unit
+    }
 
   def hasWatchlistsForDate(day: LocalDate): ZIO[MongoDatabase, Throwable, Boolean] = {
     for {

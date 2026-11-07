@@ -125,17 +125,20 @@ function App() {
             Latest market data: {latestQuoteDate ?? (latestQuoteDate === undefined ? 'Loading…' : 'Unavailable')}
           </p>
           {watchlist && !error && (
-            <p className="watchlist-info">
+            <p className="watchlist-info watchlist-meta">
               <span className="market-title">{market.title}</span>
-              {' · '}
-              Watchlist: <strong>{watchlist.screenName ?? DEFAULT_WATCHLIST}</strong>
-              {watchlist.day && ` (${watchlist.day})`} — {tickers.length} tickers
-              {' · Generated: '}
-              {watchlist.generatedAt ? (
-                <time dateTime={watchlist.generatedAt}>
-                  {new Date(watchlist.generatedAt).toLocaleString(undefined, { timeZoneName: 'short' })}
-                </time>
-              ) : 'Unavailable'}
+              <span>
+                Watchlist: <strong>{watchlist.screenName ?? DEFAULT_WATCHLIST}</strong>
+                {watchlist.day && ` (${watchlist.day})`}
+              </span>
+              <span>{tickers.length} tickers</span>
+              <span>
+                Generated: {watchlist.generatedAt ? (
+                  <time dateTime={watchlist.generatedAt}>
+                    {new Date(watchlist.generatedAt).toLocaleString(undefined, { timeZoneName: 'short' })}
+                  </time>
+                ) : 'Unavailable'}
+              </span>
             </p>
           )}
         </div>

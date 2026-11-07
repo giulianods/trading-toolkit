@@ -10,15 +10,6 @@ const CHART_HEIGHT = 300;
 const TICKER_HEADER_HEIGHT = 44;
 const ROW_HEIGHT = TICKER_HEADER_HEIGHT + CHART_HEIGHT + CELL_GAP;
 const OVERSCAN_ROWS = 2;
-const HEADER_HEIGHT = 72;
-const WRAPPER_PADDING = 12;
-
-function getViewportGridSize() {
-  return {
-    width: Math.max(400, window.innerWidth - WRAPPER_PADDING * 2),
-    height: Math.max(400, window.innerHeight - HEADER_HEIGHT - WRAPPER_PADDING * 2),
-  };
-}
 
 function ChartCell({ ticker, label, quotes, index, focusIndex, setFocusedIndex, pendingCheckRef }) {
   const { selectedTickers, onSelectionChange } = useSelection();
@@ -53,17 +44,16 @@ function ChartCell({ ticker, label, quotes, index, focusIndex, setFocusedIndex, 
         className="chart-ticker"
         title={headerTitle || undefined}
         onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
       >
-        <label className="chart-ticker-checkbox">
-          <input
-            type="checkbox"
-            checked={selectedTickers.has(ticker)}
-            onChange={(e) => onSelectionChange(ticker, e.target.checked)}
-            onClick={(e) => e.stopPropagation()}
-            aria-label={`Include ${selectionLabel} in watchlist`}
-          />
-          <span className="chart-ticker-symbol">{ticker}</span>
-        </label>
+        <input
+          className="chart-ticker-checkbox"
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onSelectionChange(ticker, e.target.checked)}
+          aria-label={`Include ${selectionLabel} in watchlist`}
+        />
+        <span className="chart-ticker-symbol">{ticker}</span>
         {(companyName || sector) && (
           <span className="chart-ticker-details">
             {companyName && <span className="chart-ticker-name">{companyName}</span>}
@@ -86,13 +76,15 @@ function ChartGridInner({ market, tickers }) {
   const [labelsByTicker, setLabelsByTicker] = useState({});
   const [loading, setLoading] = useState(true);
   const [focusedIndex, setFocusedIndex] = useState(0);
-  const [size, setSize] = useState(getViewportGridSize);
+  const [size, setSize] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  const viewportRef = useRef(null);
   const gridRef = useRef(null);
   const pendingCheckRef = useRef(null);
 
   const tickerKey = tickers.join(',');
   const count = tickers.length;
-  const cols = Math.min(COLUMNS, Math.max(1, count));
+  const viewportColumns = size.width < 600 ? 1 : size.width < 960 ? 2 : COLUMNS;
+  const cols = Math.min(viewportColumns, Math.max(1, count));
   const rows = Math.ceil(count / cols) || 1;
   const focusIndex = Math.max(0, Math.min(focusedIndex, count - 1));
 
@@ -152,11 +144,23 @@ function ChartGridInner({ market, tickers }) {
   }, []);
 
   useLayoutEffect(() => {
-    const update = () => setSize(getViewportGridSize());
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const update = () => {
+      const { clientWidth: width, clientHeight: height } = viewport;
+      if (width > 0) {
+        setSize((previous) => previous.width === width && previous.height === height ? previous : { width, height });
+      }
+    };
     update();
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(update);
+      observer.observe(viewport);
+      return () => observer.disconnect();
+    }
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
-  }, []);
+  }, [loading, count]);
 
   useEffect(() => {
     if (count === 0 || !gridRef.current) return;
@@ -245,19 +249,21 @@ function ChartGridInner({ market, tickers }) {
 
   return (
     <div className="chart-grid-wrapper">
-      <Grid
-        ref={gridRef}
-        columnCount={cols}
-        columnWidth={columnWidth}
-        height={size.height}
-        rowCount={rows}
-        rowHeight={ROW_HEIGHT}
-        width={size.width}
-        overscanRowCount={OVERSCAN_ROWS}
-        className="chart-grid-virtual"
-      >
-        {cellRenderer}
-      </Grid>
+      <div className="chart-grid-viewport" ref={viewportRef}>
+        <Grid
+          ref={gridRef}
+          columnCount={cols}
+          columnWidth={columnWidth}
+          height={size.height}
+          rowCount={rows}
+          rowHeight={ROW_HEIGHT}
+          width={size.width}
+          overscanRowCount={OVERSCAN_ROWS}
+          className="chart-grid-virtual"
+        >
+          {cellRenderer}
+        </Grid>
+      </div>
     </div>
   );
 }

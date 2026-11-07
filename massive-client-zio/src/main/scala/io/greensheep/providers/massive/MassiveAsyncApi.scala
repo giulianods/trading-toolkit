@@ -126,6 +126,9 @@ class MassiveAsyncApi(queue: Queue[MassiveAsyncApi.JobHandler[?]]) {
     } yield stream
   }
 
+  def listCommonStocks: Task[Seq[Ticker]] =
+    collectAll(TickersRequest(limit = 1000))
+
   def getTickerDetails(symbol: String): ZIO[Any, Throwable, TickerDetails] = {
     val request = TickerDetailsRequest(symbol)
     for {

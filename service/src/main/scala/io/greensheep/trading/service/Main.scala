@@ -10,7 +10,7 @@ import io.greensheep.trading.core.types.{MarketDefinition, Markets}
 import io.greensheep.trading.core.utils.LocalConfig
 import io.greensheep.trading.dataservice.{MarketStore, MongoDataRepo}
 import io.greensheep.trading.service.app.{AppHealth, CronJobs, WebApp}
-import io.greensheep.trading.service.services.{ApiEndpoints, BvbInitialization, FiancialsServices, InitializationService, JquantsInitialization, QuotesServices, XetraInitialization}
+import io.greensheep.trading.service.services.{AlpacaQuotesServices, ApiEndpoints, BvbInitialization, FiancialsServices, InitializationService, JquantsInitialization, QuotesServices, XetraInitialization}
 import zio.*
 import zio.http.{Client, DnsResolver, Server, ZClient}
 import zio.http.netty.NettyConfig
@@ -29,10 +29,13 @@ object Main extends ZIOAppDefault {
     val enabled = Markets.enabledFromConfig.fold(msg => throw new IllegalStateException(msg), identity)
     val needsMassive = enabled.exists(_.id.provider == "massive")
     val needsJquants = enabled.exists(_.id.provider == "jquants")
-    val needsFinnhub = enabled.exists(_.hasFinancials)
-    if (needsMassive) LocalConfig.require("massive.api.key")
+    if (needsMassive || enabled.contains(Markets.UsAlpaca)) LocalConfig.require("massive.api.key")
     if (needsJquants) LocalConfig.require("jquants.api.key")
-    val finnhubApiKey = if (needsFinnhub) LocalConfig.require("finnhub.api.key") else ""
+    if (enabled.contains(Markets.UsAlpaca)) {
+      LocalConfig.require("alpaca.api.key")
+      LocalConfig.require("alpaca.api.secret")
+    }
+    val finnhubApiKey = if (needsMassive) LocalConfig.require("finnhub.api.key") else LocalConfig.get("finnhub.api.key").getOrElse("")
     val skipInitialization = LocalConfig.get("ttk.skip.initialization").exists(_.equalsIgnoreCase("true"))
     val skipCron = LocalConfig.get("ttk.skip.cron").exists(_.equalsIgnoreCase("true"))
     val mongoUrl = LocalConfig.get("mongodb.url").getOrElse("mongodb://127.0.0.1:27017")
@@ -119,6 +122,33 @@ object Main extends ZIOAppDefault {
             .forkDaemon
           _ <- CronJobs.start(market).provideSomeLayer(dbLayer).unless(skipCron)
           _ <- ZIO.logInfo(s"Cron jobs started for ${market.id.id}").unless(skipCron)
+        } yield ()
+      case "alpaca" =>
+        val financialsEnabled = LocalConfig.get("finnhub.api.key").isDefined
+        val initialize = CronJobs.guarded(
+          market.id.job("quotes"),
+          AlpacaQuotesServices.initialize(market).tap { _ =>
+            CronJobs.guarded(market.id.job("financials"), FiancialsServices.updateFinancials())
+              .forkDaemon
+              .when(financialsEnabled)
+          }
+        )
+        for {
+          _ <- ZIO.logInfo(s"Opening market ${market.id.id} database ${market.id.databaseName}")
+          _ <- MongoDataRepo.ensureIndexes.provideLayer(dbLayer)
+          hasUniverse <- MongoDataRepo.getStockUniverse
+            .map(_.symbols.nonEmpty)
+            .catchSome { case _: NoSuchElementException => ZIO.succeed(false) }
+            .provideLayer(dbLayer)
+          _ <- ZIO.logInfo(s"No stock universe for ${market.id.id}; starting first-time backfill")
+            .unless(hasUniverse)
+          _ <- initialize
+            .provideSomeLayer(dbLayer)
+            .forkDaemon
+            .unless(skipInitialization && hasUniverse)
+          _ <- CronJobs.startAlpaca(market, financialsEnabled)
+            .provideSomeLayer(dbLayer)
+            .unless(skipCron)
         } yield ()
       case "bvb" =>
         for {

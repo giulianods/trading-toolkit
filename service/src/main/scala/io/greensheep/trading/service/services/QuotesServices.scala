@@ -240,5 +240,5 @@ object QuotesServices {
 
   /** Rescreen immediately (quality gates), then repair quotes, then rescreen again. */
   def hygieneThenRescreen: ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] =
-    ScreenerServices.massiveScreenerTask *> nightlyHygiene *> ScreenerServices.massiveScreenerTask
+    ScreenerServices.latestSessionScreenerTask *> nightlyHygiene *> ScreenerServices.latestSessionScreenerTask
 }

@@ -41,7 +41,7 @@ object FiancialsServices {
             .catchAll(error => ZIO.logError(s"Error updating financials for $symbol: ${error.getMessage}"))
             .zipRight(ZIO.sleep(perTickerPause))
         }
-        _ <- MongoDataRepo.saveStockUniverse(universe.copy(lastUpdateFinancials = LocalDate.now()))
+        _ <- MongoDataRepo.updateUniverseFinancialsDate(LocalDate.now())
       } yield ()
     }
 }

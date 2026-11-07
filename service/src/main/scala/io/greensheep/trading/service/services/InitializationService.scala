@@ -115,8 +115,7 @@ object InitializationService {
     } yield ()
   }
 
-  private def initializeHistoricalWatchlists(): ZIO[MongoDatabase, Throwable, Unit] = {
-    val end = QuotesServices.latestMassiveDate()
+  private def initializeHistoricalWatchlists(end: LocalDate, rebuildExisting: Boolean): ZIO[MongoDatabase, Throwable, Unit] = {
     val start = end.minusMonths(3)
     val dates = QuotesServices.datesBetweenInclusive(start, end, end)
 
@@ -126,25 +125,24 @@ object InitializationService {
       sessions = market.stocks.valuesIterator.flatMap(_.dailyAggregates.iterator.map(_.t)).toSet
       _ <- ZIO.foreachDiscard(dates.filter(sessions.contains)) { date =>
         for {
-          alreadyExists <- MongoDataRepo.hasWatchlistsForDate(date)
-          _ <- if (alreadyExists) {
+          alreadyExists <- MongoDataRepo.hasWatchlistsForDate(date).unless(rebuildExisting)
+          _ <- if (alreadyExists.contains(true)) {
             ZIO.logInfo(s"Watchlists already exist for date $date, skipping initialization")
           } else {
-            ScreenerServices
+            val build = ScreenerServices
               .buildScreensForMarket(date, market)
               .tapBoth(
                 err => ZIO.logError(s"Failed to build watchlists for date $date: ${err.getMessage}"),
                 _ => ZIO.logInfo(s"Saved watchlists for date $date")
               )
-              .ignore
+            if (rebuildExisting) build.unit else build.ignore
           }
         } yield ()
       }
     } yield ()
   }
 
-  private def initializeMarketBreadthHistory(): ZIO[MongoDatabase, Throwable, Unit] = {
-    val end = QuotesServices.latestMassiveDate()
+  private def initializeMarketBreadthHistory(end: LocalDate, rebuildExisting: Boolean): ZIO[MongoDatabase, Throwable, Unit] = {
     val start = end.minusMonths(3)
     val dates = QuotesServices.datesBetweenInclusive(start, end, end)
 
@@ -153,8 +151,8 @@ object InitializationService {
       stockMarket <- ScreenerServices.LoadQuotes
       _ <- ZIO.foreachDiscard(dates)(date =>
         for {
-          alreadyExists <- MongoDataRepo.hasMarketBreadthForDate(date)
-          _ <- if (alreadyExists) {
+          alreadyExists <- MongoDataRepo.hasMarketBreadthForDate(date).unless(rebuildExisting)
+          _ <- if (alreadyExists.contains(true)) {
             ZIO.logInfo(s"Market breadth indicators already exist for date $date, skipping initialization")
           } else {
             val snapshot = stockMarket.historicalSnapshot(date)
@@ -182,6 +180,9 @@ object InitializationService {
     } yield ()
   }
 
+  def initializeScreenHistory(end: LocalDate, rebuildExisting: Boolean = false): ZIO[MongoDatabase, Throwable, Unit] =
+    initializeHistoricalWatchlists(end, rebuildExisting) *> initializeMarketBreadthHistory(end, rebuildExisting)
+
   //TODO add initialization for other services, see what can be done in parallel
   def initializeApp(market: MarketDefinition): ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] =  {
     for {
@@ -196,9 +197,8 @@ object InitializationService {
       _ <- InitializeDescriptions
         .catchAll(error => ZIO.logWarning(s"Description initialization skipped: ${error.getMessage}"))
         .forkDaemon
-      _ <- initializeHistoricalWatchlists()
-      _ <- initializeMarketBreadthHistory()
-      _ <- ScreenerServices.massiveScreenerTask
+      _ <- initializeScreenHistory(QuotesServices.latestMassiveDate())
+      _ <- ScreenerServices.latestSessionScreenerTask
     } yield ()
   }
 

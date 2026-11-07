@@ -21,6 +21,12 @@ object Markets {
     hasFinancials = true
   )
 
+  val UsAlpaca: MarketDefinition = UsMassive.copy(
+    id = MarketId.UsAlpaca,
+    dataSource = "alpaca",
+    cron = UsMassive.cron.copy(quotes = "0 30 20 * * ?", clean = None)
+  )
+
   val RoBvb: MarketDefinition = MarketDefinition(
     id = MarketId.RoBvb,
     timeZone = "Europe/Bucharest",
@@ -65,6 +71,7 @@ object Markets {
 
   val catalog: Map[MarketId, MarketDefinition] = Map(
     UsMassive.id -> UsMassive,
+    UsAlpaca.id -> UsAlpaca,
     RoBvb.id -> RoBvb,
     DeXetra.id -> DeXetra,
     JpJquants.id -> JpJquants
