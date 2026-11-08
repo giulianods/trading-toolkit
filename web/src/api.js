@@ -32,6 +32,12 @@ export async function fetchMarketDataStatus(market) {
   return res.json();
 }
 
+export async function fetchIncomeStatements(market, ticker, signal) {
+  const res = await fetch(apiPath(`${marketRoot(market)}/income-statements/${encodeURIComponent(ticker)}`), { signal });
+  if (!res.ok) throw new Error(`Income statements: ${res.status}`);
+  return res.json();
+}
+
 /**
  * Fetch a watchlist by name for a market.
  * @param {{ country: string, provider: string }} market

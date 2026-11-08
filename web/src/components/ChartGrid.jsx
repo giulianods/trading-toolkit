@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { FixedSizeGrid as Grid } from 'react-window';
 import OhlcChart from './OhlcChart';
+import FinancialCharts from './FinancialCharts';
 import { useSelection } from '../context/SelectionContext';
 import { fetchDescriptions, fetchQuotes } from '../api';
 
@@ -8,10 +9,10 @@ const COLUMNS = 3;
 const CELL_GAP = 12;
 const CHART_HEIGHT = 300;
 const TICKER_HEADER_HEIGHT = 44;
-const ROW_HEIGHT = TICKER_HEADER_HEIGHT + CHART_HEIGHT + CELL_GAP;
 const OVERSCAN_ROWS = 2;
+const FINANCIAL_CARD_WIDTH = 300;
 
-function ChartCell({ ticker, label, quotes, index, focusIndex, setFocusedIndex, pendingCheckRef }) {
+function ChartCell({ ticker, label, quotes, index, focusIndex, setFocusedIndex, pendingCheckRef, financialMarket, stacked }) {
   const { selectedTickers, onSelectionChange } = useSelection();
   const focused = index === focusIndex;
   const checked = selectedTickers.has(ticker);
@@ -36,9 +37,6 @@ function ChartCell({ ticker, label, quotes, index, focusIndex, setFocusedIndex, 
         }
         setFocusedIndex(index);
       }}
-      role="button"
-      tabIndex={-1}
-      aria-label={`Select ${selectionLabel} for watchlist`}
     >
       <div
         className="chart-ticker"
@@ -61,12 +59,10 @@ function ChartCell({ ticker, label, quotes, index, focusIndex, setFocusedIndex, 
           </span>
         )}
       </div>
-      <OhlcChart
-        ticker={ticker}
-        quotes={quotes}
-        height={CHART_HEIGHT}
-        focused={focused}
-      />
+      <div className={financialMarket && !stacked ? 'chart-content chart-content--side-by-side' : 'chart-content'}>
+        <OhlcChart ticker={ticker} quotes={quotes} height={CHART_HEIGHT} focused={focused} />
+        {financialMarket && <FinancialCharts market={financialMarket} ticker={ticker} />}
+      </div>
     </div>
   );
 }
@@ -83,6 +79,7 @@ function ChartGridInner({ market, tickers }) {
 
   const tickerKey = tickers.join(',');
   const count = tickers.length;
+  const financialMarket = market.country === 'us' || market.country === 'ro' ? market : null;
   const viewportColumns = size.width < 600 ? 1 : size.width < 960 ? 2 : COLUMNS;
   const cols = Math.min(viewportColumns, Math.max(1, count));
   const rows = Math.ceil(count / cols) || 1;
@@ -201,6 +198,8 @@ function ChartGridInner({ market, tickers }) {
     const totalGap = CELL_GAP * (cols - 1);
     return Math.floor((size.width - totalGap) / cols);
   }, [size.width, cols]);
+  const stacked = columnWidth < FINANCIAL_CARD_WIDTH;
+  const rowHeight = TICKER_HEADER_HEIGHT + CHART_HEIGHT + CELL_GAP + (financialMarket && stacked ? CHART_HEIGHT : 0);
 
   const cellRenderer = useCallback(
     ({ columnIndex, rowIndex, style }) => {
@@ -224,11 +223,13 @@ function ChartGridInner({ market, tickers }) {
             focusIndex={focusIndex}
             setFocusedIndex={setFocusedIndex}
             pendingCheckRef={pendingCheckRef}
+            financialMarket={financialMarket}
+            stacked={stacked}
           />
         </div>
       );
     },
-    [tickers, quotesByTicker, labelsByTicker, focusIndex, cols]
+    [tickers, quotesByTicker, labelsByTicker, focusIndex, cols, financialMarket, stacked]
   );
 
   if (loading) {
@@ -256,7 +257,7 @@ function ChartGridInner({ market, tickers }) {
           columnWidth={columnWidth}
           height={size.height}
           rowCount={rows}
-          rowHeight={ROW_HEIGHT}
+          rowHeight={rowHeight}
           width={size.width}
           overscanRowCount={OVERSCAN_ROWS}
           className="chart-grid-virtual"

@@ -34,6 +34,7 @@ object AlpacaLiveIntegrationSpec extends ZIOSpecDefault {
       ZIO.scoped {
         for {
           client <- ZIO.service[MongoClient]
+          http <- ZIO.service[Client]
           // A unique market ID keeps the production route lookup and Mongo database naming in use.
           market = Markets.UsAlpaca.copy(id = MarketId("us", s"alpaca-it-${UUID.randomUUID()}"))
           store = new MarketStore(client, Seq(market))
@@ -48,7 +49,7 @@ object AlpacaLiveIntegrationSpec extends ZIOSpecDefault {
             universe <- MongoDataRepo.getStockUniverse
             stored <- MongoDataRepo.getPriceData("AAPL")
             latest <- MongoDataRepo.latestQuoteDate
-            app = ApiEndpoints.routes(store).toHttpApp
+            app = ApiEndpoints.routes(store, http).toHttpApp
             base = s"/markets/us/${market.id.provider}"
             quotes <- getJson[DailyQuoteData](app, s"$base/quotes/AAPL")
             watchlist <- getJson[Watchlist](app, s"$base/watchlists/SEPA")

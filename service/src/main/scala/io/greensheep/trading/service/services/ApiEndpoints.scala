@@ -207,7 +207,7 @@ object ApiEndpoints {
         } yield Response.json(indicators.sortBy(_.date).toJson)
     }
 
-  def routes(store: MarketStore): Routes[AppHealth, Response] = {
+  def routes(store: MarketStore, http: Client): Routes[AppHealth, Response] = {
     val status = Routes(
       (Method.GET / "status") -> Handler.fromFunctionZIO[Request] { _ =>
         for {
@@ -240,6 +240,14 @@ object ApiEndpoints {
       (Method.GET / "markets" / string("country") / string("provider") / "financials") ->
         Handler.fromFunctionZIO[(String, String, Request)] { case (country, provider, req) =>
           withMarket(store, country, provider)(financialsResponse(req))
+        },
+      (Method.GET / "markets" / string("country") / string("provider") / "income-statements" / string("ticker")) ->
+        Handler.fromFunctionZIO[(String, String, String, Request)] { case (country, provider, ticker, _) =>
+          withMarket(store, country, provider)(
+            IncomeStatementsService.load(MarketId.fromPath(country, provider).country, ticker)
+              .map(statements => Response.json(statements.toJson))
+              .provideSomeLayer[MongoDatabase](ZLayer.succeed(http))
+          )
         },
       (Method.GET / "markets" / string("country") / string("provider") / "watchlists" / "history") ->
         Handler.fromFunctionZIO[(String, String, Request)] { case (country, provider, req) =>

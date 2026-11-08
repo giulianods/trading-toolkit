@@ -1,11 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import ChartGrid from './ChartGrid';
-import { fetchDescriptions, fetchQuotes } from '../api';
+import { fetchDescriptions, fetchIncomeStatements, fetchQuotes } from '../api';
 import { SelectionContext } from '../context/SelectionContext';
 
 jest.mock('../api', () => ({
   __esModule: true,
   fetchQuotes: jest.fn(async () => []),
+  fetchIncomeStatements: jest.fn(),
   fetchDescriptions: jest.fn(async () => ({
     AAPL: { companyName: 'Apple Inc.', sector: 'Electronic Computers' },
     XYZ: { companyName: 'No Sector Co', sector: '   ' },
@@ -22,6 +23,7 @@ const labels = {
 beforeEach(() => {
   fetchQuotes.mockResolvedValue([]);
   fetchDescriptions.mockResolvedValue(labels);
+  fetchIncomeStatements.mockResolvedValue({ annual: [], quarterly: [] });
 });
 
 test('shows company name and sector in the chart header', async () => {

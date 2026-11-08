@@ -75,6 +75,7 @@ Edit `local.properties` at the repo root:
 | `jquants.api.key` | Required if `jp-jquants` is enabled ([J-Quants](https://jpx-jquants.com/en/register)) |
 | `jquants.data.delay.days` | Optional; default `84` (free plan ~12-week delay; use `0` on Light+) |
 | `finnhub.api.key` | Required for `us-massive`. Optional for US-Alpaca financials |
+| `eodhd.api.key` | Optional EODHD Fundamentals token for total revenue, net income, margin, and EPS on US and Romanian charts |
 | `ttk.skip.initialization` | `true` to skip startup backfill except for a missing or empty US-Alpaca universe |
 | `ttk.skip.cron` | `true` to skip nightly jobs |
 
@@ -174,6 +175,11 @@ npm start          # http://localhost:3000, proxies API to :7777
 ```
 
 The header switches markets and loads the selected market’s SEPA watchlist and quotes from `/markets/{country}/{provider}/...`.
+
+For US and Romanian companies, the chart panel requests annual and quarterly
+income statements when a card comes into view. The server caches successful
+requests for seven days in MongoDB. Use an EODHD plan with Fundamentals access
+for full symbol access. Missing statement fields appear as unavailable.
 
 Or point the service at a local build:
 

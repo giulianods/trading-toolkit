@@ -69,6 +69,37 @@ paths:
           $ref: '#/components/responses/NotFoundText'
         '500':
           $ref: '#/components/responses/InternalErrorText'
+  /markets/{country}/{provider}/income-statements/{ticker}:
+    get:
+      tags: [Financials]
+      summary: Get annual and quarterly income statement totals and reported EPS
+      parameters:
+        - $ref: '#/components/parameters/CountryParam'
+        - $ref: '#/components/parameters/ProviderParam'
+        - $ref: '#/components/parameters/TickerParam'
+      responses:
+        '200':
+          description: Statement periods in date order, or empty arrays when unavailable
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [annual, quarterly]
+                properties:
+                  annual:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/IncomePeriod'
+                  quarterly:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/IncomePeriod'
+        '400':
+          $ref: '#/components/responses/BadRequestText'
+        '404':
+          $ref: '#/components/responses/NotFoundText'
+        '500':
+          $ref: '#/components/responses/InternalErrorText'
   /markets/{country}/{provider}/financials:
     get:
       tags: [Financials]
@@ -735,6 +766,23 @@ components:
           type: object
           additionalProperties:
             type: string
+    IncomePeriod:
+      type: object
+      required: [date]
+      properties:
+        date:
+          type: string
+          format: date
+        currency:
+          type: string
+        revenue:
+          type: number
+        netIncome:
+          type: number
+        netMarginPct:
+          type: number
+        eps:
+          type: number
     Watchlist:
       type: object
       required: [day, screenName, tickers, stats]

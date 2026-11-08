@@ -6,6 +6,8 @@ alpaca.api.key=
 alpaca.api.secret=
 # alpaca.paper=false
 finnhub.api.key=
+# Optional company income statements for US and Romanian markets.
+eodhd.api.key=
 # JPX J-Quants (required only when ttk.markets includes jp-jquants). Free plan: ~5 req/min, ~12w delay.
 jquants.api.key=
 # jquants.data.delay.days=84

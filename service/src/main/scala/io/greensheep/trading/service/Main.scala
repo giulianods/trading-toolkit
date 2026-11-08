@@ -56,12 +56,13 @@ object Main extends ZIOAppDefault {
 
     val everything = for {
       client <- ZIO.service[MongoClient]
+      http <- ZIO.service[Client]
       store <- ZIO.fromEither(MarketStore.live(client)).mapError(msg => new IllegalStateException(msg))
       _ <- ZIO.logInfo(s"Enabled markets: ${store.enabled.map(_.id.id).mkString(", ")}")
       _ <- ZIO.foreachParDiscard(store.enabled) { market =>
         startMarket(client, store, market, skipInitialization, skipCron)
       }
-      allApi = ApiEndpoints.routes(store).toHttpApp
+      allApi = ApiEndpoints.routes(store, http).toHttpApp
       webSource = WebApp.describeSource
       _ <- ZIO.logInfo("Starting rest api")
       _ <- ZIO.logInfo(s"Serving web app from $webSource")

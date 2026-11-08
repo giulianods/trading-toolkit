@@ -8,7 +8,7 @@ import io.github.zeal18.zio.mongodb.driver.sorts.Sort
 import io.github.zeal18.zio.mongodb.bson.BsonDocument
 import io.github.zeal18.zio.mongodb.driver.{MongoClient, MongoDatabase, filters, updates}
 import io.greensheep.trading.core.screens.{BreadthIndicators => MarketBreadth}
-import io.greensheep.trading.core.types.{DailyQuoteData, MarketId, Markets, Quote, ScreenStats, Stock, StockDescription, Watchlist}
+import io.greensheep.trading.core.types.{DailyQuoteData, IncomeStatements, MarketId, Markets, Quote, ScreenStats, Stock, StockDescription, Watchlist}
 import zio.*
 import zio.stream.ZStream
 import zio.interop.reactivestreams.*
@@ -18,7 +18,7 @@ import org.bson.{BsonDocumentReader, BsonNull, BsonWriter}
 import org.bson.codecs.{BsonDocumentCodec, EncoderContext}
 import org.bson.codecs.configuration.CodecRegistries
 
-import java.time.LocalDate
+import java.time.{Instant, LocalDate}
 import io.greensheep.trading.core.types.AnnualFinancialData
 import io.greensheep.trading.core.types.QuarterlyFinancialData
 import io.greensheep.trading.core.types.StockFinancials
@@ -30,6 +30,20 @@ import io.greensheep.trading.core.types.StockFinancials
 object MongoDataRepo {
 
   final case class StoredDailyQuotes(@BsonId ticker: String, quotes: Seq[Quote])
+
+  final case class CachedIncomeStatements(@BsonId ticker: String, fetchedAt: Instant, statements: IncomeStatements)
+
+  def getCachedIncomeStatements(ticker: String): ZIO[MongoDatabase, Throwable, Option[CachedIncomeStatements]] =
+    ZIO.serviceWithZIO[MongoDatabase] { db =>
+      db.getCollection[CachedIncomeStatements]("income-statements").find(filters.eq("_id", ticker)).runHead
+    }
+
+  def cacheIncomeStatements(record: CachedIncomeStatements): ZIO[MongoDatabase, Throwable, Unit] =
+    ZIO.serviceWithZIO[MongoDatabase] { db =>
+      db.getCollection[CachedIncomeStatements]("income-statements")
+        .replaceOne(filters.eq("_id", record.ticker), record, ReplaceOptions(upsert = true))
+        .unit
+    }
 
   final case class StoredFinancials(
       @BsonId ticker: String,
