@@ -9,6 +9,7 @@ export const MARKETS = [
   { id: 'ro-bvb', country: 'ro', provider: 'bvb', label: 'RO', title: 'Romania · BVB' },
   { id: 'de-xetra', country: 'de', provider: 'xetra', label: 'DE', title: 'Germany · Xetra' },
   { id: 'jp-jquants', country: 'jp', provider: 'jquants', label: 'JP', title: 'Japan · J-Quants' },
+  { id: 'ca-eodhd', country: 'ca', provider: 'eodhd', label: 'CA', title: 'Canada · EODHD' },
 ];
 
 export const DEFAULT_MARKET_ID = 'us-massive';

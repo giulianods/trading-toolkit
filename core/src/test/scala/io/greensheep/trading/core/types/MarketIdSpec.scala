@@ -49,6 +49,12 @@ object MarketIdSpec extends ZIOSpecDefault {
     test("jp-jquants is a registered catalog market") {
       assertTrue(Markets.parseEnabled("jp-jquants") == Right(Seq(Markets.JpJquants)))
     },
+    test("Canada EODHD has its own database and registered market") {
+      assertTrue(
+        MarketId.CaEodhd.databaseName == "ttk-ca-eodhd",
+        Markets.parseEnabled("ca-eodhd") == Right(Seq(Markets.CaEodhd))
+      )
+    },
     test("unknown markets are rejected") {
       assertTrue(Markets.parseEnabled("us-other").isLeft)
     }

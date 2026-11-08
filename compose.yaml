@@ -21,6 +21,7 @@ services:
       TTK_LOG_DIR: /var/log/ttk
     volumes:
       - .:/workspace
+      - node-modules:/workspace/web/node_modules
       - backend-logs:/var/log/ttk
       - sbt-cache:/root/.sbt
       - coursier-cache:/root/.cache/coursier

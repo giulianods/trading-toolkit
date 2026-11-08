@@ -178,46 +178,39 @@ object TrendScreens {
   }
   
 
-  def buildVcpScreen(params: VCPParams) : ZIO[StockMarket, Throwable, Seq[(Stock, ScreenStats)]] = {
-    ZIO.service[StockMarket].map(stockMarket => stockMarket.stocks.values.toSeq.map(s => (s, VCPDetector.detect(s.dailyAggregates, params)))
-      .filter(x => x._2.isDefined).map(kv => (kv._1, kv._2.get)).sortBy(_._2.score) map { case (stock, vcpHit) =>
-      (stock, ScreenStats(
-        ticker = "stock.symbol",
-        stats = Map(
-          "score" -> f"${vcpHit.score}%.2f",
-          "pivotDate" -> vcpHit.pivotDate.toString,
-          "numContractions" -> vcpHit.contractions.size.toString,
-          "uptrendOk" -> vcpHit.uptrendOk.toString,
-          "volumeTrendDown" -> vcpHit.volumeTrendDown.toString,
-          "startDate" -> vcpHit.startDate.toString,
-          "endDate" -> vcpHit.endDate.toString
-        )
-      ))
+  def buildVcpScreen(params: VCPParams): ZIO[StockMarket, Throwable, Seq[(Stock, ScreenStats)]] =
+    SEPA.map { candidates =>
+      candidates.iterator
+        .flatMap { case (stock, _) =>
+          VCPDetector.detect(stock.dailyAggregates, params, uptrendConfirmed = true).map(hit => (stock, hit))
+        }
+        .toVector
+        .sortBy { case (stock, hit) => (-hit.score, stock.symbol) }
+        .map { case (stock, hit) =>
+          (stock, ScreenStats(
+            ticker = stock.symbol,
+            stats = Map(
+              "score" -> f"${hit.score}%.2f",
+              "pivot" -> hit.pivot.toString,
+              "pivotDate" -> hit.pivotDate.toString,
+              "numContractions" -> hit.contractions.size.toString,
+              "uptrendOk" -> hit.uptrendOk.toString,
+              "volumeTrendDown" -> hit.volumeTrendDown.toString,
+              "volumeDryUp" -> hit.dryUp.isDryUp.toString,
+              "startDate" -> hit.startDate.toString,
+              "endDate" -> hit.endDate.toString
+            )
+          ))
+        }
+    }
 
-    })
-  }
-
-  val VolatilityContractionPattern: ZIO[StockMarket, Throwable, Seq[(Stock, ScreenStats)]] = {
-    ZIO.service[StockMarket].map(stockMarket => stockMarket.stocks.values.toSeq.map(s => (s, VCPDetector.detect(s.dailyAggregates, VCPParams.Default)))
-      .filter(x => x._2.isDefined).map(kv => (kv._1, kv._2.get)).sortBy(_._2.score) map { case (stock, vcpHit) =>
-      (stock, ScreenStats(
-        ticker = "stock.symbol",
-        stats = Map(
-          "score" -> f"${vcpHit.score}%.2f",
-          "pivotDate" -> vcpHit.pivotDate.toString,
-          "numContractions" -> vcpHit.contractions.size.toString,
-          "uptrendOk" -> vcpHit.uptrendOk.toString,
-          "volumeTrendDown" -> vcpHit.volumeTrendDown.toString,
-          "startDate" -> vcpHit.startDate.toString,
-          "endDate" -> vcpHit.endDate.toString
-        )
-      ))
-
-    })
-  }
+  val VolatilityContractionPattern: ZIO[StockMarket, Throwable, Seq[(Stock, ScreenStats)]] =
+    buildVcpScreen(VCPParams.Default)
 
   def debugVCP(params: VCPParams): ZIO[StockMarket, Throwable, Seq[DebugResult]] = {
-    ZIO.service[StockMarket].map(sm => sm.stocks.values.toSeq.map(s => VCPDebug.detectWithReasons(s.symbol,s.dailyAggregates, params)))
+    SEPA.map(_.map { case (stock, _) =>
+      VCPDebug.detectWithReasons(stock.symbol, stock.dailyAggregates, params, uptrendConfirmed = true)
+    })
   }
 
 }

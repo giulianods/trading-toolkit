@@ -4,12 +4,13 @@ import cron4zio.*
 import io.finnhub.client.FinnhubClient
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.providers.bvb.BvbClient
+import io.greensheep.providers.eodhd.EodhdClient
 import io.greensheep.providers.jquants.JquantsClient
 import io.greensheep.providers.massive.MassiveAsyncApi
 import io.greensheep.providers.xetra.XetraClient
 import io.greensheep.trading.core.types.MarketDefinition
 import io.greensheep.trading.dataservice.MongoDataRepo
-import io.greensheep.trading.service.services.{AlpacaQuotesServices, BvbQuotesServices, FiancialsServices, JquantsQuotesServices, QuotesServices, ScreenerServices, XetraQuotesServices}
+import io.greensheep.trading.service.services.{AlpacaQuotesServices, BvbQuotesServices, EodhdQuotesServices, FiancialsServices, JquantsQuotesServices, QuotesServices, ScreenerServices, XetraQuotesServices}
 import zio.*
 import zio.http.Client
 
@@ -134,6 +135,13 @@ object CronJobs {
       _ <- ZIO.logInfo(s"Skipping financials cron for ${market.id.id}")
       _ <- supervised(screens, market.cron.screens, ScreenerServices.ScreenerTask)
     } yield ()
+  }
+
+  def startEodhd(market: MarketDefinition): URIO[MongoDatabase & EodhdClient & Client & AppHealth, Unit] = {
+    val zone = ZoneId.of(market.timeZone)
+    AppHealth.markCronStarted *>
+      ZIO.logInfo(s"Quote refresh for ${market.id.id} scheduled in $zone") *>
+      supervised(market.id.job("quotes"), market.cron.quotes, EodhdQuotesServices.refresh(market), zone)
   }
 
   private def rectifyRecentSplits: ZIO[MongoDatabase & MassiveAsyncApi, Throwable, Unit] =

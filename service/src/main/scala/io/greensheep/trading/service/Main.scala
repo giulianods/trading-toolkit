@@ -3,6 +3,7 @@ package io.greensheep.trading.service
 import io.finnhub.client.FinnhubClient
 import io.github.zeal18.zio.mongodb.driver.MongoClient
 import io.greensheep.providers.bvb.BvbClient
+import io.greensheep.providers.eodhd.EodhdClient
 import io.greensheep.providers.jquants.JquantsClient
 import io.greensheep.providers.massive.MassiveAsyncApi
 import io.greensheep.providers.xetra.XetraClient
@@ -10,7 +11,7 @@ import io.greensheep.trading.core.types.{MarketDefinition, Markets}
 import io.greensheep.trading.core.utils.LocalConfig
 import io.greensheep.trading.dataservice.{MarketStore, MongoDataRepo}
 import io.greensheep.trading.service.app.{AppHealth, CronJobs, WebApp}
-import io.greensheep.trading.service.services.{AlpacaQuotesServices, ApiEndpoints, BvbInitialization, FiancialsServices, InitializationService, JquantsInitialization, QuotesServices, ScreenerServices, XetraInitialization}
+import io.greensheep.trading.service.services.{AlpacaQuotesServices, ApiEndpoints, BvbInitialization, EodhdQuotesServices, FiancialsServices, InitializationService, JquantsInitialization, QuotesServices, ScreenerServices, XetraInitialization}
 import zio.*
 import zio.http.{Client, DnsResolver, Server, ZClient}
 import zio.http.netty.NettyConfig
@@ -28,17 +29,18 @@ object Main extends ZIOAppDefault {
   override def run: ZIO[Environment & ZIOAppArgs & Scope, Any, Any] = {
     val enabled = Markets.enabledFromConfig.fold(msg => throw new IllegalStateException(msg), identity)
     val screens = ScreenerServices.screenOptions
+    val skipInitialization = LocalConfig.get("ttk.skip.initialization").exists(_.equalsIgnoreCase("true"))
+    val skipCron = LocalConfig.get("ttk.skip.cron").exists(_.equalsIgnoreCase("true"))
     val needsMassive = enabled.exists(_.id.provider == "massive")
     val needsJquants = enabled.exists(_.id.provider == "jquants")
     if (needsMassive || enabled.contains(Markets.UsAlpaca)) LocalConfig.require("massive.api.key")
     if (needsJquants) LocalConfig.require("jquants.api.key")
+    if (enabled.contains(Markets.CaEodhd) && (!skipInitialization || !skipCron)) LocalConfig.require("eodhd.api.key")
     if (enabled.contains(Markets.UsAlpaca)) {
       LocalConfig.require("alpaca.api.key")
       LocalConfig.require("alpaca.api.secret")
     }
     val finnhubApiKey = if (needsMassive) LocalConfig.require("finnhub.api.key") else LocalConfig.get("finnhub.api.key").getOrElse("")
-    val skipInitialization = LocalConfig.get("ttk.skip.initialization").exists(_.equalsIgnoreCase("true"))
-    val skipCron = LocalConfig.get("ttk.skip.cron").exists(_.equalsIgnoreCase("true"))
     val mongoUrl = LocalConfig.get("mongodb.url").getOrElse("mongodb://127.0.0.1:27017")
 
     val outboundHttpClient =
@@ -87,7 +89,8 @@ object Main extends ZIOAppDefault {
       finnhubLayer,
       BvbClient.live,
       XetraClient.live,
-      JquantsClient.live
+      JquantsClient.live,
+      EodhdClient.live
     )
   }
 
@@ -97,10 +100,10 @@ object Main extends ZIOAppDefault {
       market: MarketDefinition,
       skipInitialization: Boolean,
       skipCron: Boolean
-  ): ZIO[MassiveAsyncApi & BvbClient & XetraClient & JquantsClient & AppHealth & FinnhubClient & Client & Scope, Throwable, Unit] = {
+  ): ZIO[MassiveAsyncApi & BvbClient & XetraClient & JquantsClient & EodhdClient & AppHealth & FinnhubClient & Client & Scope, Throwable, Unit] = {
     val dbLayer = ZLayer.succeed(store.database(market))
     val screenerTask =
-      if (market.id == Markets.UsAlpaca.id) ScreenerServices.latestSessionScreenerTask
+      if (market.id == Markets.UsAlpaca.id || market.id == Markets.CaEodhd.id) ScreenerServices.latestSessionScreenerTask
       else ScreenerServices.ScreenerTask
     val screenStoredQuotes = CronJobs
       .guarded(market.id.job("screens"), screenerTask)
@@ -211,6 +214,17 @@ object Main extends ZIOAppDefault {
           _ <- screenStoredQuotes.when(skipInitialization)
           _ <- CronJobs.startJquants(market).provideSomeLayer(dbLayer).unless(skipCron)
           _ <- ZIO.logInfo(s"Cron jobs started for ${market.id.id}").unless(skipCron)
+        } yield ()
+      case "eodhd" =>
+        for {
+          _ <- ZIO.logInfo(s"Opening market ${market.id.id} database ${market.id.databaseName}")
+          _ <- MongoDataRepo.ensureIndexes.provideLayer(dbLayer)
+          _ <- CronJobs.guarded(market.id.job("quotes"), EodhdQuotesServices.initialize(market))
+            .provideSomeLayer(dbLayer)
+            .forkDaemon
+            .unless(skipInitialization)
+          _ <- screenStoredQuotes.when(skipInitialization)
+          _ <- CronJobs.startEodhd(market).provideSomeLayer(dbLayer).unless(skipCron)
         } yield ()
       case other =>
         ZIO.fail(new IllegalStateException(s"No quote client for provider '$other'"))

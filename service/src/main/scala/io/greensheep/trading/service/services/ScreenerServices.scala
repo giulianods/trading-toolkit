@@ -60,7 +60,7 @@ object ScreenerServices {
         dailyAggregates = Chunk.fromIterable(data.quotes.map(DailyAggregate.apply))
       )
     }
-  } yield StockMarket(stocks.map(stock => stock.symbol -> stock).toMap)
+  } yield StockMarket(stocks.map(stock => stock.symbol -> stock).toMap, universe.issuerByTicker.getOrElse(Map.empty))
 
   def buildWatchlist(name: String, date: LocalDate)(stocks: Seq[(Stock, ScreenStats)]): ZIO[Any, Throwable, Watchlist] =
     Clock.instant.map { generatedAt =>

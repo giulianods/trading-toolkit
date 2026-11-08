@@ -29,13 +29,14 @@ npmBuild := {
   if (!dir.exists) {
     sys.error(s"Frontend project not found at $dir")
   }
-  if (!(dir / "node_modules").exists) {
+  val npm = if (scala.util.Properties.isWin) Seq("cmd", "/d", "/c", "npm") else Seq("npm")
+  if (!(dir / "node_modules" / ".bin").isDirectory) {
     log.info(s"Installing frontend dependencies in $dir")
-    val install = Process(Seq("npm", "install"), dir).!
-    if (install != 0) sys.error("npm install failed")
+    val install = Process(npm :+ "ci", dir).!
+    if (install != 0) sys.error("npm ci failed")
   }
   log.info(s"Building frontend in $dir")
-  val code = Process(Seq("npm", "run", "build"), dir).!
+  val code = Process(npm ++ Seq("run", "build"), dir).!
   if (code != 0) sys.error("npm run build failed")
   val buildDir = dir / "build"
   if (!buildDir.exists) sys.error(s"Expected $buildDir after npm run build")
@@ -58,9 +59,74 @@ Compile / resourceGenerators += Def.task {
   }
 }.taskValue
 
-packageService := {
+packageService := Def.taskDyn {
   npmBuild.value
-  assembly.value
+  Def.task { assembly.value }
+}.value
+
+val deployArgo = taskKey[File]("Build and deploy the toolkit container on argo using its existing configuration")
+
+deployArgo := {
+  val jar = packageService.value
+  val log = streams.value.log
+  val target = "gds@192.168.0.153"
+  val ssh = Seq("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", target)
+  val release = java.util.UUID.randomUUID().toString
+  val incoming = s"app/ttk.jar.$release.incoming"
+  val previous = s"app/ttk.jar.$release.previous"
+  val digest = java.security.MessageDigest.getInstance("SHA-256")
+  val checksum = digest.digest(IO.readBytes(jar)).map(b => f"${b & 0xff}%02x").mkString
+
+  def run(command: Seq[String], action: String): Unit = {
+    val code = Process(command, jar.getParentFile).!
+    if (code != 0) sys.error(s"$action failed (exit $code)")
+  }
+
+  run(ssh :+ "cd ttk && test -f app/ttk.jar && test -f app/local.conf && docker compose version >/dev/null && command -v curl flock sha256sum >/dev/null",
+    "Checking argo deployment prerequisites")
+  log.info(s"Uploading $jar to argo")
+  run(Seq("scp", "-B", "-o", "ConnectTimeout=10", jar.getName, s"$target:ttk/$incoming"), "Uploading the release")
+
+  val switchRelease =
+    s"""set -eu
+       |cd ttk
+       |trap 'rm -f $incoming' EXIT
+       |exec 9>app/.deploy.lock
+       |flock -n 9
+       |printf '%s  %s\n' '$checksum' '$incoming' | sha256sum -c -
+       |cp -p app/ttk.jar '$previous'
+       |mv -f '$incoming' app/ttk.jar
+       |
+       |recreate() {
+       |  docker compose up -d --force-recreate --no-deps ttk
+       |}
+       |
+       |await_status() {
+       |  for attempt in $$(seq 1 30); do
+       |    if curl -fsS --max-time 2 http://127.0.0.1:7777/status 2>/dev/null |
+       |      grep -Eq '"mongo"[[:space:]]*:[[:space:]]*"ok"'; then
+       |      return 0
+       |    fi
+       |    sleep 2
+       |  done
+       |  return 1
+       |}
+       |
+       |if ! recreate || ! await_status; then
+       |  echo 'Toolkit did not become healthy. Restoring the previous JAR.' >&2
+       |  cp -p '$previous' '$incoming'
+       |  mv -f '$incoming' app/ttk.jar
+       |  recreate
+       |  await_status
+       |  exit 1
+       |fi
+       |""".stripMargin
+  val input = new java.io.ByteArrayInputStream(switchRelease.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+  val code = (Process(ssh :+ "sh -s") #< input).!
+  if (code != 0) sys.error(s"Deployment on argo failed (exit $code)")
+  log.info("Toolkit running at http://192.168.0.153:7777")
+  log.info(s"Previous JAR kept at ~/ttk/$previous on argo")
+  jar
 }
 
 val deploy = taskKey[File]("Build the fat jar and deploy it with docker compose (local or SSH)")

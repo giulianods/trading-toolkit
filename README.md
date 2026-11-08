@@ -1,6 +1,6 @@
 # trading-toolkit
 
-Multi-market quotes toolkit (US Massive and Alpaca, Romania BVB, Germany Xetra, Japan J-Quants). The service talks to MongoDB, initializes each enabled market’s universe and quotes at startup, then refreshes them on a nightly cron. HTTP API + UI listen on port **7777**.
+Multi-market quotes toolkit (US Massive and Alpaca, Romania BVB, Germany Xetra, Japan J-Quants, Canada EODHD). The service talks to MongoDB, initializes each enabled market’s universe and quotes at startup, then refreshes them on a nightly cron. HTTP API + UI listen on port **7777**.
 
 ## Develop with Docker
 
@@ -78,7 +78,7 @@ Edit `local.conf` at the repo root. It uses HOCON syntax.
 | `jquants.api.key` | Required if `jp-jquants` is enabled ([J-Quants](https://jpx-jquants.com/en/register)) |
 | `jquants.data.delay.days` | Optional; default `84` (free plan ~12-week delay; use `0` on Light+) |
 | `finnhub.api.key` | Required for `us-massive`. Optional for US-Alpaca financials |
-| `eodhd.api.key` | Optional EODHD Fundamentals token for total revenue, net income, margin, and EPS on US and Romanian charts |
+| `eodhd.api.key` | Required for `ca-eodhd` downloads. Optional for income statements on US and Romanian charts |
 | `ttk.skip.initialization` | `true` to skip startup backfill except for a missing or empty US-Alpaca universe |
 | `ttk.skip.cron` | `true` to skip nightly jobs |
 
@@ -91,6 +91,24 @@ For an existing installation, carry your values from `local.properties` into
 `local.conf`. Quote strings such as credentials and MongoDB URLs, and turn
 market and screen lists into HOCON arrays. The service can still read
 `local.properties` when no `local.conf` is found. Deployment uses `local.conf`.
+
+### Canadian stocks
+
+Add `ca-eodhd` to `ttk.markets` and set `eodhd.api.key` in `local.conf` or
+`EODHD_API_KEY` in the environment. To run Canada by itself, set
+`TTK_MARKETS=ca-eodhd`. The full universe needs an
+[EODHD Historical Data — All World plan](https://eodhd.com/help/plans) or a plan
+that includes the same historical prices and splits.
+
+The provider tracks CAD-denominated common shares on the TSX and TSX Venture.
+It stores split-adjusted daily bars in `ttk-ca-eodhd` and refreshes the rolling
+23-month window at startup and after trading weekdays at 00:30 Toronto time.
+Each refresh uses two symbol-list requests and up to two requests per stock
+for prices and splits. The dashboard market is **CA** and the API uses
+exchange-qualified tickers such as `/markets/ca/eodhd/quotes/RY.TO`.
+Canadian screens group listings by issuer using ISINs and company names.
+Each screen date uses one listing per matched issuer, favoring the most
+recently traded listing and then the highest average turnover over up to 20 sessions.
 
 ## Start MongoDB
 
@@ -210,11 +228,21 @@ ttk.web.root = "web/build"
 
 ```bash
 sbt "service/packageService"   # React build + fat jar
+sbt "service/deployArgo"       # Build the current checkout and update argo
 sbt "service/deploy"           # jar + local.conf → Docker (local or SSH via ttk.deploy.*)
 ```
 
-`scripts/package.sh` and `scripts/deploy.sh` wrap the same sbt tasks.
-Keep the deployment config self-contained because the task copies `local.conf` to the target.
+`service/deployArgo` requires Node 22 and SSH key access to `gds@192.168.0.153`
+from the environment running sbt. Rebuild the development container once
+to pick up its bundled Node 22. The task builds the UI and assembles the
+JAR without running test suites. It verifies the upload, backs up the
+previous JAR, and recreates the `ttk` service in `~/ttk` with the server's
+existing configuration and MongoDB. If startup fails, it restores the
+previous JAR.
+
+`scripts/package.sh` and `scripts/deploy.sh` wrap `service/packageService`
+and `service/deploy` respectively. The latter copies `local.conf` to its
+configured target.
 
 ## License
 

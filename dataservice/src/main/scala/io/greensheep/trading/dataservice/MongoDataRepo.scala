@@ -112,6 +112,25 @@ object MongoDataRepo {
     db.getCollection[Watchlist]("watchlist")
   }
 
+  private val stockUniverseCodec: Codec[StockUniverse] = {
+    val derived = Codec.derived[StockUniverse]
+    val documentCodec = new BsonDocumentCodec
+    Codec[StockUniverse](
+      (writer, universe, context) => derived.encode(writer, universe, context),
+      (reader, context) => {
+        val document = documentCodec.decode(reader, context)
+        // Universes saved before issuer grouping have no issuer mapping.
+        if (!document.containsKey("issuerByTicker")) document.put("issuerByTicker", BsonNull.VALUE)
+        derived.decode(new BsonDocumentReader(document), context)
+      }
+    )
+  }
+
+  private def stockUniverseCollection(db: MongoDatabase) = {
+    implicit val codec: Codec[StockUniverse] = stockUniverseCodec
+    db.getCollection[StockUniverse]("stock-universe")
+  }
+
   def build(url: String, dbName: String): ZLayer[Any, Throwable, MongoDataRepo] = ZLayer.succeed {
     val mongoLayer = MongoClient.live(url) >>> ZLayer.fromZIO(ZIO.serviceWith[MongoClient](_.getDatabase(dbName)))
     new MongoDataRepo() {
@@ -159,7 +178,7 @@ object MongoDataRepo {
   def saveStockUniverse(stockUniverse: StockUniverse): ZIO[MongoDatabase, Throwable, Unit] = {
     for {
       db <- ZIO.service[MongoDatabase]
-      coll = db.getCollection[StockUniverse]("stock-universe")
+      coll = stockUniverseCollection(db)
       _ <- coll.replaceOne(filters.eq("_id", stockUniverse._id),
         stockUniverse,
         ReplaceOptions(upsert = true)).map(_.wasAcknowledged())
@@ -169,7 +188,7 @@ object MongoDataRepo {
 
   def updateUniverseQuotes(symbols: Seq[String], day: LocalDate): ZIO[MongoDatabase, Throwable, Unit] =
     ZIO.serviceWithZIO[MongoDatabase] { db =>
-      db.getCollection[StockUniverse]("stock-universe").updateOne(
+      stockUniverseCollection(db).updateOne(
         filters.eq("_id", "stock-universe"),
         updates.combine(updates.set("symbols", symbols), updates.max("lastUpdateQuotes", day))
       ).unit
@@ -177,7 +196,7 @@ object MongoDataRepo {
 
   def updateUniverseFinancialsDate(day: LocalDate): ZIO[MongoDatabase, Throwable, Unit] =
     ZIO.serviceWithZIO[MongoDatabase] { db =>
-      db.getCollection[StockUniverse]("stock-universe")
+      stockUniverseCollection(db)
         .updateOne(filters.eq("_id", "stock-universe"), updates.set("lastUpdateFinancials", day))
         .unit
     }
@@ -279,7 +298,7 @@ object MongoDataRepo {
   def hasStockUniverse: ZIO[MongoDatabase, Throwable, Boolean] = {
     for {
       db <- ZIO.service[MongoDatabase]
-      coll = db.getCollection[StockUniverse]("stock-universe")
+      coll = stockUniverseCollection(db)
       count <- coll.countDocuments().map(_.toInt)
       _ <- ZIO.logInfo(s"Stock universe count: $count")
     } yield count > 0
@@ -288,7 +307,7 @@ object MongoDataRepo {
   def getStockUniverse: ZIO[MongoDatabase, Throwable, StockUniverse] = {
     for {
       db <- ZIO.service[MongoDatabase]
-      coll = db.getCollection[StockUniverse]("stock-universe")
+      coll = stockUniverseCollection(db)
       su <- coll.find(filters.eq("_id", "stock-universe")).runHead
       universe <- ZIO.fromOption(su).orElseFail(new NoSuchElementException("No stock universe found"))
     } yield universe

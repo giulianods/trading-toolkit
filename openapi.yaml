@@ -4,6 +4,8 @@ info:
   version: 1.0.0
   description: |
     Canonical data routes are `/markets/{country}/{provider}/...`.
+    Canada EODHD uses `/markets/ca/eodhd/...` with exchange-qualified tickers
+    such as `RY.TO` (TSX) and `AAG.V` (TSX Venture).
     Unprefixed `/quotes`, `/financials`, `/watchlists`, `/description`, `/descriptions`, and `/breadth`
     paths alias to the US Massive market (`us` / `massive`). `/status` is process-wide.
 servers:
@@ -785,6 +787,11 @@ components:
           type: string
         stats:
           type: object
+          description: >
+            Newly generated VCP watchlists only include tickers that pass SEPA
+            for the same market and date. In VCP stats, pivot is the reference
+            price of the last contraction's swing high. volumeDryUp records
+            whether volume dried up near the right edge. Both values are strings.
           additionalProperties:
             type: string
     IncomePeriod:

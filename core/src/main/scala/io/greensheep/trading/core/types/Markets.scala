@@ -69,12 +69,27 @@ object Markets {
     hasFinancials = false
   )
 
+  val CaEodhd: MarketDefinition = MarketDefinition(
+    id = MarketId.CaEodhd,
+    timeZone = "America/Toronto",
+    dataSource = "eodhd",
+    cron = MarketCron(
+      quotes = "0 30 0 ? * TUE-SAT",
+      splits = "0 0 2 * * ?",
+      clean = None,
+      screens = "0 0 3 * * ?",
+      financials = None
+    ),
+    hasFinancials = false
+  )
+
   val catalog: Map[MarketId, MarketDefinition] = Map(
     UsMassive.id -> UsMassive,
     UsAlpaca.id -> UsAlpaca,
     RoBvb.id -> RoBvb,
     DeXetra.id -> DeXetra,
-    JpJquants.id -> JpJquants
+    JpJquants.id -> JpJquants,
+    CaEodhd.id -> CaEodhd
   )
 
   def parseEnabled(raw: String): Either[String, Seq[MarketDefinition]] =

@@ -2,7 +2,7 @@ package io.greensheep.trading.core.types
 
 import java.time.LocalDate
 
-case class StockMarket(stocks: Map[String, Stock]) {
+case class StockMarket(stocks: Map[String, Stock], issuerByTicker: Map[String, String] = Map.empty) {
 
 
 
@@ -28,10 +28,18 @@ case class StockMarket(stocks: Map[String, Stock]) {
 
 
   def historicalSnapshot(upTo: java.time.LocalDate): StockMarket = {
-    StockMarket(
-      stocks.map {
-        case (k, v) => k -> v.historicalSnapshot(upTo)
-      } filter(_._2.dailyAggregates.nonEmpty)
-    )
+    val snapshot = stocks.view.mapValues(_.historicalSnapshot(upTo))
+      .filter { case (_, stock) => stock.dailyAggregates.nonEmpty }.toMap
+    if (issuerByTicker.isEmpty) StockMarket(snapshot)
+    else {
+      val (listed, ungrouped) = snapshot.partition { case (ticker, _) => issuerByTicker.contains(ticker) }
+      val representatives = listed.valuesIterator.toSeq.groupBy(stock => issuerByTicker(stock.symbol)).valuesIterator
+        .map(_.maxBy { stock =>
+          val recent = stock.dailyAggregates.takeRight(20)
+          val averageTurnover = recent.iterator.map(bar => bar.c * bar.v).sum / recent.size
+          (recent.last.t, averageTurnover, stock.symbol)
+        })
+      StockMarket(ungrouped ++ representatives.map(stock => stock.symbol -> stock))
+    }
   }
 }

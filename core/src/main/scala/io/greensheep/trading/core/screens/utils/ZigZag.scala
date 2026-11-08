@@ -10,7 +10,7 @@ object ZigZag {
   final case class Swing(idx: Int, price: Double, date: LocalDate, isHigh: Boolean)
 
   /**
-   * Build swings where price reverses by >= reversalPct from the last extreme.
+   * Return confirmed swings where price reverses by >= reversalPct from the last extreme.
    * Uses closes for simplicity; you can swap to highs/lows if you prefer.
    */
   def swings(bars: Seq[DailyAggregate], reversalPct: Double): List[Swing] = {
@@ -18,7 +18,7 @@ object ZigZag {
     var dir: Dir = Dir.None
     var lastExtremeIdx = 0
     var lastExtremePrice = bars.head.c
-    var swings = List(Swing(0, lastExtremePrice, bars.head.t, isHigh = false))
+    var swings = List.empty[Swing]
 
     for (i <- 1 until bars.size) {
       val px = bars(i).c
@@ -53,11 +53,6 @@ object ZigZag {
       }
     }
 
-    // Close out with the last extreme labeled as per current dir
-    dir match {
-      case Dir.Up    => swings :+ Swing(lastExtremeIdx, lastExtremePrice, bars(lastExtremeIdx).t, isHigh = true)
-      case Dir.Down  => swings :+ Swing(lastExtremeIdx, lastExtremePrice, bars(lastExtremeIdx).t, isHigh = false)
-      case Dir.None  => swings
-    }
+    swings
   }
 }
