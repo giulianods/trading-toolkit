@@ -1,3 +1,4 @@
 *.jar
 local.properties
+local.conf
 logs/

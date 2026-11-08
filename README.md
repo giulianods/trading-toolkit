@@ -7,9 +7,9 @@ Multi-market quotes toolkit (US Massive and Alpaca, Romania BVB, Germany Xetra, 
 Install Docker with the Compose plugin (Docker Desktop on Windows). The
 containers provide the JDK, Scala, sbt, Node.js, and MongoDB.
 
-1. From the repository root, copy `local.properties.example` to
-   `local.properties` if it doesn't already exist.
-2. Set `ttk.markets=ro-bvb` to try the app without API keys, or keep the
+1. For a new checkout, copy `local.conf.example` to `local.conf` in the repository root.
+   If you already have `local.properties`, follow the migration notes under [Config](#config).
+2. Set `ttk.markets = ["ro-bvb"]` to try the app without API keys, or keep the
    markets you want and fill in their keys using the config table below.
    Compose sets `MONGODB_URL` to use its own MongoDB container.
 3. Start the stack:
@@ -23,7 +23,7 @@ The backend status is at http://localhost:7777/status. The first start
 downloads dependencies and can take longer while the backend backfills quotes.
 
 Frontend edits reload automatically. After a Scala edit or a change to
-`local.properties`, run `docker compose restart backend` to recompile and restart.
+`local.conf`, run `docker compose restart backend` to recompile and restart.
 
 ```sh
 docker compose run --rm --no-deps backend sbt -batch test
@@ -42,7 +42,7 @@ checkout inside the backend container with JDK 21 and sbt. Stop any separate
 `docker compose up` session first so the IDE can use the same local ports.
 
 The Dev Container starts MongoDB and the React dev server alongside the IDE
-container. Once `local.properties` is configured, run `sbt service/run` in
+container. Once `local.conf` is configured, run `sbt service/run` in
 IntelliJ's container terminal or launch `Main` from the IDE.
 
 For Git on a Windows checkout, run `git config --local core.autocrlf true`
@@ -60,18 +60,21 @@ with `ssh-add`, and reconnect with SSH agent forwarding enabled.
 
 ## Config
 
+Create the file from the template for a new installation.
+
 ```bash
-cp local.properties.example local.properties
+cp local.conf.example local.conf
 ```
 
-Edit `local.properties` at the repo root:
+Edit `local.conf` at the repo root. It uses HOCON syntax.
 
 | Key | Purpose |
 |---|---|
 | `mongodb.url` | Default `mongodb://127.0.0.1:27017` |
-| `ttk.markets` | Comma list, e.g. `us-massive,us-alpaca,ro-bvb,de-xetra,jp-jquants` |
+| `ttk.markets` | List of market IDs, e.g. `["us-massive", "us-alpaca", "ro-bvb", "de-xetra", "jp-jquants"]` |
+| `ttk.screens` | Ordered list of screen IDs, e.g. `["SEPA", "7_PCT_UP"]`. Defaults to all built-in screens with SEPA first. |
 | `massive.api.key` | Required for US-Massive and for US-Alpaca's common-stock reference data |
-| `alpaca.api.key`, `alpaca.api.secret` | Required if `us-alpaca` is enabled. Set `alpaca.paper=false` for live account keys |
+| `alpaca.api.key`, `alpaca.api.secret` | Required if `us-alpaca` is enabled. Set `alpaca.paper = false` for live account keys |
 | `jquants.api.key` | Required if `jp-jquants` is enabled ([J-Quants](https://jpx-jquants.com/en/register)) |
 | `jquants.data.delay.days` | Optional; default `84` (free plan ~12-week delay; use `0` on Light+) |
 | `finnhub.api.key` | Required for `us-massive`. Optional for US-Alpaca financials |
@@ -79,7 +82,15 @@ Edit `local.properties` at the repo root:
 | `ttk.skip.initialization` | `true` to skip startup backfill except for a missing or empty US-Alpaca universe |
 | `ttk.skip.cron` | `true` to skip nightly jobs |
 
-Env vars override the file (`MASSIVE_API_KEY`, `MONGODB_URL`, …).
+Environment variables override the file. List overrides use comma-separated values,
+for example `TTK_MARKETS=ro-bvb` or `TTK_SCREENS=SEPA,7_PCT_UP`.
+The service looks for `local.conf` in the working directory and its parents.
+Use `-Dttk.config.file=/path/to/local.conf` to select a different file.
+
+For an existing installation, carry your values from `local.properties` into
+`local.conf`. Quote strings such as credentials and MongoDB URLs, and turn
+market and screen lists into HOCON arrays. The service can still read
+`local.properties` when no `local.conf` is found. Deployment uses `local.conf`.
 
 ## Start MongoDB
 
@@ -103,7 +114,7 @@ Leave the DB running across restarts; only recreate the app container when deplo
 
 ## Start from sbt
 
-From the repo root (so `local.properties` is found):
+From the repo root (so `local.conf` is found):
 
 ```bash
 # Mongo must already be up
@@ -114,8 +125,16 @@ That runs `io.greensheep.trading.service.Main`. On startup it:
 
 1. Opens a Mongo database per enabled market (`ttk-us-massive`, `ttk-ro-bvb`, `ttk-de-xetra`, `ttk-jp-jquants`, …)
 2. Initializes universes and quotes **in parallel** for enabled providers, subject to `ttk.skip.initialization`
-3. Schedules nightly quote/screen crons (unless `ttk.skip.cron=true`)
-4. Serves the API (and packaged web UI if present) on http://localhost:7777
+3. Runs the configured screens for each market, using stored quotes when startup backfill is skipped
+4. Schedules nightly quote/screen crons (unless `ttk.skip.cron=true`)
+5. Serves the API (and packaged web UI if present) on http://localhost:7777
+
+The dashboard's Screen selector uses the configured order and opens the first screen.
+Supported IDs are `SEPA`, `VCP`, `7_PCT_UP`, `7_PCT_DOWN`, `NEW_52_WEEK_HIGH`,
+`NEW_52_WEEK_LOW`, and `NEW_IPOS`. **7%UP** includes stocks whose latest close
+is at least 7% above their close five trading sessions earlier and requires at
+least 16 closing prices. **7%UP** and **7% Down** both sort by the app's IBD
+relative strength rank across the market, highest first.
 
 US Massive quotes refresh at 00:30 New York time, after the Basic plan releases
 the previous trading day's bars. The US screener runs after the quote refresh
@@ -136,10 +155,10 @@ breadth history using the current common-stock universe.
 
 Useful flags while iterating:
 
-```properties
-ttk.markets=ro-bvb
-ttk.skip.initialization=true
-ttk.skip.cron=true
+```hocon
+ttk.markets = ["ro-bvb"]
+ttk.skip.initialization = true
+ttk.skip.cron = true
 ```
 
 ### Tests
@@ -154,7 +173,7 @@ Provider-specific:
 sbt "jquantsClientZio/test" "xetraClientZio/test" "bvbClientZio/test" "core/test"
 ```
 
-With Alpaca credentials in `local.properties`, run the live Alpaca tests
+With Alpaca credentials in `local.conf`, run the live Alpaca tests
 against Compose's MongoDB:
 
 ```sh
@@ -174,7 +193,7 @@ npm install
 npm start          # http://localhost:3000, proxies API to :7777
 ```
 
-The header switches markets and loads the selected market’s SEPA watchlist and quotes from `/markets/{country}/{provider}/...`.
+The header switches markets and screens and loads the selected watchlist and quotes from `/markets/{country}/{provider}/...`.
 
 For US and Romanian companies, the chart panel requests annual and quarterly
 income statements when a card comes into view. The server caches successful
@@ -183,18 +202,19 @@ for full symbol access. Missing statement fields appear as unavailable.
 
 Or point the service at a local build:
 
-```properties
-ttk.web.root=web/build
+```hocon
+ttk.web.root = "web/build"
 ```
 
 ## Package / deploy
 
 ```bash
 sbt "service/packageService"   # React build + fat jar
-sbt "service/deploy"           # jar + local.properties → Docker (local or SSH via ttk.deploy.*)
+sbt "service/deploy"           # jar + local.conf → Docker (local or SSH via ttk.deploy.*)
 ```
 
 `scripts/package.sh` and `scripts/deploy.sh` wrap the same sbt tasks.
+Keep the deployment config self-contained because the task copies `local.conf` to the target.
 
 ## License
 

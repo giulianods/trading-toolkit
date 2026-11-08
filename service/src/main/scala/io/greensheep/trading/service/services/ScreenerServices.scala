@@ -2,13 +2,43 @@ package io.greensheep.trading.service.services
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.trading.core.screens.{BreadthIndicators as MarketBreadth, TrendScreens}
-import io.greensheep.trading.core.types.{DailyAggregate, DailyQuoteData, ScreenStats, Stock, StockMarket, Watchlist}
+import io.greensheep.trading.core.types.{DailyAggregate, ScreenStats, Stock, StockMarket, Watchlist}
+import io.greensheep.trading.core.utils.LocalConfig
 import io.greensheep.trading.dataservice.MongoDataRepo
 import zio.{Chunk, Clock, ZIO, ZLayer}
+import zio.json.{DeriveJsonEncoder, JsonEncoder}
 
 import java.time.LocalDate
 
 object ScreenerServices {
+
+  final case class ScreenOption(id: String, label: String)
+  object ScreenOption {
+    implicit val encoder: JsonEncoder[ScreenOption] = DeriveJsonEncoder.gen[ScreenOption]
+  }
+
+  private val catalog = Seq(
+    ScreenOption("SEPA", "SEPA") -> TrendScreens.SEPA,
+    ScreenOption("VCP", "VCP") -> TrendScreens.VolatilityContractionPattern,
+    ScreenOption("7_PCT_UP", "7%UP") -> TrendScreens.SevenPctUp,
+    ScreenOption("7_PCT_DOWN", "7% Down") -> TrendScreens.SevenPctDown,
+    ScreenOption("NEW_52_WEEK_HIGH", "New 52-Week High") -> TrendScreens.New52WeekHigh,
+    ScreenOption("NEW_52_WEEK_LOW", "New 52-Week Low") -> TrendScreens.New52WeekLow,
+    ScreenOption("NEW_IPOS", "New IPOs") -> TrendScreens.NewIPOs
+  )
+
+  private lazy val enabledScreens = LocalConfig.getList("ttk.screens").fold(catalog) { names =>
+    require(names.nonEmpty, "ttk.screens must list at least one screen")
+    names.map { name =>
+      catalog.find { case (option, _) =>
+        option.id.equalsIgnoreCase(name) || option.label.equalsIgnoreCase(name)
+      }.getOrElse {
+        throw new IllegalArgumentException(s"Unknown screen '$name' in ttk.screens. Valid IDs: ${catalog.map(_._1.id).mkString(", ")}")
+      }
+    }.distinctBy(_._1.id)
+  }
+
+  def screenOptions: Seq[ScreenOption] = enabledScreens.map(_._1)
 
   val LoadQuotes: ZIO[MongoDatabase, Throwable, StockMarket] = for {
     universe <- MongoDataRepo.getStockUniverse
@@ -44,17 +74,7 @@ object ScreenerServices {
     }
 
   def buildScreens(date: LocalDate): ZIO[StockMarket, Throwable, Seq[Watchlist]] =
-    ZIO.collectAll(
-      Seq(
-        TrendScreens.SEPA.flatMap(buildWatchlist("SEPA", date)),
-        TrendScreens.VolatilityContractionPattern.flatMap(buildWatchlist("VCP", date)),
-        TrendScreens.SevenPctUp.flatMap(buildWatchlist("7_PCT_UP", date)),
-        TrendScreens.SevenPctDown.flatMap(buildWatchlist("7_PCT_DOWN", date)),
-        TrendScreens.New52WeekHigh.flatMap(buildWatchlist("NEW_52_WEEK_HIGH", date)),
-        TrendScreens.New52WeekLow.flatMap(buildWatchlist("NEW_52_WEEK_LOW", date)),
-        TrendScreens.NewIPOs.flatMap(buildWatchlist("NEW_IPOS", date))
-      )
-    )
+    ZIO.foreach(enabledScreens) { case (option, screen) => screen.flatMap(buildWatchlist(option.id, date)) }
 
   def getScreensForDate(date: LocalDate): ZIO[MongoDatabase, Throwable, Seq[Watchlist]] = {
     val stockMarket = ZLayer.fromZIO(LoadQuotes.map(_.historicalSnapshot(date)))

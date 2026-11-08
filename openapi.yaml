@@ -28,6 +28,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AppStatus'
+  /markets/screens:
+    get:
+      tags: [Watchlists]
+      summary: List enabled screens in display order
+      responses:
+        '200':
+          description: Screen choices shared by all enabled markets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, label]
+                  properties:
+                    id:
+                      type: string
+                      example: 7_PCT_UP
+                    label:
+                      type: string
+                      example: 7%UP
   /markets/{country}/{provider}/data-status:
     get:
       tags: [Quotes]

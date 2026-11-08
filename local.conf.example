@@ -1,0 +1,35 @@
+# Copy to local.conf and set your local secrets.
+# Also required for us-alpaca common-stock classification.
+massive.api.key = ""
+# Required only for us-alpaca. Paper API keys are used by default.
+alpaca.api.key = ""
+alpaca.api.secret = ""
+# alpaca.paper = false
+finnhub.api.key = ""
+# Optional company income statements for US and Romanian markets.
+eodhd.api.key = ""
+# JPX J-Quants (required only when ttk.markets includes jp-jquants). Free plan: ~5 req/min, ~12w delay.
+jquants.api.key = ""
+# jquants.data.delay.days = 84
+# jquants.min.interval.ms = 12500
+mongodb.url = "mongodb://127.0.0.1:27017"
+
+ttk {
+  markets = ["us-massive", "ro-bvb", "de-xetra", "jp-jquants"]
+  # Optional ordered screen list. The UI opens the first enabled screen.
+  # screens = ["SEPA", "7_PCT_UP"]
+
+  # A missing or empty US-Alpaca universe still gets its first startup backfill.
+  skip.initialization = false
+  skip.cron = false
+
+  # Optional local overlay of the React build. Packaged jars serve classpath:/web instead.
+  # web.root = "web/build"
+
+  # Home-server deploy via sbt "service/deploy". localhost uses local Docker.
+  deploy {
+    host = "192.168.0.153"
+    # user = "gds"
+    # dir = "ttk"
+  }
+}

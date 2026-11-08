@@ -105,7 +105,7 @@ object JquantsClient {
       new JquantsClient(limiter, key)
     }
 
-  /** Test layer with an explicit API key (does not read local.properties). */
+  /** Test layer with an explicit API key and no local config lookup. */
   def layerWithKey(apiKey: String): ZLayer[Any, Nothing, JquantsClient & JquantsRateLimiter] =
     JquantsRateLimiter.probeLayer >+> ZLayer.fromFunction((limiter: JquantsRateLimiter) => new JquantsClient(limiter, apiKey))
 

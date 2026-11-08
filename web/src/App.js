@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { DEFAULT_MARKET_ID, MARKETS, fetchMarketDataStatus, fetchWatchlist, marketById } from './api';
+import { DEFAULT_MARKET_ID, MARKETS, fetchMarketDataStatus, fetchScreens, fetchWatchlist, marketById } from './api';
 import ChartGrid from './components/ChartGrid';
 import { SelectionContext } from './context/SelectionContext';
 import './App.css';
 
-const DEFAULT_WATCHLIST = 'SEPA';
 const MARKET_STORAGE_KEY = 'ttk.selectedMarket';
 
 function readStoredMarketId() {
@@ -32,6 +31,10 @@ function formatDateForFilename(dayStr) {
 function App() {
   const [marketId, setMarketId] = useState(readStoredMarketId);
   const market = useMemo(() => marketById(marketId), [marketId]);
+  const [screens, setScreens] = useState([]);
+  const [screenId, setScreenId] = useState('');
+  const [screenError, setScreenError] = useState(null);
+  const selectedScreen = screens.find((screen) => screen.id === screenId) ?? screens[0];
   const [watchlist, setWatchlist] = useState(null);
   const [latestQuoteDate, setLatestQuoteDate] = useState(undefined);
   const [error, setError] = useState(null);
@@ -59,11 +62,11 @@ function App() {
   }, []);
 
   const handleDownloadWatchlist = useCallback(() => {
-    if (selectedTickers.size === 0) return;
-    const watchlistName = watchlist?.screenName ?? DEFAULT_WATCHLIST;
-    const dateStr = formatDateForFilename(watchlist?.day);
+    if (selectedTickers.size === 0 || !watchlist) return;
+    const watchlistName = watchlist.screenName ?? selectedScreen.id;
+    const dateStr = formatDateForFilename(watchlist.day);
     const filename = `${market.label}-${watchlistName}-${dateStr}.csv`;
-    const tickersInOrder = (watchlist?.tickers ?? []).filter((t) => selectedTickers.has(t));
+    const tickersInOrder = watchlist.tickers.filter((t) => selectedTickers.has(t));
     const content = tickersInOrder.join(',\n');
     const blob = new Blob([content], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -72,18 +75,35 @@ function App() {
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-  }, [selectedTickers, watchlist?.screenName, watchlist?.day, watchlist?.tickers, market.label]);
+  }, [selectedTickers, watchlist, selectedScreen, market.label]);
 
   useEffect(() => {
+    let active = true;
+    fetchScreens()
+      .then((options) => {
+        if (!options.length) throw new Error('No screens are configured.');
+        if (active) setScreens(options);
+      })
+      .catch((e) => { if (active) setScreenError(e.message); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedScreen) return;
     let active = true;
     setLoading(true);
     setError(null);
     setWatchlist(null);
-    setLatestQuoteDate(undefined);
-    fetchWatchlist(market, DEFAULT_WATCHLIST)
+    fetchWatchlist(market, selectedScreen.id)
       .then((data) => { if (active) setWatchlist(data); })
       .catch((e) => { if (active) setError(e.message); })
       .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [market, selectedScreen]);
+
+  useEffect(() => {
+    let active = true;
+    setLatestQuoteDate(undefined);
     fetchMarketDataStatus(market)
       .then((data) => { if (active) setLatestQuoteDate(data.latestQuoteDate ?? null); })
       .catch(() => { if (active) setLatestQuoteDate(null); });
@@ -115,11 +135,22 @@ function App() {
               </button>
             ))}
           </div>
-          {loading && !watchlist && !error && (
-            <p className="watchlist-info">Loading {market.title}…</p>
-          )}
-          {error && (
-            <p className="app-error">{error}</p>
+          <label className="screen-picker">
+            Screen
+            <select
+              value={selectedScreen?.id ?? ''}
+              disabled={!selectedScreen}
+              onChange={(event) => {
+                setScreenId(event.target.value);
+                setSelectedTickers(new Set());
+              }}
+            >
+              {!selectedScreen && <option value="">{screenError ? 'Unavailable' : 'Loading…'}</option>}
+              {screens.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
+            </select>
+          </label>
+          {(screenError || error) && (
+            <p className="app-error">{screenError || error}</p>
           )}
           <p className="watchlist-info">
             Latest market data: {latestQuoteDate ?? (latestQuoteDate === undefined ? 'Loading…' : 'Unavailable')}
@@ -128,7 +159,7 @@ function App() {
             <p className="watchlist-info watchlist-meta">
               <span className="market-title">{market.title}</span>
               <span>
-                Watchlist: <strong>{watchlist.screenName ?? DEFAULT_WATCHLIST}</strong>
+                Watchlist: <strong>{selectedScreen.label}</strong>
                 {watchlist.day && ` (${watchlist.day})`}
               </span>
               <span>{tickers.length} tickers</span>
@@ -155,9 +186,11 @@ function App() {
         </div>
       </header>
       <main className="app-main">
-        {error ? (
+        {screenError ? (
+          <div className="chart-grid-empty">Screen options are unavailable.</div>
+        ) : error ? (
           <div className="chart-grid-empty">
-            No watchlist for this market yet. Try another market or wait for screener init.
+            No {selectedScreen.label} watchlist for this market yet. Try another screen or market.
           </div>
         ) : loading && !watchlist ? (
           <div className="chart-grid-loading">Loading watchlist…</div>
@@ -165,7 +198,7 @@ function App() {
           <SelectionContext.Provider
             value={{ selectedTickers, onSelectionChange: handleSelectionChange }}
           >
-            <ChartGrid key={market.id} market={market} tickers={tickers} />
+            <ChartGrid key={`${market.id}/${selectedScreen.id}`} market={market} tickers={tickers} />
           </SelectionContext.Provider>
         )}
       </main>

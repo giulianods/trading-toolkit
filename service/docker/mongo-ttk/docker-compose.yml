@@ -44,7 +44,7 @@ services:
       MONGODB_URL: mongodb://mongo:27017
     volumes:
       - ./app/ttk.jar:/app/app.jar:ro
-      - ./app/local.properties:/app/local.properties:ro
+      - ./app/local.conf:/app/local.conf:ro
       - ./app/logs:/app/logs
       - /etc/localtime:/etc/localtime:ro
     depends_on:

@@ -45,43 +45,82 @@ object TrendScreens {
   }
 
   val SevenPctUp: ZIO[StockMarket, Throwable, Seq[(Stock, ScreenStats)]] = {
-    ZIO.service[StockMarket].map(stockMarket => stockMarket.stocks.values.toSeq filter {
-      stock => stock.performanceDays(5) > 7.0
-    } sortBy (s => s.performanceDays(5))
-    ) map { stocks =>
-      stocks.map { stock =>
-        (stock, ScreenStats(
-          ticker = stock.symbol,
-          stats = Map(
-            "performanceDays(5)" -> f"${stock.performanceDays(5)}%.2f",
-            "performanceDays(20)" -> f"${stock.performanceDays(20)}%.2f",
-            "performanceDays(50)" -> f"${stock.performanceDays(50)}%.2f",
-            "performanceDays(200)" -> f"${stock.performanceDays(200)}%.2f"
-          )
-        ))
+    ZIO.serviceWith[StockMarket] { market =>
+      val latestSession = market.stocks.valuesIterator.flatMap(_.dailyAggregates.lastOption.map(_.t)).maxOption
+      val rsiPeriod = 15
+      val matches = market.stocks.valuesIterator
+        .filter(stock => stock.dailyAggregates.size > rsiPeriod && latestSession.contains(stock.dailyAggregates.last.t))
+        .flatMap { stock =>
+          val gain = stock.pctChange(5)
+          // Allow for floating-point rounding at the inclusive 7% boundary.
+          Option.when(gain.isFinite && gain >= 7.0 - 1e-10)(gain).flatMap { qualifyingGain =>
+            relativeStrengthIndex(stock, rsiPeriod).map(rsi => (stock, qualifyingGain, rsi))
+          }
+        }
+        .map { case (stock, gain, rsi) =>
+          (stock, ScreenStats(
+            ticker = stock.symbol,
+            stats = Map(
+              "performanceDays(5)" -> f"$gain%.2f",
+              "performanceDays(20)" -> f"${stock.performanceDays(20)}%.2f",
+              "performanceDays(50)" -> f"${stock.performanceDays(50)}%.2f",
+              "performanceDays(200)" -> f"${stock.performanceDays(200)}%.2f",
+              "RSI(15)" -> f"$rsi%.2f"
+            )
+          ))
+        }
+        .toVector
+      rankByIbd(market, matches)
+    }
+  }
+
+  private def relativeStrengthIndex(stock: Stock, period: Int): Option[Double] = {
+    val closes = stock.dailyAggregates.map(_.c)
+    Option.when(closes.forall(close => close.isFinite && close > 0)) {
+      val changes = closes.iterator.zip(closes.iterator.drop(1)).map { case (previous, current) =>
+        current - previous
       }
+      val seed = Vector.fill(period)(changes.next())
+      var averageGain = seed.map(change => math.max(change, 0)).sum / period
+      var averageLoss = seed.map(change => math.max(-change, 0)).sum / period
+      changes.foreach { change =>
+        averageGain += (math.max(change, 0) - averageGain) / period
+        averageLoss += (math.max(-change, 0) - averageLoss) / period
+      }
+      100 / (1 + averageLoss / averageGain)
     }
   }
 
   val SevenPctDown: ZIO[StockMarket, Throwable, Seq[(Stock, ScreenStats)]] = {
-    ZIO.service[StockMarket].map(stockMarket => stockMarket.stocks.values.toSeq filter {
-      stock => stock.performanceDays(5) < -7.0
-    } sortBy (s => (-s.performanceDays(5)))
-    ) map {
-      stocks =>
-        stocks.map { stock =>
+    ZIO.serviceWith[StockMarket] { market =>
+      val matches = market.stocks.valuesIterator
+        .filter(_.dailyAggregates.nonEmpty)
+        .map(stock => (stock, stock.performanceDays(5)))
+        .filter { case (_, loss) => loss < -7.0 }
+        .map { case (stock, loss) =>
           (stock, ScreenStats(
             ticker = stock.symbol,
             stats = Map(
-              "performanceDays(5)" -> f"${stock.performanceDays(5)}%.2f",
+              "performanceDays(5)" -> f"$loss%.2f",
               "performanceDays(20)" -> f"${stock.performanceDays(20)}%.2f",
               "performanceDays(50)" -> f"${stock.performanceDays(50)}%.2f",
               "performanceDays(200)" -> f"${stock.performanceDays(200)}%.2f"
             )
           ))
         }
+        .toVector
+      rankByIbd(market, matches)
     }
   }
+
+  private def rankByIbd(market: StockMarket, matches: Seq[(Stock, ScreenStats)]): Seq[(Stock, ScreenStats)] =
+    matches
+      .map { case (stock, stats) => (stock, stats, market.ibdRelativeStrengthRanking.get(stock.symbol)) }
+      .sortBy { case (stock, _, rank) => (-rank.getOrElse(-1.0), stock.symbol) }
+      .map { case (stock, stats, rank) =>
+        val displayRank = rank.map(value => f"$value%.2f").getOrElse("Unavailable")
+        (stock, stats.copy(stats = stats.stats.updated("IBD rank", displayRank)))
+      }
 
   val New52WeekHigh: ZIO[StockMarket, Throwable, Seq[(Stock, ScreenStats)]] = {
     ZIO.service[StockMarket].map(stockMarket => stockMarket.stocks.values.toSeq filter {

@@ -227,6 +227,9 @@ object ApiEndpoints {
     )
 
     val marketData = Routes(
+      (Method.GET / "markets" / "screens") -> Handler.fromFunction[Request] { _ =>
+        Response.json(ScreenerServices.screenOptions.toJson)
+      },
       (Method.GET / "markets" / string("country") / string("provider") / "data-status") ->
         Handler.fromFunctionZIO[(String, String, Request)] { case (country, provider, _) =>
           withMarket(store, country, provider)(

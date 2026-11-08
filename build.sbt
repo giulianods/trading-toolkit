@@ -100,7 +100,7 @@ lazy val finnhubClientZio = (project in file("finnhub-client-zio"))
 
 lazy val core = (project in file("core"))
   .settings(
-    libraryDependencies := zioLibraries ++ logbackLib,
+    libraryDependencies := zioLibraries ++ logbackLib ++ Seq("com.typesafe" % "config" % "1.4.2"),
     testFrameworks := Seq(zioTestFramework)
   )
 

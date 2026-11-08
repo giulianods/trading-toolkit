@@ -15,6 +15,7 @@ case class StockMarket(stocks: Map[String, Stock]) {
 
   lazy val ibdRelativeStrength: Map[String, Double] = {
     stocks.values.iterator
+      .filter(_.dailyAggregates.nonEmpty)
       .map { s =>
         val ibdStrength = (2 * s.perfQ1 + s.perfQ2 + s.perfQ3 + s.perfQ4) / 5
         s.symbol -> ibdStrength

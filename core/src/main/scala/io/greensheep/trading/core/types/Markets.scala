@@ -77,8 +77,10 @@ object Markets {
     JpJquants.id -> JpJquants
   )
 
-  def parseEnabled(raw: String): Either[String, Seq[MarketDefinition]] = {
-    val tokens = raw.split(",").map(_.trim).filter(_.nonEmpty).toSeq
+  def parseEnabled(raw: String): Either[String, Seq[MarketDefinition]] =
+    parseEnabled(raw.split(",").map(_.trim).filter(_.nonEmpty).toSeq)
+
+  private def parseEnabled(tokens: Seq[String]): Either[String, Seq[MarketDefinition]] = {
     if (tokens.isEmpty) Left("ttk.markets must list at least one market")
     else {
       val parsed = tokens.map { token =>
@@ -94,5 +96,5 @@ object Markets {
   }
 
   def enabledFromConfig: Either[String, Seq[MarketDefinition]] =
-    parseEnabled(LocalConfig.get("ttk.markets").getOrElse(UsMassive.id.id))
+    parseEnabled(LocalConfig.getList("ttk.markets").getOrElse(Seq(UsMassive.id.id)))
 }

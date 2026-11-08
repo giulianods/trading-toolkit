@@ -10,7 +10,7 @@ import io.greensheep.trading.core.types.{MarketDefinition, Markets}
 import io.greensheep.trading.core.utils.LocalConfig
 import io.greensheep.trading.dataservice.{MarketStore, MongoDataRepo}
 import io.greensheep.trading.service.app.{AppHealth, CronJobs, WebApp}
-import io.greensheep.trading.service.services.{AlpacaQuotesServices, ApiEndpoints, BvbInitialization, FiancialsServices, InitializationService, JquantsInitialization, QuotesServices, XetraInitialization}
+import io.greensheep.trading.service.services.{AlpacaQuotesServices, ApiEndpoints, BvbInitialization, FiancialsServices, InitializationService, JquantsInitialization, QuotesServices, ScreenerServices, XetraInitialization}
 import zio.*
 import zio.http.{Client, DnsResolver, Server, ZClient}
 import zio.http.netty.NettyConfig
@@ -27,6 +27,7 @@ object Main extends ZIOAppDefault {
 
   override def run: ZIO[Environment & ZIOAppArgs & Scope, Any, Any] = {
     val enabled = Markets.enabledFromConfig.fold(msg => throw new IllegalStateException(msg), identity)
+    val screens = ScreenerServices.screenOptions
     val needsMassive = enabled.exists(_.id.provider == "massive")
     val needsJquants = enabled.exists(_.id.provider == "jquants")
     if (needsMassive || enabled.contains(Markets.UsAlpaca)) LocalConfig.require("massive.api.key")
@@ -59,6 +60,7 @@ object Main extends ZIOAppDefault {
       http <- ZIO.service[Client]
       store <- ZIO.fromEither(MarketStore.live(client)).mapError(msg => new IllegalStateException(msg))
       _ <- ZIO.logInfo(s"Enabled markets: ${store.enabled.map(_.id.id).mkString(", ")}")
+      _ <- ZIO.logInfo(s"Enabled screens: ${screens.map(_.id).mkString(", ")}")
       _ <- ZIO.foreachParDiscard(store.enabled) { market =>
         startMarket(client, store, market, skipInitialization, skipCron)
       }
@@ -97,6 +99,13 @@ object Main extends ZIOAppDefault {
       skipCron: Boolean
   ): ZIO[MassiveAsyncApi & BvbClient & XetraClient & JquantsClient & AppHealth & FinnhubClient & Client & Scope, Throwable, Unit] = {
     val dbLayer = ZLayer.succeed(store.database(market))
+    val screenerTask =
+      if (market.id == Markets.UsAlpaca.id) ScreenerServices.latestSessionScreenerTask
+      else ScreenerServices.ScreenerTask
+    val screenStoredQuotes = CronJobs
+      .guarded(market.id.job("screens"), screenerTask)
+      .provideSomeLayer[AppHealth](dbLayer)
+      .forkDaemon
     market.id.provider match {
       case "massive" =>
         for {
@@ -147,6 +156,7 @@ object Main extends ZIOAppDefault {
             .provideSomeLayer(dbLayer)
             .forkDaemon
             .unless(skipInitialization && hasUniverse)
+          _ <- screenStoredQuotes.when(skipInitialization && hasUniverse)
           _ <- CronJobs.startAlpaca(market, financialsEnabled)
             .provideSomeLayer(dbLayer)
             .unless(skipCron)
@@ -164,6 +174,7 @@ object Main extends ZIOAppDefault {
             }
             .forkDaemon
             .unless(skipInitialization)
+          _ <- screenStoredQuotes.when(skipInitialization)
           _ <- CronJobs.startBvb(market).provideSomeLayer(dbLayer).unless(skipCron)
           _ <- ZIO.logInfo(s"Cron jobs started for ${market.id.id}").unless(skipCron)
         } yield ()
@@ -180,6 +191,7 @@ object Main extends ZIOAppDefault {
             }
             .forkDaemon
             .unless(skipInitialization)
+          _ <- screenStoredQuotes.when(skipInitialization)
           _ <- CronJobs.startXetra(market).provideSomeLayer(dbLayer).unless(skipCron)
           _ <- ZIO.logInfo(s"Cron jobs started for ${market.id.id}").unless(skipCron)
         } yield ()
@@ -196,6 +208,7 @@ object Main extends ZIOAppDefault {
             }
             .forkDaemon
             .unless(skipInitialization)
+          _ <- screenStoredQuotes.when(skipInitialization)
           _ <- CronJobs.startJquants(market).provideSomeLayer(dbLayer).unless(skipCron)
           _ <- ZIO.logInfo(s"Cron jobs started for ${market.id.id}").unless(skipCron)
         } yield ()

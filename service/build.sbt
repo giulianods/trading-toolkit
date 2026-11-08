@@ -5,6 +5,7 @@ libraryDependencies ++= Seq(
 )
 
 import scala.sys.process.Process
+import com.typesafe.config.ConfigFactory
 
 val ttkMainClass = "io.greensheep.trading.service.Main"
 libraryDependencySchemes += "io.circe" %% "circe-yaml" % VersionScheme.Always
@@ -74,26 +75,26 @@ deploy := {
   IO.copyFile(jar, destJar)
   log.info(s"Copied $jar -> $destJar")
 
-  val propsFile = (ThisBuild / baseDirectory).value / "local.properties"
-  if (!propsFile.exists) {
-    sys.error("Missing local.properties at the repo root (API keys). Copy local.properties.example first.")
+  val configFile = (ThisBuild / baseDirectory).value / "local.conf"
+  if (!configFile.isFile) {
+    sys.error("Missing local.conf at the repo root. Copy local.conf.example first.")
   }
-  IO.copyFile(propsFile, appDir / "local.properties")
-  log.info(s"Copied workspace ${propsFile.getName} -> ${appDir / "local.properties"}")
+  val deployConfig = ConfigFactory.parseFile(configFile).resolve()
+  val destConfig = appDir / configFile.getName
+  IO.copyFile(configFile, destConfig)
+  log.info(s"Copied workspace ${configFile.getName} -> $destConfig")
 
-  val deployProps = {
-    val loaded = new java.util.Properties()
-    val in = new java.io.FileInputStream(propsFile)
-    try loaded.load(in)
-    finally in.close()
-    loaded
-  }
-  def prop(key: String, default: String): String =
-    Option(deployProps.getProperty(key)).map(_.trim).filter(_.nonEmpty).getOrElse(default)
+  def setting(key: String, default: String): String =
+    sys.env
+      .get(key.toUpperCase(java.util.Locale.ROOT).replace('.', '_'))
+      .orElse(if (deployConfig.hasPath(key)) Some(deployConfig.getString(key)) else None)
+      .map(_.trim)
+      .filter(_.nonEmpty)
+      .getOrElse(default)
 
-  val host = prop("ttk.deploy.host", "192.168.0.156")
-  val user = prop("ttk.deploy.user", sys.props.getOrElse("user.name", "giuli"))
-  val remoteDir = prop("ttk.deploy.dir", "ttk")
+  val host = setting("ttk.deploy.host", "192.168.0.156")
+  val user = setting("ttk.deploy.user", sys.props.getOrElse("user.name", "giuli"))
+  val remoteDir = setting("ttk.deploy.dir", "ttk")
   val localHosts = Set("localhost", "127.0.0.1", "::1")
 
   if (localHosts.contains(host)) {
@@ -110,7 +111,7 @@ deploy := {
       val code = Process(cmd).!
       if (code != 0) sys.error(s"Command failed ($code): ${cmd.mkString(" ")}")
     }
-    log.info(s"Deploying to $sshTarget:$remoteDir (including workspace local.properties)")
+    log.info(s"Deploying to $sshTarget:$remoteDir (including workspace local.conf)")
     val remoteBase = if (remoteDir.startsWith("/")) remoteDir else remoteDir
     val mkdirRemote = if (remoteDir.startsWith("/")) s"$remoteDir/app/logs" else s"$remoteDir/app/logs"
     run(ssh ++ Seq(sshTarget, s"mkdir -p $mkdirRemote"))
@@ -124,7 +125,7 @@ deploy := {
     run(
       rsync ++ Seq(
         destJar.getAbsolutePath,
-        (appDir / "local.properties").getAbsolutePath,
+        destConfig.getAbsolutePath,
         s"$sshTarget:$remoteBase/app/"
       )
     )

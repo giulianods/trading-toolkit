@@ -79,6 +79,22 @@
   color: #d1d5db;
 }
 
+.screen-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #d1d5db;
+  font-size: 0.85rem;
+}
+
+.screen-picker select {
+  color: inherit;
+  background: #141a24;
+  border: 1px solid #2a3444;
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
 .app-header-logo {
   width: 56px;
   height: 56px;
