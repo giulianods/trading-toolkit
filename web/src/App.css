@@ -34,6 +34,14 @@
   min-width: 0;
 }
 
+.app-header-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+
 .market-switcher {
   display: flex;
   flex-wrap: wrap;
@@ -93,6 +101,10 @@
   border: 1px solid #2a3444;
   border-radius: 6px;
   padding: 4px 8px;
+}
+
+.mobile-market-picker {
+  display: none;
 }
 
 .app-header-logo {
@@ -171,23 +183,50 @@
 
 @media (max-width: 720px) {
   .app-header {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 6px 12px;
-    padding: 8px 12px 10px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+    padding: 6px 10px;
   }
 
-  .app-header-logo {
-    grid-area: 1 / 1;
-    width: 32px;
-    height: 32px;
-  }
-
-  .app-header-toolbox {
-    grid-area: 1 / 2;
+  .app-header-logo,
+  .market-switcher,
+  .market-title,
+  .watchlist-generated,
+  .app-header-toolbox:empty {
+    display: none;
   }
 
   .app-header-center {
-    grid-column: 1 / -1;
+    align-items: stretch;
+    text-align: left;
+    gap: 3px;
+  }
+
+  .app-header-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .screen-picker {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 4px;
+    font-size: 0.75rem;
+  }
+
+  .screen-picker select {
+    width: 100%;
+    min-height: 38px;
+    font-size: 1rem;
+  }
+
+  .watchlist-info {
+    font-size: 0.75rem;
+  }
+
+  .watchlist-meta {
+    justify-content: flex-start;
   }
 }
 

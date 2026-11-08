@@ -111,6 +111,10 @@ function App() {
   }, [market]);
 
   const tickers = watchlist?.tickers ?? [];
+  const vcpStatsByTicker = useMemo(() => {
+    if (selectedScreen?.id !== 'VCP') return undefined;
+    return new Map((watchlist?.stats ?? []).map(({ ticker, stats }) => [ticker, stats]));
+  }, [selectedScreen?.id, watchlist]);
   const hasSelection = selectedTickers.size > 0;
 
   return (
@@ -120,35 +124,43 @@ function App() {
           <img src="/green-sheep.png" alt="Greensheep" className="app-logo" />
         </div>
         <div className="app-header-center">
-          <div className="market-switcher" role="tablist" aria-label="Market">
-            {MARKETS.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                role="tab"
-                aria-selected={m.id === market.id}
-                title={m.title}
-                className={`market-switcher-btn${m.id === market.id ? ' market-switcher-btn--active' : ''}`}
-                onClick={() => handleMarketChange(m.id)}
+          <div className="app-header-controls">
+            <div className="market-switcher" role="tablist" aria-label="Market">
+              {MARKETS.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={m.id === market.id}
+                  title={m.title}
+                  className={`market-switcher-btn${m.id === market.id ? ' market-switcher-btn--active' : ''}`}
+                  onClick={() => handleMarketChange(m.id)}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            <label className="screen-picker mobile-market-picker">
+              Market
+              <select value={market.id} onChange={(event) => handleMarketChange(event.target.value)}>
+                {MARKETS.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
+              </select>
+            </label>
+            <label className="screen-picker">
+              Screen
+              <select
+                value={selectedScreen?.id ?? ''}
+                disabled={!selectedScreen}
+                onChange={(event) => {
+                  setScreenId(event.target.value);
+                  setSelectedTickers(new Set());
+                }}
               >
-                {m.label}
-              </button>
-            ))}
+                {!selectedScreen && <option value="">{screenError ? 'Unavailable' : 'Loading…'}</option>}
+                {screens.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
+              </select>
+            </label>
           </div>
-          <label className="screen-picker">
-            Screen
-            <select
-              value={selectedScreen?.id ?? ''}
-              disabled={!selectedScreen}
-              onChange={(event) => {
-                setScreenId(event.target.value);
-                setSelectedTickers(new Set());
-              }}
-            >
-              {!selectedScreen && <option value="">{screenError ? 'Unavailable' : 'Loading…'}</option>}
-              {screens.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
-            </select>
-          </label>
           {(screenError || error) && (
             <p className="app-error">{screenError || error}</p>
           )}
@@ -163,7 +175,7 @@ function App() {
                 {watchlist.day && ` (${watchlist.day})`}
               </span>
               <span>{tickers.length} tickers</span>
-              <span>
+              <span className="watchlist-generated">
                 Generated: {watchlist.generatedAt ? (
                   <time dateTime={watchlist.generatedAt}>
                     {new Date(watchlist.generatedAt).toLocaleString(undefined, { timeZoneName: 'short' })}
@@ -198,7 +210,12 @@ function App() {
           <SelectionContext.Provider
             value={{ selectedTickers, onSelectionChange: handleSelectionChange }}
           >
-            <ChartGrid key={`${market.id}/${selectedScreen.id}`} market={market} tickers={tickers} />
+            <ChartGrid
+              key={`${market.id}/${selectedScreen.id}`}
+              market={market}
+              tickers={tickers}
+              vcpStatsByTicker={vcpStatsByTicker}
+            />
           </SelectionContext.Provider>
         )}
       </main>

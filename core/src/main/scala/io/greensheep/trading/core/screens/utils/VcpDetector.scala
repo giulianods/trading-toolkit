@@ -28,6 +28,8 @@ final case class VCPHit(
                          pivot: Double,
                          pivotDate: LocalDate,
                          contractions: List[Contraction],
+                         leadingContractions: List[Contraction],
+                         baseDrawdownPct: Double,
                          atrPercentSlope20vs50: Double,
                          dryUp: DryUpMetrics,
                          volumeTrendDown: Boolean,
@@ -36,12 +38,12 @@ final case class VCPHit(
                        )
 
 object VCPParams {
-  val Default: VCPParams = VCPParams(finerReversalPct = Some(0.04))
+  val Default: VCPParams = VCPParams(finerReversalPcts = List(0.04, 0.03), tightShelf = true)
 }
 
 final case class VCPParams(
                             minBaseDays: Int = 15,        // ~3 weeks
-                            maxBaseDays: Int = 65,        // ~13 weeks
+                            maxBaseDays: Int = 120,       // calendar days
                             minContractions: Int = 2,
                             maxContractions: Int = 5,
                             zigzagReversalPct: Double = 0.06, // 6% reversal defines a swing
@@ -56,7 +58,9 @@ final case class VCPParams(
                             priorUptrendMa: Int = 50,
                             minUptrendSlopeBps: Double = 0.0, // > 0 rising; set >0 to be stricter
                             breakoutVolumeBoost: Double = 1.5, // 1.5× avg vol (if you check breakouts)
-                            finerReversalPct: Option[Double] = None // retry tight setups at a finer swing scale
+                            finerReversalPcts: List[Double] = Nil,
+                            tightShelf: Boolean = false,
+                            maxBaseDrawdownPct: Double = 0.30
                           )
 
 
@@ -64,6 +68,8 @@ object VCPDetector {
 
   import TA._
   import ZigZag._
+
+  private val MinShelfDepthPct = 0.01
 
   private def percentChange(a: Double, b: Double): Double = (b - a) / a
 
@@ -165,23 +171,69 @@ object VCPDetector {
       lookRight: Int,
       uptrendConfirmed: Boolean = false
   ): Either[(String, List[Contraction]), VCPHit] = {
-    val primary = evaluateAtReversal(bars, params, lookRight, params.zigzagReversalPct, uptrendConfirmed)
-    params.finerReversalPct.filter(pct => pct > 0 && pct < params.zigzagReversalPct) match {
-      case Some(reversalPct) =>
-        primary.orElse(evaluateAtReversal(bars, params, lookRight, reversalPct, uptrendConfirmed).orElse(primary))
-      case None => primary
+    if (bars.size < 200) return Left(("history_lt_200", Nil))
+    val primarySwings = findContractions(ZigZag.swings(bars, params.zigzagReversalPct))
+    val primary = evaluateContractions(bars, params, lookRight, primarySwings, primarySwings, uptrendConfirmed)
+    primary.orElse {
+      val finer = params.finerReversalPcts.iterator
+        .filter(pct => pct > 0 && pct < params.zigzagReversalPct)
+        .map { pct =>
+          val contractions = findContractions(ZigZag.swings(bars, pct))
+          evaluateContractions(bars, params, lookRight, contractions, primarySwings, uptrendConfirmed)
+        }
+        .collectFirst { case Right(hit) => hit }
+      finer.orElse {
+        Option.when(params.tightShelf)(findTightShelf(bars, primarySwings)).flatten
+          .flatMap(cs => evaluateContractions(bars, params.copy(minLastDepthPct = MinShelfDepthPct), lookRight, cs, primarySwings, uptrendConfirmed).toOption)
+      }.map(Right(_)).getOrElse(primary)
     }
   }
 
-  private def evaluateAtReversal(
+  private def findTightShelf(bars: Seq[DailyAggregate], contractions: List[Contraction]): Option[List[Contraction]] = {
+    val shelf = bars.takeRight(10)
+    val highIndex = shelf.indices.maxBy(i => shelf(i).h)
+    val high = shelf(highIndex)
+    val fullRange = 1 - shelf.iterator.map(_.l).min / high.h
+    if (fullRange > 0.04 || bars.last.c < high.h * (1 - fullRange / 2)) return None
+
+    for {
+      previous <- contractions.findLast(_.toDate.isBefore(shelf.head.t))
+      low <- shelf.drop(highIndex + 1).minByOption(_.l)
+      depth = 1 - low.l / high.h
+      if depth >= MinShelfDepthPct && previous.depthPct >= 2 * fullRange && low.l >= previous.toPrice
+    } yield {
+      val duration = shelf.indexWhere(_.t == low.t) - highIndex + 1
+      List(previous, Contraction(high.t, low.t, high.h, low.l, depth, duration))
+    }
+  }
+
+  private def rightEdgeFailure(bars: Seq[DailyAggregate], chosen: List[Contraction]): Option[String] = {
+    val last = chosen.last
+    val afterLow = bars.dropWhile(b => !b.t.isAfter(last.toDate))
+    val close = bars.last.c
+    if (afterLow.exists(_.c < last.toPrice)) Some("closed_below_support")
+    else if (close > last.fromPrice * 1.05) Some("extended_above_pivot")
+    else if (close > last.fromPrice * 1.03 && afterLow.size >= 6 && afterLow.takeRight(6).forall(_.c > last.fromPrice))
+      Some("sustained_move_above_pivot")
+    else {
+      // A breakout through the previous pivot must hold that mini-base's low.
+      chosen.dropRight(1).lastOption.filter(_.fromPrice < last.fromPrice).flatMap { previous =>
+        bars.find(_.t == previous.toDate).flatMap { support =>
+          val retest = bars.dropWhile(_.t.isBefore(last.fromDate))
+          Option.when(retest.exists(_.l < support.l * 0.995))("failed_mini_base")
+        }
+      }
+    }
+  }
+
+  private def evaluateContractions(
       bars: Seq[DailyAggregate],
       params: VCPParams,
       lookRight: Int,
-      reversalPct: Double,
+      contractions: List[Contraction],
+      coarseContractions: List[Contraction],
       uptrendConfirmed: Boolean
   ): Either[(String, List[Contraction]), VCPHit] = {
-    if (bars.size < 200) return Left(("history_lt_200", Nil))
-    val contractions = findContractions(ZigZag.swings(bars, reversalPct))
     if (contractions.isEmpty) return Left(("no_contractions_found", Nil))
 
     val recentWindowDate = bars((bars.size - 1 - lookRight.max(0)).max(0)).t
@@ -196,15 +248,48 @@ object VCPDetector {
     if (bases.isEmpty) return Left(("too_few_contractions", recent))
     val longEnough = bases.filter(cs => baseSpanDays(cs) >= params.minBaseDays)
     if (longEnough.isEmpty) return Left(("base_too_short", bases.head))
-    val matching = longEnough.find { cs =>
+    val contracting = longEnough.filter { cs =>
       cs.head.depthPct <= params.maxFirstDepthPct &&
         cs.last.depthPct >= params.minLastDepthPct &&
+        cs.last.depthPct <= 0.10 &&
         decreasingDepths(cs, params.decreasingDepthTolerancePct)
     }
-    val chosen = matching match {
+    if (contracting.isEmpty) return Left(("depths_not_ok", longEnough.head))
+
+    // Pullbacks should form one base around its initial resistance. Allow it to
+    // slope upward, but keep its swing highs within one initial pullback of that level.
+    val chosen = contracting.find { cs =>
+      val first = cs.head
+      val ceiling = first.fromPrice + (first.fromPrice - first.toPrice)
+      cs.forall(_.fromPrice <= ceiling)
+    } match {
       case Some(base) => base
-      case None => return Left(("depths_not_ok", longEnough.head))
+      case None => return Left(("base_trended_higher", contracting.head))
     }
+    rightEdgeFailure(bars, chosen) match {
+      case Some(reason) => return Left((reason, chosen))
+      case None => ()
+    }
+
+    val first = chosen.head
+    val last = chosen.last
+    val earliest = last.toDate.minusDays(params.maxBaseDays.toLong)
+    val priorSwings = coarseContractions
+      .dropWhile(_.fromDate.isBefore(earliest))
+      .takeWhile(_.toDate.isBefore(first.fromDate))
+    val resistance = priorSwings.foldLeft(first.fromPrice)((high, swing) => math.max(high, swing.fromPrice))
+    // Keep the earlier tests of the same resistance, including the main correction.
+    val leading = priorSwings.dropWhile(_.fromPrice < resistance * 0.95)
+    val baseStart = leading.headOption.fold(first.fromDate)(_.fromDate)
+    val (_, baseDrawdown) = bars.iterator
+      .dropWhile(_.t.isBefore(baseStart))
+      .takeWhile(bar => !bar.t.isAfter(last.toDate))
+      .foldLeft((0.0, 0.0)) { case ((peak, drawdown), bar) =>
+        val high = math.max(peak, bar.c)
+        (high, math.max(drawdown, 1 - bar.c / high))
+      }
+    if (baseDrawdown > params.maxBaseDrawdownPct)
+      return Left(("base_drawdown_too_deep", leading ++ chosen))
 
     // Volatility: ATR% should be trending down (short vs long)
     val atrSlope = atrPctSlope(bars, params.atrShort, params.atrLong)
@@ -218,21 +303,17 @@ object VCPDetector {
 
     if (!upOk) return Left(("prior_uptrend_gate_failed", chosen))
 
-    // Pivot = last swing high BEFORE the last contraction low (i.e., the right-side high)
-    // Simpler: pivot is the 'fromPrice' of the last contraction
-    val lastC = chosen.last
-    val pivot = lastC.fromPrice
-    val pivotDate = lastC.fromDate
-
     val sc = scoreVcp(chosen, atrSlope, dry, volDown, upOk)
 
     Right(
       VCPHit(
-        startDate = chosen.head.fromDate,
-        endDate = chosen.last.toDate,
-        pivot = pivot,
-        pivotDate = pivotDate,
+        startDate = baseStart,
+        endDate = last.toDate,
+        pivot = last.fromPrice,
+        pivotDate = last.fromDate,
         contractions = chosen,
+        leadingContractions = leading,
+        baseDrawdownPct = baseDrawdown,
         atrPercentSlope20vs50 = atrSlope,
         dryUp = dry,
         volumeTrendDown = volDown,

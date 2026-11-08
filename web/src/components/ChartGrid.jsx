@@ -12,7 +12,7 @@ const TICKER_HEADER_HEIGHT = 44;
 const OVERSCAN_ROWS = 2;
 const FINANCIAL_CARD_WIDTH = 300;
 
-function ChartCell({ ticker, label, quotes, index, focusIndex, setFocusedIndex, pendingCheckRef, financialMarket, stacked }) {
+function ChartCell({ ticker, label, quotes, vcpStats, index, focusIndex, setFocusedIndex, pendingCheckRef, financialMarket, stacked }) {
   const { selectedTickers, onSelectionChange } = useSelection();
   const focused = index === focusIndex;
   const checked = selectedTickers.has(ticker);
@@ -60,14 +60,14 @@ function ChartCell({ ticker, label, quotes, index, focusIndex, setFocusedIndex, 
         )}
       </div>
       <div className={financialMarket && !stacked ? 'chart-content chart-content--side-by-side' : 'chart-content'}>
-        <OhlcChart ticker={ticker} quotes={quotes} height={CHART_HEIGHT} focused={focused} />
+        <OhlcChart ticker={ticker} quotes={quotes} vcpStats={vcpStats} height={CHART_HEIGHT} focused={focused} />
         {financialMarket && <FinancialCharts market={financialMarket} ticker={ticker} />}
       </div>
     </div>
   );
 }
 
-function ChartGridInner({ market, tickers }) {
+function ChartGridInner({ market, tickers, vcpStatsByTicker }) {
   const [quotesByTicker, setQuotesByTicker] = useState({});
   const [labelsByTicker, setLabelsByTicker] = useState({});
   const [loading, setLoading] = useState(true);
@@ -79,7 +79,7 @@ function ChartGridInner({ market, tickers }) {
 
   const tickerKey = tickers.join(',');
   const count = tickers.length;
-  const financialMarket = market.country === 'us' || market.country === 'ro' ? market : null;
+  const financialMarket = size.width > 720 && (market.country === 'us' || market.country === 'ro') ? market : null;
   const viewportColumns = size.width < 600 ? 1 : size.width < 960 ? 2 : COLUMNS;
   const cols = Math.min(viewportColumns, Math.max(1, count));
   const rows = Math.ceil(count / cols) || 1;
@@ -219,6 +219,7 @@ function ChartGridInner({ market, tickers }) {
             ticker={ticker}
             label={labelsByTicker[ticker]}
             quotes={quotes}
+            vcpStats={vcpStatsByTicker?.get(ticker)}
             index={index}
             focusIndex={focusIndex}
             setFocusedIndex={setFocusedIndex}
@@ -229,7 +230,7 @@ function ChartGridInner({ market, tickers }) {
         </div>
       );
     },
-    [tickers, quotesByTicker, labelsByTicker, focusIndex, cols, financialMarket, stacked]
+    [tickers, quotesByTicker, labelsByTicker, vcpStatsByTicker, focusIndex, cols, financialMarket, stacked]
   );
 
   if (loading) {
@@ -269,8 +270,6 @@ function ChartGridInner({ market, tickers }) {
   );
 }
 
-const ChartGrid = React.memo(function ChartGrid({ market, tickers }) {
-  return <ChartGridInner market={market} tickers={tickers} />;
-});
+const ChartGrid = React.memo(ChartGridInner);
 
 export default ChartGrid;

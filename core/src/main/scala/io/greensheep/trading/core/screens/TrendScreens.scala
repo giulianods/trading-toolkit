@@ -4,6 +4,7 @@ import io.greensheep.trading.core.screens.utils.VCPDebug.DebugResult
 import io.greensheep.trading.core.screens.utils.{VCPDebug, VCPDetector, VCPParams}
 import io.greensheep.trading.core.types.{ScreenStats, Stock, StockMarket}
 import zio.ZIO
+import zio.json.*
 
 object TrendScreens {
 
@@ -21,7 +22,7 @@ object TrendScreens {
             stock.currentPrice > (stock.low52Week * 1.3) &&
             eligibleMarket.ibdRelativeStrengthRanking.getOrElse(stock.symbol, 0.0) > 70.0
         }
-        .sortBy(s => 100 - eligibleMarket.ibdRelativeStrengthRanking.getOrElse(s.symbol, 0.0))
+        .sortBy(s => (-eligibleMarket.ibdRelativeStrengthRanking.getOrElse(s.symbol, 0.0), s.symbol))
         .map { stock =>
           (stock, ScreenStats(
             ticker = stock.symbol,
@@ -181,18 +182,31 @@ object TrendScreens {
   def buildVcpScreen(params: VCPParams): ZIO[StockMarket, Throwable, Seq[(Stock, ScreenStats)]] =
     SEPA.map { candidates =>
       candidates.iterator
-        .flatMap { case (stock, _) =>
-          VCPDetector.detect(stock.dailyAggregates, params, uptrendConfirmed = true).map(hit => (stock, hit))
+        .flatMap { case (stock, sepaStats) =>
+          VCPDetector.detect(stock.dailyAggregates, params, uptrendConfirmed = true)
+            .map(hit => (stock, sepaStats, hit))
         }
-        .toVector
-        .sortBy { case (stock, hit) => (-hit.score, stock.symbol) }
-        .map { case (stock, hit) =>
+        .map { case (stock, sepaStats, hit) =>
+          val swings = (hit.leadingContractions ++ hit.contractions).flatMap { contraction =>
+            List(
+              contraction.fromDate.toString -> contraction.fromPrice,
+              contraction.toDate.toString -> contraction.toPrice
+            )
+          }
+          val recovery = stock.dailyAggregates.iterator
+            .filter(_.t.isAfter(hit.endDate))
+            .maxByOption(_.c)
+            .map(bar => bar.t.toString -> bar.c)
           (stock, ScreenStats(
             ticker = stock.symbol,
             stats = Map(
               "score" -> f"${hit.score}%.2f",
+              "IBD rank" -> sepaStats.stats("IBD rank"),
               "pivot" -> hit.pivot.toString,
+              "support" -> hit.contractions.last.toPrice.toString,
               "pivotDate" -> hit.pivotDate.toString,
+              "swingPoints" -> (swings ++ recovery).toJson,
+              "baseDrawdownPct" -> f"${hit.baseDrawdownPct * 100}%.2f",
               "numContractions" -> hit.contractions.size.toString,
               "uptrendOk" -> hit.uptrendOk.toString,
               "volumeTrendDown" -> hit.volumeTrendDown.toString,
@@ -201,7 +215,7 @@ object TrendScreens {
               "endDate" -> hit.endDate.toString
             )
           ))
-        }
+        }.toVector
     }
 
   val VolatilityContractionPattern: ZIO[StockMarket, Throwable, Seq[(Stock, ScreenStats)]] =

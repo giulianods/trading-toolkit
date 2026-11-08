@@ -789,9 +789,17 @@ components:
           type: object
           description: >
             Newly generated VCP watchlists only include tickers that pass SEPA
-            for the same market and date. In VCP stats, pivot is the reference
-            price of the last contraction's swing high. volumeDryUp records
-            whether volume dried up near the right edge. Both values are strings.
+            for the same market and date, ordered by descending IBD rank.
+            In VCP stats, pivot and support are the reference prices of the last
+            contraction's high and low. volumeDryUp records whether volume dried
+            up near the right edge. swingPoints is a JSON-encoded array of
+            [ISO date, price] pairs in chronological order. It alternates the
+            detected highs and lows, including earlier swings in the same
+            base, with an optional final recovery point at
+            the highest close after the last low through the watchlist snapshot.
+            baseDrawdownPct is the maximum close-to-close peak-to-trough
+            drawdown across the full base, expressed as a percentage.
+            Stats values are strings.
           additionalProperties:
             type: string
     IncomePeriod:

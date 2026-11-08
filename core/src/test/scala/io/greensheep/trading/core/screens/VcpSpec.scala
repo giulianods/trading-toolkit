@@ -3,6 +3,7 @@ package io.greensheep.trading.core.screens
 import io.greensheep.trading.core.screens.utils.{VCPDebug, VCPDetector, VCPParams}
 import io.greensheep.trading.core.types.{DailyAggregate, Stock, StockMarket}
 import zio.{Chunk, ZLayer}
+import zio.json.*
 import zio.test.*
 
 import java.time.LocalDate
@@ -64,20 +65,82 @@ object VcpSpec extends ZIOSpecDefault {
       } yield assertTrue(before.isEmpty, after.map(_._1.symbol) == Seq("TEST"))
     },
     test("finds a newer base despite an earlier swing and allows modest variation in depth") {
-      val quotes = bars(advance ++ Seq(108.0, 100.0, 110.0) ++ base.updated(17, 100.0))
+      val quotes = bars(advance ++ Seq(108.0, 100.0, 110.0) ++ base.updated(11, 108.0).updated(17, 105.0))
       val hit = VCPDetector.detect(quotes, params)
-      assertTrue(hit.exists(_.contractions.map(_.toPrice) == List(96.0, 104.0, 100.0)))
+      assertTrue(hit.exists(_.contractions.map(_.toPrice) == List(96.0, 108.0, 105.0)))
+    },
+    test("rejects shrinking pullbacks that stair-step well above the initial base") {
+      val firstPullback = Seq(120.0, 117.0, 115.0, 112.0, 110.0, 113.0, 118.0)
+      val stairStep = Seq(121.0, 125.0, 129.0, 132.0, 135.0, 138.0, 140.0, 142.0, 140.0, 138.0, 136.0, 134.0, 133.0, 134.0, 139.0, 142.0)
+      val result = VCPDebug.detectWithReasons("STAIR", bars(advance ++ firstPullback ++ stairStep), params)
+      assertTrue(
+        result.hit.isEmpty,
+        result.reasons.map(_.reason) == List("base_trended_higher"),
+        result.candidateContractions.map(_.fromPrice) == List(120.0, 142.0)
+      )
+    },
+    test("includes the earlier swings of a longer base without changing the pivot") {
+      val leftEdge = Seq(119.0) ++ Seq.fill(68)(111.0)
+      val quotes = bars(advance ++ leftEdge ++ base)
+      val hit = VCPDetector.detect(quotes, params)
+      assertTrue(
+        hit.exists(_.startDate == quotes(advance.size).t),
+        hit.exists(_.leadingContractions.map(_.fromPrice) == List(119.0)),
+        hit.exists(_.pivot == 116.0)
+      )
+    },
+    test("rejects a deep outer base even when its right-side contractions qualify") {
+      val quotes = bars(advance ++ Seq(135.0, 89.0) ++ base)
+      val hitWithHigherLimit = VCPDetector.detect(quotes, params.copy(maxBaseDrawdownPct = 0.40))
+      val result = VCPDebug.detectWithReasons("DEEP", quotes, params)
+      assertTrue(
+        hitWithHigherLimit.exists(_.baseDrawdownPct > 0.30),
+        result.hit.isEmpty,
+        result.reasons.map(_.reason) == List("base_drawdown_too_deep")
+      )
     },
     test("accepts two contracting pullbacks and can resolve a tight final pullback at the finer scale") {
-      val twoPullbacks = bars(advance ++ base.take(8) ++ Seq.fill(4)(110.0) ++ base.slice(8, 15))
+      val twoPullbacks = bars(advance ++ base.take(8) ++ Seq.fill(4)(110.0) ++ base.updated(11, 107.0).slice(8, 15))
       val tight = bars(advance ++ base.updated(16, 112.0).updated(17, 111.0).updated(18, 112.0).updated(19, 116.0))
       assertTrue(
         VCPDetector.detect(twoPullbacks, params).exists(_.contractions.size == 2),
-        VCPDetector.detect(tight, params.copy(finerReversalPct = None)).isEmpty,
+        VCPDetector.detect(tight, params.copy(finerReversalPcts = Nil, tightShelf = false)).isEmpty,
         VCPDetector.detect(tight, params).exists(_.contractions.map(_.toPrice) == List(96.0, 104.0, 111.0))
       )
     },
-    test("the default screen only ranks SEPA members and identifies each result by ticker") {
+    test("keeps a supported breakout retest but excludes extended or broken bases") {
+      val formed = advance ++ base
+      val retest = bars(formed ++ Seq(117.0, 126.0, 120.0))
+      val extended = bars(formed ++ Seq(117.0, 126.0))
+      val broken = bars(formed ++ Seq(117.0, 106.0))
+      assertTrue(
+        VCPDetector.detect(retest, params).isDefined,
+        VCPDetector.detect(extended, params).isEmpty,
+        VCPDetector.detect(broken, params).isEmpty
+      )
+    },
+    test("rejects a wide final swing and a breakout retest that undercuts the prior mini-base") {
+      val wide = bars(advance ++ base.updated(17, 103.0))
+      val retest = bars(advance ++ base.updated(14, 119.0))
+      val lowIndex = advance.size + 17
+      val failed = retest.updated(lowIndex, retest(lowIndex).copy(l = 102.0))
+      assertTrue(
+        VCPDetector.detect(wide, params).isEmpty,
+        VCPDetector.detect(retest, params).isDefined,
+        VCPDebug.detectWithReasons("FAILED", failed, params).reasons.map(_.reason) == List("failed_mini_base")
+      )
+    },
+    test("finds a tight shelf after a larger contraction") {
+      val shelf = Seq(119.0, 120.0, 119.5, 118.0, 117.5, 118.2, 118.5, 119.0, 118.8, 119.0)
+      val quotes = bars(advance ++ base.take(8) ++ Seq.fill(8)(114.0) ++ shelf)
+      val hit = VCPDetector.detect(quotes, params)
+      assertTrue(
+        VCPDetector.detect(quotes, params.copy(tightShelf = false)).isEmpty,
+        hit.exists(_.contractions.size == 2),
+        hit.exists(_.pivot == 120.0 * 1.005)
+      )
+    },
+    test("ranks VCP matches by their same-date SEPA strength") {
       val quiet = Stock("QUIET", "Quiet", start, dailyAggregates = bars(Seq.fill(55)(140.0) ++ advance ++ base))
       val loud = Stock("LOUD", "Loud", start, dailyAggregates = bars(advance ++ base, 20000.0))
       val outside = Stock("OUT", "Outside SEPA", start, dailyAggregates = bars(advance.updated(0, 160.0) ++ base))
@@ -88,14 +151,18 @@ object VcpSpec extends ZIOSpecDefault {
         results <- TrendScreens.VolatilityContractionPattern.provideLayer(layer)
       } yield {
         val stats = results.map(_._2)
+        val expectedSwings = List(0 -> 120.0, 4 -> 96.0, 8 -> 118.0, 11 -> 104.0, 14 -> 116.0, 17 -> 108.0, 19 -> 115.0)
+          .map { case (offset, price) => start.plusDays((advance.size + offset).toLong).toString -> price }
         assertTrue(
           VCPDetector.detect(outside.dailyAggregates, params).isDefined,
           VCPDetector.detect(quiet.dailyAggregates, params).isEmpty,
           !sepa.exists(_._1.symbol == outside.symbol),
-          results.map(_._1.symbol) == Seq("QUIET", "LOUD"),
-          stats.map(_.ticker) == Seq("QUIET", "LOUD"),
+          results.map(_._1.symbol) == Seq("LOUD", "QUIET"),
+          stats.map(_.ticker) == Seq("LOUD", "QUIET"),
+          stats.map(_.stats("IBD rank")) == sepa.map(_._2.stats("IBD rank")),
           stats.forall(_.stats.get("pivot").contains("116.0")),
-          stats.map(_.stats("volumeDryUp")) == Seq("true", "false")
+          stats.head.stats("swingPoints").fromJson[List[(String, Double)]] == Right(expectedSwings),
+          stats.map(_.stats("volumeDryUp")) == Seq("false", "true")
         )
       }
     }
