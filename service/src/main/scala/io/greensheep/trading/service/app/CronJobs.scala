@@ -1,6 +1,8 @@
 package io.greensheep.trading.service.app
 
 import cron4zio.*
+import com.cronutils.model.Cron
+import com.cronutils.model.time.ExecutionTime
 import io.finnhub.client.FinnhubClient
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.providers.bvb.BvbClient
@@ -14,11 +16,22 @@ import io.greensheep.trading.service.services.{AlpacaQuotesServices, BvbQuotesSe
 import zio.*
 import zio.http.Client
 
-import java.time.ZoneId
+import java.time.{Instant, ZoneId}
 
 object CronJobs {
 
   private val localZone: ZoneId = ZoneId.systemDefault()
+
+  // cron4zio 1.0.0 attaches the target zone to the server's local time,
+  // shifting jobs when the two zones differ. Convert the instant instead.
+  private[app] def nextRunDelay(cron: Cron, zone: ZoneId, now: Instant): Duration = {
+    val next = ExecutionTime.forCron(cron).nextExecution(now.atZone(zone))
+      .orElseThrow(() => new IllegalArgumentException(s"Cannot generate next run for ${cron.asString()} in $zone"))
+    Duration.fromJava(java.time.Duration.between(now, next.toInstant))
+  }
+
+  private[app] def sleepUntilNextRun(cron: Cron, zone: ZoneId): Task[Unit] =
+    Clock.instant.flatMap(now => ZIO.attempt(nextRunDelay(cron, zone, now))).flatMap(ZIO.sleep(_))
 
   def guarded[R](name: String, job: ZIO[R, Throwable, Unit]): ZIO[R & AppHealth, Nothing, Unit] =
     AppHealth.tryStart(name).flatMap {
@@ -40,8 +53,8 @@ object CronJobs {
       job: ZIO[R, Throwable, Unit],
       zone: ZoneId = localZone
   ): URIO[R & AppHealth, Unit] =
-    repeatEffectForCron(guarded(name, job), unsafeParse(cron), zoneId = zone)
-      .catchAllCause(cause => ZIO.logErrorCause(s"Cron fiber $name stopped", cause).as(0L))
+    (sleepUntilNextRun(unsafeParse(cron), zone) *> guarded(name, job))
+      .catchAllCause(cause => ZIO.logErrorCause(s"Cron fiber $name stopped", cause))
       .forever
       .forkDaemon
       .unit
@@ -85,6 +98,7 @@ object CronJobs {
     val zone = ZoneId.of(market.timeZone)
     for {
       _ <- AppHealth.markCronStarted
+      _ <- ZIO.logInfo(s"Quote refresh for ${market.id.id} scheduled in $zone")
       _ <- supervised(market.id.job("quotes"), market.cron.quotes, AlpacaQuotesServices.refresh(market), zone)
       _ <- ZIO.foreachDiscard(market.cron.financials.filter(_ => financialsEnabled)) { expr =>
         supervised(market.id.job("financials"), expr, FiancialsServices.updateFinancials(), zone)

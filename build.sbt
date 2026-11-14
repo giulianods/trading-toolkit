@@ -133,7 +133,7 @@ val cronScheduling = "com.github.tharwaninitin" %% "cron4zio" % "1.0.0"
 
 lazy val service = (project in file("service")).dependsOn(core, dataservice, restApi, massiveClientZio, finnhubClientZio, bvbClientZio, xetraClientZio, jquantsClientZio, eodhdClientZio)
   .settings(
-    libraryDependencies := zioLibraries ++ logbackLib :+ cronScheduling,
+    libraryDependencies := zioLibraries ++ logbackLib ++ Seq(cronScheduling, "io.circe" %% "circe-yaml" % "0.15.1"),
     testFrameworks := Seq(zioTestFramework)
   )
 

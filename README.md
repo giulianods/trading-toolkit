@@ -1,6 +1,114 @@
 # trading-toolkit
 
-Multi-market quotes toolkit (US Massive and Alpaca, Romania BVB, Germany Xetra, Japan J-Quants, Canada EODHD). The service talks to MongoDB, initializes each enabled market’s universe and quotes at startup, then refreshes them on a nightly cron. HTTP API + UI listen on port **7777**.
+Multi-market quotes toolkit (US Massive and Alpaca, Romania BVB, Germany Xetra, Japan J-Quants, Canada EODHD). The service talks to MongoDB, initializes each enabled market’s universe and quotes at startup, then refreshes them on a nightly cron. HTTP API, MCP API, and UI listen on port **7777**.
+
+## Connect an agent through MCP
+
+Start the backend using the setup below. In your agent's MCP server settings,
+add a server named `trading-toolkit`, choose **Streamable HTTP**, and enter
+`http://localhost:7777/mcp`. The backend serves MCP alongside REST; no separate
+process or provider credentials are needed in the agent. The backend still needs
+the normal market configuration and MongoDB connection.
+
+For example, in VS Code run **MCP: Add Server**, choose **HTTP**, enter that URL,
+and use `trading-toolkit` as the server ID. Enable its tools in your agent chat.
+See the [VS Code MCP connection guide](https://code.visualstudio.com/docs/agent-customization/mcp-servers).
+Agents running inside another container must use a reachable backend hostname,
+such as `http://backend:7777/mcp` on the Compose network. A hosted agent cannot
+reach your computer's `localhost`; it needs a reachable deployment URL.
+
+MCP tools cover every REST operation in [openapi.yaml](openapi.yaml), including
+health, screen choices, data freshness, quotes (JSON or CSV), financials, income
+statements, watchlists and history, company descriptions, and market breadth.
+Tool names are `get_` followed by the path with slashes and hyphens replaced by
+underscores and braces removed. Examples:
+
+| Tool | Arguments |
+|---|---|
+| `get_status` | `{}` |
+| `get_markets_screens` | `{}` |
+| `get_markets_country_provider_quotes_ticker` | `{"country":"ro","provider":"bvb","ticker":"TLV"}` |
+| `get_markets_country_provider_watchlists_name` | `{"country":"us","provider":"alpaca","name":"SEPA"}` |
+| `get_markets_country_provider_financials` | `{"country":"us","provider":"massive","tickers":"AAPL,MSFT","category":"annual"}` |
+| `get_quotes_ticker` | `{"ticker":"AAPL","Accept":"text/csv"}` |
+
+Prefer market-qualified tools: the unprefixed tools always use **US Massive**.
+Discover current tool names and argument schemas with `tools/list`. Dates use
+`YYYY-MM-DD`; ticker lists are comma-separated strings. Results include
+`structuredContent: {"status":200,"body":...}` and the same payload as text.
+The body preserves REST arrays and ticker order. CSV bodies are strings.
+REST failures set `isError: true` and retain the HTTP status and response body.
+Invalid tool names or arguments return JSON-RPC errors.
+
+Try asking your agent: “List the enabled screens, then fetch the latest SEPA
+watchlist for the US Alpaca market and show its quote freshness date.”
+
+### Test the MCP connection
+
+The endpoint implements stateless [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)
+with JSON responses. It supports protocol versions `2025-11-25`, `2025-06-18`,
+and `2025-03-26`. Clients initialize, send `notifications/initialized`, then
+discover and call tools. Send both accepted response types and use the negotiated
+version in subsequent requests. No `MCP-Session-Id` is issued; `GET` and `DELETE`
+return 405 because there is no standalone SSE stream or session to terminate.
+
+Run these commands in Bash (use `curl.exe` in Windows shells and adapt quoting):
+
+```sh
+curl -sS http://localhost:7777/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"my-agent","version":"1.0"}}}'
+
+curl -sS http://localhost:7777/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-11-25' \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+
+curl -sS http://localhost:7777/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-11-25' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+
+curl -sS http://localhost:7777/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-11-25' \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_markets_screens","arguments":{}}}'
+```
+
+MCP uses the same access boundary as REST: the service does not implement
+authentication. Compose publishes port 7777 on loopback. For remote access,
+use a private network or an authenticated HTTPS reverse proxy protecting both
+interfaces. Native agents normally omit `Origin`. When it is present, MCP
+allows only `http://localhost:7777`, `http://127.0.0.1:7777`, and
+`http://[::1]:7777` by default. For an intentional browser-origin client, set
+`TTK_MCP_ALLOWED_ORIGINS` (or `ttk.mcp.allowed.origins` in `local.conf`) to a
+comma-separated list of exact origins; this replaces the defaults and does not
+enable CORS. An origin allowlist is not authentication.
+
+### Keep REST and MCP in sync
+
+Whenever a REST route, parameter, or response changes, update `openapi.yaml`
+alongside `ApiEndpoints.scala`. The build bundles that contract into the service;
+`McpEndpoints.scala` generates tool descriptions and argument schemas from it and
+dispatches tool calls directly through the REST app. Rebuild and restart the
+backend, then reconnect the agent to refresh discovery. Existing tool names are
+stable while paths remain unchanged; an explicit OpenAPI `operationId` can fix
+the name when introducing a route.
+
+`McpEndpointsSpec` checks REST route coverage against the generated catalog and
+exercises every tool's dispatch. New HTTP methods, request bodies, or non-scalar
+parameters require extending the MCP mapping and tests; unsupported contracts
+fail at startup rather than silently omitting tools. Run from the repository root:
+
+```sh
+sbt "service/testOnly *McpEndpointsSpec"
+# Without a host JDK/sbt:
+docker compose run --rm --no-deps backend sbt -batch "service/testOnly *McpEndpointsSpec"
+```
 
 ## Develop with Docker
 

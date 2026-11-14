@@ -7,6 +7,7 @@ Use the root `build.sbt` for the Scala 3 / ZIO multi-project build. The developm
 - `core/` contains stock and quote types, indicator calculations, and screening rules. Test calculations here with deterministic quote series.
 - Provider clients live in `*-client-zio/`. Provider orchestration, startup, and scheduled jobs live in `service/`. `dataservice/` owns MongoDB persistence and market database selection.
 - The running HTTP API is wired through `service/.../services/ApiEndpoints.scala`. Document contract changes in `openapi.yaml`. Market-specific endpoints live under `/markets/{country}/{provider}/`. Preserve the unprefixed US Massive aliases when changing shared endpoints.
+- Keep MCP at `/mcp` in sync whenever the REST API changes. `McpEndpoints.scala` generates tools from the bundled `openapi.yaml` and invokes the REST handlers in process. Update the contract's parameters and schemas alongside routes, extend MCP mapping for any new parameter/body types or HTTP methods, and run `service/testOnly *McpEndpointsSpec`. Keep agent connection instructions in `README.md` current.
 - The React dashboard lives in `web/`. `src/api.js` owns request paths, `src/App.js` owns market and screen selection, and `src/components/ChartGrid.jsx` renders the watchlist in server order.
 
 ## Market data and screens

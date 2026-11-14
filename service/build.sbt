@@ -17,6 +17,15 @@ val frontendSrc = settingKey[File]("Directory of the React web app")
 val npmBuild = taskKey[File]("Install and build the React web app")
 val packageService = taskKey[File]("Build the React UI and assemble the service fat jar")
 
+// MCP discovery uses the same contract shipped with the service, including in the fat jar.
+Compile / resourceGenerators += Def.task {
+  val dest = (Compile / resourceManaged).value / "openapi.yaml"
+  IO.copyFile((ThisBuild / baseDirectory).value / "openapi.yaml", dest)
+  Seq(dest)
+}.taskValue
+
+Test / javaOptions += "-Dttk.repo.root=" + (ThisBuild / baseDirectory).value.getAbsolutePath
+
 frontendSrc := {
   sys.env.get("TTK_WEB_SRC").map(file)
     .orElse(sys.props.get("ttk.web.src").map(file))

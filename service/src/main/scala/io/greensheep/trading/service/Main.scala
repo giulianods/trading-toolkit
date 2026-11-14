@@ -11,7 +11,7 @@ import io.greensheep.trading.core.types.{MarketDefinition, Markets}
 import io.greensheep.trading.core.utils.LocalConfig
 import io.greensheep.trading.dataservice.{MarketStore, MongoDataRepo}
 import io.greensheep.trading.service.app.{AppHealth, CronJobs, WebApp}
-import io.greensheep.trading.service.services.{AlpacaQuotesServices, ApiEndpoints, BvbInitialization, EodhdQuotesServices, FiancialsServices, InitializationService, JquantsInitialization, QuotesServices, ScreenerServices, XetraInitialization}
+import io.greensheep.trading.service.services.{AlpacaQuotesServices, ApiEndpoints, BvbInitialization, EodhdQuotesServices, FiancialsServices, InitializationService, JquantsInitialization, McpEndpoints, QuotesServices, ScreenerServices, XetraInitialization}
 import zio.*
 import zio.http.{Client, DnsResolver, Server, ZClient}
 import zio.http.netty.NettyConfig
@@ -67,14 +67,18 @@ object Main extends ZIOAppDefault {
         startMarket(client, store, market, skipInitialization, skipCron)
       }
       allApi = ApiEndpoints.routes(store, http).toHttpApp
+      mcpOrigins = LocalConfig.get("ttk.mcp.allowed.origins")
+        .map(_.split(",").map(_.trim).filter(_.nonEmpty).toSet)
+        .getOrElse(Set("http://localhost:7777", "http://127.0.0.1:7777", "http://[::1]:7777"))
       webSource = WebApp.describeSource
       _ <- ZIO.logInfo("Starting rest api")
       _ <- ZIO.logInfo(s"Serving web app from $webSource")
       _ <- ZIO
         .logWarning("Web app not found on disk or classpath. Run `sbt service/packageService` or `npm run build` in web/.")
         .when(webSource == "missing")
-      _ <- Server.install(allApi ++ WebApp.app)
+      _ <- Server.install(McpEndpoints.routes(allApi, mcpOrigins).toHttpApp ++ allApi ++ WebApp.app)
       _ <- ZIO.logInfo("Rest api started on port 7777")
+      _ <- ZIO.logInfo("MCP Streamable HTTP endpoint started at /mcp")
       _ <- ZIO.logInfo("Cron jobs skipped").when(skipCron)
       _ <- ZIO.logInfo("Bulk initialization skipped").when(skipInitialization)
       _ <- ZIO.never

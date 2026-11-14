@@ -18,7 +18,56 @@ tags:
   - name: Watchlists
   - name: Metadata
   - name: Breadth
+  - name: MCP
 paths:
+  /mcp:
+    post:
+      tags: [MCP]
+      summary: MCP Streamable HTTP JSON-RPC endpoint
+      description: |
+        Stateless MCP transport (2025-11-25, 2025-06-18, 2025-03-26).
+        Supports initialize, ping, tools/list, tools/call and notifications.
+        Each REST operation below is exposed as a tool generated from this contract.
+        Send Content-Type application/json and Accept application/json, text/event-stream.
+        No session ID is issued. When supplied, MCP-Protocol-Version must be supported.
+        Origin, when present, must be explicitly allowed by ttk.mcp.allowed.origins
+        (defaults to localhost, 127.0.0.1 and [::1] on HTTP port 7777).
+        Tool results contain status and body; REST errors set isError to true.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: JSON-RPC result or error
+          content:
+            application/json:
+              schema:
+                type: object
+        '202':
+          description: Notification accepted (empty body)
+        '400':
+          description: Invalid JSON-RPC envelope or unsupported protocol version
+        '403':
+          description: Origin rejected
+        '406':
+          description: Accept must include application/json and text/event-stream
+        '415':
+          description: Content-Type must be application/json
+    get:
+      tags: [MCP]
+      summary: No standalone SSE stream is offered
+      responses:
+        '405':
+          description: Method not allowed (stateless JSON responses only)
+    delete:
+      tags: [MCP]
+      summary: No MCP sessions to terminate
+      responses:
+        '405':
+          description: Method not allowed (no sessions)
   /status:
     get:
       tags: [Status]
@@ -83,6 +132,7 @@ paths:
         - $ref: '#/components/parameters/CountryParam'
         - $ref: '#/components/parameters/ProviderParam'
         - $ref: '#/components/parameters/TickerParam'
+        - $ref: '#/components/parameters/QuotesFormatParam'
       responses:
         '200':
           $ref: '#/paths/~1quotes~1{ticker}/get/responses/200'
@@ -284,20 +334,13 @@ paths:
       tags: [Quotes]
       summary: Get daily quote data for a ticker
       deprecated: true
-      description: Alias for `/markets/us/massive/quotes/{ticker}`.
       description: |
+        Alias for `/markets/us/massive/quotes/{ticker}`.
         Returns quote history as JSON by default.
-        If request header `Content-Type: text/csv` is set, returns CSV text.
+        If request header `Accept: text/csv` is set, returns CSV text.
       parameters:
         - $ref: '#/components/parameters/TickerParam'
-        - name: Content-Type
-          in: header
-          required: false
-          schema:
-            type: string
-            enum: [application/json, text/csv]
-            default: application/json
-          description: Non-standard content negotiation used by the service for this endpoint.
+        - $ref: '#/components/parameters/QuotesFormatParam'
       responses:
         '200':
           description: Quote data
@@ -605,6 +648,15 @@ paths:
           $ref: '#/components/responses/InternalErrorText'
 components:
   parameters:
+    QuotesFormatParam:
+      name: Accept
+      in: header
+      required: false
+      schema:
+        type: string
+        enum: [application/json, text/csv]
+        default: application/json
+      description: Response format for quote history.
     CountryParam:
       name: country
       in: path
@@ -644,7 +696,7 @@ components:
             type: string
           examples:
             sample:
-              value: Unknown market: ro-bvb
+              value: 'Unknown market: ro-bvb'
     InternalErrorText:
       description: Unexpected server error (stacktrace text)
       content:
