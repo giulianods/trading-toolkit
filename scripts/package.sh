@@ -5,4 +5,4 @@ sbt "service/packageService"
 echo
 echo "Fat jar: service/target/scala-3.7.1/service-assembly-0.1.0-SNAPSHOT.jar"
 echo "Run with: java -jar <jar>   (needs Mongo + local.conf or env keys)"
-echo "Or deploy: sbt \"service/deploy\"   (SSH to ttk.deploy.host, default 192.168.0.156)"
+echo "Or deploy: sbt \"service/deploy\"   (SSH to ttk.deploy.host, default argo.local)"

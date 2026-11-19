@@ -1,7 +1,7 @@
 package io.greensheep.trading.service.services
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
-import io.greensheep.trading.core.types.{MarketId, WatchlistHistoryEntry, WatchlistSummary}
+import io.greensheep.trading.core.types.{MarketId, MarketSources, WatchlistHistoryEntry, WatchlistSummary}
 import io.greensheep.trading.dataservice.{MarketStore, MongoDataRepo}
 import io.greensheep.trading.service.app.{AppHealth, AppStatus}
 import zio.*
@@ -18,6 +18,7 @@ object ApiEndpoints {
 
   def handleError(error: Throwable): Response = {
     val status = error match {
+      case _: ResearchServices.Conflict => Status.Conflict
       case _: NoSuchElementException => Status.NotFound
       case _: IllegalArgumentException => Status.BadRequest
       case _ => Status.InternalServerError
@@ -166,11 +167,17 @@ object ApiEndpoints {
 
   private val MaxDescriptionTickers = 500
 
-  private def descriptionResponse(ticker: String): ZIO[MongoDatabase, Throwable, Response] =
-    MongoDataRepo.getStockDescription(ticker).map(data => Response.json(data.toJson))
+  private case class ProfileView(id: String, country: String, provider: String, label: String, title: String,
+    sources: Map[String, String], hasFinancials: Boolean, aliases: Seq[String])
+  private object ProfileView {
+    implicit val encoder: JsonEncoder[ProfileView] = DeriveJsonEncoder.gen[ProfileView]
+  }
+
+  private def descriptionResponse(store: MarketStore, market: MarketId, ticker: String): ZIO[MongoDatabase, Throwable, Response] =
+    CompanyDescriptionService.load(store, market, ticker).map(data => Response.json(data.toJson))
 
   /** Company name and sector (SIC description) for the chart header. Missing tickers are omitted. */
-  private def descriptionsResponse(req: Request): ZIO[MongoDatabase, Throwable, Response] =
+  private def descriptionsResponse(store: MarketStore, market: MarketId, req: Request): ZIO[MongoDatabase, Throwable, Response] =
     for {
       tickersParam <- ZIO
         .fromOption(req.url.queryParams.get("tickers"))
@@ -180,7 +187,7 @@ object ApiEndpoints {
       _ <- ZIO
         .fail(new IllegalArgumentException(s"at most $MaxDescriptionTickers tickers"))
         .when(tickers.size > MaxDescriptionTickers)
-      descriptions <- MongoDataRepo.getStockDescriptions(tickers)
+      descriptions <- CompanyDescriptionService.loadMany(store, market, tickers)
       labels = descriptions.iterator.map { stock =>
         stock.symbol -> ChartLabel(companyName = stock.companyName, sector = stock.sicDescription)
       }.toMap
@@ -227,6 +234,35 @@ object ApiEndpoints {
     )
 
     val marketData = Routes(
+      (Method.GET / "markets" / string("country") / string("provider") / "reports") ->
+        Handler.fromFunctionZIO[(String, String, Request)] { case (country, provider, req) =>
+          withMarket(store, country, provider)(ResearchServices.reports(req))
+        },
+      (Method.POST / "markets" / string("country") / string("provider") / "reports") ->
+        Handler.fromFunctionZIO[(String, String, Request)] { case (country, provider, req) =>
+          withMarket(store, country, provider)(ResearchServices.createReport(req))
+        },
+      (Method.GET / "markets" / string("country") / string("provider") / "reports" / string("id")) ->
+        Handler.fromFunctionZIO[(String, String, String, Request)] { case (country, provider, id, _) =>
+          withMarket(store, country, provider)(ResearchServices.report(id))
+        },
+      (Method.GET / "markets" / string("country") / string("provider") / "portfolio") ->
+        Handler.fromFunctionZIO[(String, String, Request)] { case (country, provider, _) =>
+          withMarket(store, country, provider)(ResearchServices.portfolio(country.toLowerCase))
+        },
+      (Method.POST / "markets" / string("country") / string("provider") / "portfolio" / "trades") ->
+        Handler.fromFunctionZIO[(String, String, Request)] { case (country, provider, req) =>
+          withMarket(store, country, provider)(ResearchServices.addTrade(req))
+        },
+      (Method.GET / "markets") -> Handler.fromFunction[Request] { _ =>
+        Response.json(store.enabled.map { profile =>
+          val sources = profile.sources
+          ProfileView(profile.id.id, profile.id.country, profile.id.provider, profile.label,
+            s"${profile.label} · Prices: ${MarketSources.name(sources.prices)}; financials: ${MarketSources.name(sources.financials)}; company info: ${MarketSources.name(sources.metadata)}",
+            Map("prices" -> sources.prices, "financials" -> sources.financials, "metadata" -> sources.metadata, "listings" -> sources.listings),
+            sources.financials != "none", profile.aliases.map(_.id))
+        }.toJson)
+      },
       (Method.GET / "markets" / "screens") -> Handler.fromFunction[Request] { _ =>
         Response.json(ScreenerServices.screenOptions.toJson)
       },
@@ -247,7 +283,7 @@ object ApiEndpoints {
       (Method.GET / "markets" / string("country") / string("provider") / "income-statements" / string("ticker")) ->
         Handler.fromFunctionZIO[(String, String, String, Request)] { case (country, provider, ticker, _) =>
           withMarket(store, country, provider)(
-            IncomeStatementsService.load(MarketId.fromPath(country, provider).country, ticker)
+            ZIO.fromEither(store.resolve(country, provider)).flatMap(profile => IncomeStatementsService.load(store, profile, ticker))
               .map(statements => Response.json(statements.toJson))
               .provideSomeLayer[MongoDatabase](ZLayer.succeed(http))
           )
@@ -258,15 +294,16 @@ object ApiEndpoints {
         },
       (Method.GET / "markets" / string("country") / string("provider") / "watchlists" / string("name")) ->
         Handler.fromFunctionZIO[(String, String, String, Request)] { case (country, provider, name, req) =>
-          withMarket(store, country, provider)(watchlistResponse(name, req, MarketId.fromPath(country, provider) == MarketId.UsMassive))
+          withMarket(store, country, provider)(watchlistResponse(name, req,
+            store.resolve(country, provider).toOption.exists(_.sources.prices == "massive")))
         },
       (Method.GET / "markets" / string("country") / string("provider") / "descriptions") ->
         Handler.fromFunctionZIO[(String, String, Request)] { case (country, provider, req) =>
-          withMarket(store, country, provider)(descriptionsResponse(req))
+          withMarket(store, country, provider)(descriptionsResponse(store, MarketId.fromPath(country, provider), req))
         },
       (Method.GET / "markets" / string("country") / string("provider") / "description" / string("ticker")) ->
         Handler.fromFunctionZIO[(String, String, String, Request)] { case (country, provider, ticker, _) =>
-          withMarket(store, country, provider)(descriptionResponse(ticker))
+          withMarket(store, country, provider)(descriptionResponse(store, MarketId.fromPath(country, provider), ticker))
         },
       (Method.GET / "markets" / string("country") / string("provider") / "breadth" / "indicators") ->
         Handler.fromFunctionZIO[(String, String, Request)] { case (country, provider, req) =>
@@ -289,15 +326,16 @@ object ApiEndpoints {
         },
       (Method.GET / "watchlists" / string("name")) ->
         Handler.fromFunctionZIO[(String, Request)] { case (name, req) =>
-          withMarket(store, "us", "massive")(watchlistResponse(name, req, massive = true))
+          withMarket(store, "us", "massive")(watchlistResponse(name, req,
+            store.resolve("us", "massive").toOption.exists(_.sources.prices == "massive")))
         },
       (Method.GET / "descriptions") ->
         Handler.fromFunctionZIO[Request] { req =>
-          withMarket(store, "us", "massive")(descriptionsResponse(req))
+          withMarket(store, "us", "massive")(descriptionsResponse(store, MarketId.UsMassive, req))
         },
       (Method.GET / "description" / string("ticker")) ->
         Handler.fromFunctionZIO[(String, Request)] { case (ticker, _) =>
-          withMarket(store, "us", "massive")(descriptionResponse(ticker))
+          withMarket(store, "us", "massive")(descriptionResponse(store, MarketId.UsMassive, ticker))
         },
       (Method.GET / "breadth" / "indicators") ->
         Handler.fromFunctionZIO[Request] { req =>

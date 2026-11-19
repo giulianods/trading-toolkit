@@ -27,6 +27,8 @@ object Markets {
     cron = UsMassive.cron.copy(quotes = "0 30 20 * * ?", clean = None)
   )
 
+  val UsFinnhub: MarketDefinition = UsAlpaca.copy(id = MarketId.UsFinnhub, dataSource = "finnhub")
+
   val RoBvb: MarketDefinition = MarketDefinition(
     id = MarketId.RoBvb,
     timeZone = "Europe/Bucharest",
@@ -86,6 +88,7 @@ object Markets {
   val catalog: Map[MarketId, MarketDefinition] = Map(
     UsMassive.id -> UsMassive,
     UsAlpaca.id -> UsAlpaca,
+    UsFinnhub.id -> UsFinnhub,
     RoBvb.id -> RoBvb,
     DeXetra.id -> DeXetra,
     JpJquants.id -> JpJquants,
@@ -111,5 +114,41 @@ object Markets {
   }
 
   def enabledFromConfig: Either[String, Seq[MarketDefinition]] =
-    parseEnabled(LocalConfig.getList("ttk.markets").getOrElse(Seq(UsMassive.id.id)))
+    configured(LocalConfig.getList("ttk.markets").getOrElse(Seq(UsMassive.id.id)), LocalConfig.get, LocalConfig.getList)
+
+  def configured(tokens: Seq[String], read: String => Option[String], readList: String => Option[Seq[String]]): Either[String, Seq[MarketDefinition]] = {
+    val parsed = tokens.map { token =>
+      for {
+        id <- MarketId.parse(token)
+        _ <- Either.cond("[a-z]{2}-[a-z][a-z0-9-]*".r.matches(id.id), (), s"Invalid market profile ID '$token'")
+        prefix = s"ttk.profiles.${id.id}"
+        requestedPrice = read(s"$prefix.prices")
+        base <- catalog.get(id).orElse(catalog.values.find(m => m.id.country == id.country && requestedPrice.contains(m.id.provider)))
+          .toRight(s"Unsupported market profile '$token'; configure its price provider")
+        defaults = base.sources
+        prices = read(s"$prefix.prices").getOrElse(defaults.prices)
+        sources = MarketSources(prices, read(s"$prefix.financials").getOrElse(defaults.financials),
+          read(s"$prefix.metadata").getOrElse(defaults.metadata), read(s"$prefix.listings").getOrElse(if (prices == "alpaca") "finnhub" else prices))
+        _ <- MarketSources.validate(id.country, sources)
+        schedule = catalog.values.find(m => m.id.country == id.country && m.id.provider == prices).map(_.cron).getOrElse(base.cron)
+        aliases <- readList(s"$prefix.aliases").getOrElse(Seq.empty).foldLeft[Either[String, Seq[MarketId]]](Right(Seq.empty)) {
+          case (acc, value) => for {
+            ids <- acc
+            alias <- MarketId.parse(value)
+            _ <- Either.cond(alias.country == id.country && "[a-z]{2}-[a-z][a-z0-9-]*".r.matches(alias.id), (), "Aliases must be valid IDs in the same country")
+          } yield ids :+ alias
+        }
+      } yield base.copy(id = id, dataSource = sources.prices, cron = schedule, providers = Some(sources),
+        hasFinancials = sources.financials != "none", displayLabel = read(s"$prefix.label"), aliases = aliases)
+    }
+    parsed.collectFirst { case Left(error) => error } match {
+      case Some(error) => Left(error)
+      case None =>
+        val profiles = parsed.collect { case Right(value) => value }.distinct
+        val names = profiles.flatMap(p => p.id +: p.aliases)
+        if (profiles.isEmpty) Left("ttk.markets must list at least one market profile")
+        else if (names.distinct.size != names.size) Left("Market profile IDs and aliases must be unique")
+        else Right(profiles)
+    }
+  }
 }

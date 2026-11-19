@@ -18,6 +18,7 @@ function draw(highsAndLows) {
   const arcs = [];
   createChart.mockReturnValue({
     addCandlestickSeries: () => ({ setData: jest.fn(), createPriceLine: jest.fn() }),
+    addHistogramSeries: () => ({ setData: jest.fn(), priceScale: () => ({ applyOptions: jest.fn() }) }),
     addLineSeries: () => ({ setData: points => arcs.push(points) }),
     timeScale: () => ({ fitContent: jest.fn() }),
     remove: jest.fn(),

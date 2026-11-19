@@ -2,6 +2,54 @@
 
 Multi-market quotes toolkit (US Massive and Alpaca, Romania BVB, Germany Xetra, Japan J-Quants, Canada EODHD). The service talks to MongoDB, initializes each enabled market’s universe and quotes at startup, then refreshes them on a nightly cron. HTTP API, MCP API, and UI listen on port **7777**.
 
+## Screens, reports and portfolio
+
+Click the green sheep logo to open the left navigation drawer. **Screens** keeps
+the existing screening dashboard. **Reports** displays agent-written Markdown
+research newest first, supports browsing older publications and downloading `.md`
+files, and keeps the report's `asOf` date separate from its publication time.
+Raw HTML is rendered as text. **Portfolio** shows account equity, cash/buying
+power, an equity curve, open positions, realized/unrealized P/L, and recorded fills.
+The market selector applies to all three sections.
+
+Reports and paper ledgers live in each market profile's MongoDB database, so US
+Massive and US Alpaca remain separate. Each portfolio starts with **100,000**:
+RON for Romania, USD for US profiles, and CAD for Canada. Fills use the account
+currency with no currency conversion. The account is cash-only and long-only;
+it records completed paper trades and does not submit broker orders. Average
+cost includes buy fees; sell fees reduce realized P/L. Corporate actions and
+dividends are not applied automatically.
+
+Agents can use REST or the equivalent MCP tools:
+
+| Method | Market-qualified path | Purpose |
+|---|---|---|
+| GET | `/markets/{country}/{provider}/reports?limit=50&offset=0` | Latest reports; limit 1–200, offset 0–1,000,000 |
+| POST | `/markets/{country}/{provider}/reports` | Publish `{title, markdown, asOf}`; returns 201 with generated ID/publication time |
+| GET | `/markets/{country}/{provider}/reports/{id}` | Read one report |
+| GET | `/markets/{country}/{provider}/portfolio` | Balances, positions, daily equity history, newest-first fills |
+| POST | `/markets/{country}/{provider}/portfolio/trades` | Record `{id, ticker, side, quantity, price, executedAt, fees?, notes?}` |
+
+POST bodies use `Content-Type: application/json`. `asOf` is an ISO date and
+`executedAt` an ISO timestamp with timezone. Submit trades in chronological order
+using the provider's exact ticker, including exchange suffixes. Use a stable
+trade ID when retrying: an identical fill returns 200 without applying it twice;
+conflicting details for that ID return 409. Insufficient cash/shares, future fills,
+or invalid values return 400. A concurrent-update 409 can be retried with the same
+ID. Quantities, prices and fees support at most eight decimal places. Ledgers
+currently support up to 20,000 fills per market profile.
+
+Valuations use stored daily closes and expose their dates. When no close is
+available on or after a ticker's last fill date, its last fill price is used and
+marked `priceSource: last_fill`. History uses only fills and prices through each
+UTC date. Refresh the section to see subsequent agent updates. Report writing and
+portfolio decisions are performed by your external agent; the toolkit provides
+storage, validation and display, and does not schedule an LLM itself.
+
+For an isolated database integration test, set `RESEARCH_TEST_MONGODB_URL` to a
+disposable MongoDB and run `sbt "service/testOnly *ResearchIntegrationSpec"`.
+The test creates uniquely named databases and drops only those databases afterwards.
+
 ## Connect an agent through MCP
 
 Start the backend using the setup below. In your agent's MCP server settings,
@@ -19,18 +67,24 @@ reach your computer's `localhost`; it needs a reachable deployment URL.
 
 MCP tools cover every REST operation in [openapi.yaml](openapi.yaml), including
 health, screen choices, data freshness, quotes (JSON or CSV), financials, income
-statements, watchlists and history, company descriptions, and market breadth.
-Tool names are `get_` followed by the path with slashes and hyphens replaced by
+statements, watchlists and history, company descriptions, market breadth, reports,
+and paper portfolios. Tools include report publishing and trade recording.
+Tool names are the lowercase HTTP method followed by `_` and the path with slashes and hyphens replaced by
 underscores and braces removed. Examples:
 
 | Tool | Arguments |
 |---|---|
 | `get_status` | `{}` |
+| `get_markets` | `{}` — configured profiles, source choices and legacy aliases |
 | `get_markets_screens` | `{}` |
 | `get_markets_country_provider_quotes_ticker` | `{"country":"ro","provider":"bvb","ticker":"TLV"}` |
 | `get_markets_country_provider_watchlists_name` | `{"country":"us","provider":"alpaca","name":"SEPA"}` |
 | `get_markets_country_provider_financials` | `{"country":"us","provider":"massive","tickers":"AAPL,MSFT","category":"annual"}` |
 | `get_quotes_ticker` | `{"ticker":"AAPL","Accept":"text/csv"}` |
+| `get_markets_country_provider_reports` | `{"country":"ro","provider":"bvb","limit":50}` |
+| `post_markets_country_provider_reports` | `{"country":"ro","provider":"bvb","body":{"title":"Market review","markdown":"# Overview\n\nMarket research…","asOf":"2026-11-18"}}` |
+| `get_markets_country_provider_portfolio` | `{"country":"us","provider":"alpaca"}` |
+| `post_markets_country_provider_portfolio_trades` | `{"country":"us","provider":"alpaca","body":{"id":"agent-fill-001","ticker":"AAPL","side":"buy","quantity":10,"price":200,"executedAt":"2026-11-18T15:00:00Z","fees":1,"notes":"Initial position"}}` |
 
 Prefer market-qualified tools: the unprefixed tools always use **US Massive**.
 Discover current tool names and argument schemas with `tools/list`. Dates use
@@ -101,7 +155,8 @@ the name when introducing a route.
 
 `McpEndpointsSpec` checks REST route coverage against the generated catalog and
 exercises every tool's dispatch. New HTTP methods, request bodies, or non-scalar
-parameters require extending the MCP mapping and tests; unsupported contracts
+parameters require checking the MCP mapping and tests. GET and POST with JSON
+object bodies (including nested objects and arrays) are supported; unsupported contracts
 fail at startup rather than silently omitting tools. Run from the repository root:
 
 ```sh
@@ -159,6 +214,76 @@ the repository's Git config, including the commit author. To use an SSH
 remote from IntelliJ, start the Windows OpenSSH agent, add your GitHub key
 with `ssh-add`, and reconnect with SSH agent forwarding enabled.
 
+### Configurable market profiles
+
+`ttk.markets` is an ordered list of enabled profiles. Each profile chooses data
+sources independently in `ttk.profiles`. For example:
+
+```hocon
+ttk.markets = [us-massive, us-alpaca, ro-bvb, de-xetra, jp-jquants]
+ttk.profiles {
+  us-massive { prices = massive, financials = finnhub, metadata = massive, listings = massive }
+  us-alpaca {
+    prices = alpaca
+    financials = finnhub
+    metadata = massive
+    listings = finnhub
+    aliases = [us-finnhub]
+  }
+  ro-bvb { prices = bvb, financials = eodhd, metadata = bvb, listings = bvb }
+  de-xetra { prices = xetra, financials = none, metadata = xetra, listings = xetra }
+  jp-jquants { prices = jquants, financials = none, metadata = jquants, listings = jquants }
+}
+```
+
+The dashboard fetches `GET /markets` (also an MCP tool) and displays only enabled
+profiles in configuration order, with labels and source details from the server.
+An optional `label` overrides the generated display name. Profile IDs are storage
+and routing identities, independent of provider choices. A new ID such as
+`us-research` can select supported sources without adding a new catalog entry.
+Invalid provider capabilities, countries and ambiguous aliases fail validation.
+
+Prices and screen history stay in each profile's `ttk-{country}-{profile}` MongoDB
+database. Use a new profile ID when changing the price provider of an existing
+price history; startup rejects mixing feeds in an existing database. Financials
+are shared by country and selected source: both US profiles read the same
+`income-statements` cache in `ttk-us-finnhub`. Refreshes serialize cache checks and
+skip reports fetched within seven days, avoiding duplicate provider downloads.
+EODHD income statements for US/RO load on demand using `eodhd.api.key`; `none`
+disables financial charts. Metadata comes from the selected native provider or
+an existing Massive reference cache, without extra metadata API calls. Native
+Alpaca metadata contains listing names rather than business narratives.
+
+Existing databases remain intact. The `us-finnhub` route alias now resolves to
+the configured Alpaca-price profile, while its existing Finnhub statement cache
+continues to supply both US profiles. Unprefixed US Massive routes stay supported.
+Aliases also restore saved dashboard selections. The legacy `/financials` metrics
+contract remains a view of stored per-share metrics; combined income charts use
+the configured source through `/income-statements/{ticker}`.
+
+Alpaca prices use split-adjusted daily SIP bars. Its `listings` source can be
+Finnhub or Massive and restricts the universe to NYSE/Nasdaq common shares;
+ETFs, preferred shares and OTC listings are excluded. Credentials are required
+only for selected price/listings providers and Finnhub financials. Massive
+metadata can reuse a stored reference cache without a Massive API key.
+
+Finnhub statements provide consolidated revenue, net income, net margin and EPS.
+Bank net revenue can be reconstructed from net interest and total noninterest
+income. Recognizable SEC currency unit IDs become ISO labels; unavailable fields
+stay empty. Consecutive fiscal YTD totals are differenced into individual quarters,
+including Q4 from annual minus Q3. Derived-quarter EPS stays empty because
+weighted share counts can change. A failed report preserves available data and
+is left due for retry; `/status` records financial failures separately from prices.
+
+Startup and scheduled price refreshes use the configured price adapter. Startup
+with initialization skipped rescreens stored data; an empty Alpaca universe still
+gets its initial backfill. Financial jobs share the source cache and rate gate.
+Every Finnhub call, redirect and retry waits at least 1.1 seconds; HTTP 429 holds
+the gate for another minute. A cold 4,732-company cache takes at least 174 minutes
+for two statement requests each, plus response time and retries. Reusing the
+existing source cache avoids that backfill. Separate processes sharing a Finnhub
+key must coordinate its quota. Live tests are opt-in via `FINNHUB_LIVE_TESTS=true`.
+
 ## Prerequisites for running outside Docker
 
 - JDK 21+
@@ -182,10 +307,10 @@ Edit `local.conf` at the repo root. It uses HOCON syntax.
 | `ttk.markets` | List of market IDs, e.g. `["us-massive", "us-alpaca", "ro-bvb", "de-xetra", "jp-jquants"]` |
 | `ttk.screens` | Ordered list of screen IDs, e.g. `["SEPA", "7_PCT_UP"]`. Defaults to all built-in screens with SEPA first. |
 | `massive.api.key` | Required for US-Massive and for US-Alpaca's common-stock reference data |
-| `alpaca.api.key`, `alpaca.api.secret` | Required if `us-alpaca` is enabled. Set `alpaca.paper = false` for live account keys |
+| `alpaca.api.key`, `alpaca.api.secret` | Required if `us-alpaca` or `us-finnhub` is enabled. Set `alpaca.paper = false` for live account keys |
 | `jquants.api.key` | Required if `jp-jquants` is enabled ([J-Quants](https://jpx-jquants.com/en/register)) |
 | `jquants.data.delay.days` | Optional; default `84` (free plan ~12-week delay; use `0` on Light+) |
-| `finnhub.api.key` | Required for `us-massive`. Optional for US-Alpaca financials |
+| `finnhub.api.key` | Required for `us-massive` and `us-finnhub`. Optional for US-Alpaca financials |
 | `eodhd.api.key` | Required for `ca-eodhd` downloads. Optional for income statements on US and Romanian charts |
 | `ttk.skip.initialization` | `true` to skip startup backfill except for a missing or empty US-Alpaca universe |
 | `ttk.skip.cron` | `true` to skip nightly jobs |
@@ -323,7 +448,10 @@ The header switches markets and screens and loads the selected watchlist and quo
 
 For US and Romanian companies, the chart panel requests annual and quarterly
 income statements when a card comes into view. The server caches successful
-requests for seven days in MongoDB. Use an EODHD plan with Fundamentals access
+requests for seven days in MongoDB. Annual and quarterly charts are stacked,
+each combining revenue and net-income bars with a margin line on a separate
+percentage axis.
+Use an EODHD plan with Fundamentals access
 for full symbol access. Missing statement fields appear as unavailable.
 
 Or point the service at a local build:
@@ -340,7 +468,7 @@ sbt "service/deployArgo"       # Build the current checkout and update argo
 sbt "service/deploy"           # jar + local.conf → Docker (local or SSH via ttk.deploy.*)
 ```
 
-`service/deployArgo` requires Node 22 and SSH key access to `gds@192.168.0.153`
+`service/deployArgo` requires Node 22 and SSH key access to `gds@argo.local`
 from the environment running sbt. Rebuild the development container once
 to pick up its bundled Node 22. The task builds the UI and assembles the
 JAR without running test suites. It verifies the upload, backs up the

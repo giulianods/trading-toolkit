@@ -13,6 +13,10 @@ import java.time.{Instant, LocalDate}
 object AlpacaQuotesServices {
   private val epoch = LocalDate.ofEpochDay(0)
 
+  private[service] def assetDescription(asset: AlpacaClient.Asset, existing: Option[StockDescription]): StockDescription =
+    existing.fold(StockDescription(asset.symbol, asset.name, epoch, primaryExchange = asset.exchange))(
+      _.copy(companyName = asset.name, primaryExchange = asset.exchange))
+
   def refresh(market: MarketDefinition): ZIO[MongoDatabase & Client & MassiveAsyncApi, Throwable, Unit] =
     for {
       assets <- AlpacaClient.assets
@@ -51,8 +55,10 @@ object AlpacaQuotesServices {
       _ <- ScreenerServices.latestSessionScreenerTask
       descriptions <- MongoDataRepo.getAllStockDescriptions.map(_.map(stock => stock.symbol -> stock).toMap)
       _ <- ZIO.foreachParDiscard(assets) { asset =>
-        val description = StockDescription(asset.symbol, asset.name, epoch, primaryExchange = asset.exchange)
-        MongoDataRepo.saveStockDescription(description).unless(descriptions.get(asset.symbol).contains(description))
+        val description = assetDescription(asset, descriptions.get(asset.symbol))
+        val save = if (descriptions.contains(asset.symbol)) MongoDataRepo.updateStockListingMetadata(description)
+          else MongoDataRepo.saveStockDescription(description).unit
+        save.unless(descriptions.get(asset.symbol).contains(description))
       }.withParallelism(8)
     } yield ()
 

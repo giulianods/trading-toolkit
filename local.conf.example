@@ -1,10 +1,11 @@
 # Copy to local.conf and set your local secrets.
-# Also required for us-alpaca common-stock classification.
+# Required when prices or listings selects massive.
 massive.api.key = ""
-# Required only for us-alpaca. Paper API keys are used by default.
+# Required when prices selects alpaca. Paper API keys are used by default.
 alpaca.api.key = ""
 alpaca.api.secret = ""
 # alpaca.paper = false
+# Required when listings or financials selects finnhub.
 finnhub.api.key = ""
 # Required for ca-eodhd quotes. Optional for US and Romanian company income statements.
 eodhd.api.key = ""
@@ -15,7 +16,7 @@ jquants.api.key = ""
 mongodb.url = "mongodb://127.0.0.1:27017"
 
 ttk {
-  markets = ["us-massive", "ro-bvb", "de-xetra", "jp-jquants"]
+  markets = ["us-massive", "us-alpaca", "ro-bvb", "de-xetra", "jp-jquants"]
   # Optional ordered screen list. The UI opens the first enabled screen.
   # screens = ["SEPA", "7_PCT_UP"]
 
@@ -28,8 +29,24 @@ ttk {
 
   # Home-server deploy via sbt "service/deploy". localhost uses local Docker.
   deploy {
-    host = "192.168.0.153"
+    host = "argo.local"
     # user = "gds"
     # dir = "ttk"
   }
+}
+
+# Market IDs identify stored price history and watchlists; sources are independent.
+ttk.profiles {
+  us-massive { prices = massive, financials = finnhub, metadata = massive, listings = massive }
+  us-alpaca {
+    prices = alpaca
+    financials = finnhub
+    metadata = massive
+    listings = finnhub
+    aliases = [us-finnhub]
+  }
+  ro-bvb { prices = bvb, financials = eodhd, metadata = bvb, listings = bvb }
+  de-xetra { prices = xetra, financials = none, metadata = xetra, listings = xetra }
+  jp-jquants { prices = jquants, financials = none, metadata = jquants, listings = jquants }
+  ca-eodhd { prices = eodhd, financials = none, metadata = eodhd, listings = eodhd }
 }

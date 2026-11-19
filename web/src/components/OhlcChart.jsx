@@ -96,7 +96,7 @@ function addVcpAnnotations(chart, candles, quotes, stats) {
 }
 
 /**
- * OHLC bar chart for one ticker. Uses ~150 days of data.
+ * Candlestick chart with daily volume for one ticker. Uses ~150 days of data.
  * Efficient for many instances (lightweight-charts is canvas-based).
  */
 function OhlcChart({ ticker, quotes, vcpStats, height = 300, focused }) {
@@ -118,7 +118,7 @@ function OhlcChart({ ticker, quotes, vcpStats, height = 300, focused }) {
       },
       rightPriceScale: {
         borderColor: '#374151',
-        scaleMargins: { top: 0.1, bottom: 0.15 },
+        scaleMargins: { top: 0.1, bottom: 0.3 },
       },
       timeScale: {
         borderColor: '#374151',
@@ -161,6 +161,21 @@ function OhlcChart({ ticker, quotes, vcpStats, height = 300, focused }) {
       close: q.c,
     }));
     candleSeries.setData(data);
+    const volumeSeries = chart.addHistogramSeries({
+      priceScaleId: 'volume',
+      priceFormat: { type: 'volume' },
+      priceLineVisible: false,
+      lastValueVisible: false,
+      base: 0,
+    });
+    volumeSeries.priceScale().applyOptions({
+      scaleMargins: { top: 0.78, bottom: 0 },
+    });
+    volumeSeries.setData(quotes.map((q) => (
+      Number.isFinite(q.v) && q.v >= 0
+        ? { time: q.day, value: q.v, color: q.c >= q.o ? '#22c55e80' : '#ef444480' }
+        : { time: q.day }
+    )));
     if (vcpStats) addVcpAnnotations(chart, candleSeries, quotes, vcpStats);
     chart.timeScale().fitContent();
 

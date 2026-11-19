@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { FixedSizeGrid as Grid } from 'react-window';
 import OhlcChart from './OhlcChart';
 import FinancialCharts from './FinancialCharts';
+import CompanyDescription from './CompanyDescription';
 import { useSelection } from '../context/SelectionContext';
 import { fetchDescriptions, fetchQuotes } from '../api';
 
@@ -10,9 +11,9 @@ const CELL_GAP = 12;
 const CHART_HEIGHT = 300;
 const TICKER_HEADER_HEIGHT = 44;
 const OVERSCAN_ROWS = 2;
-const FINANCIAL_CARD_WIDTH = 300;
+const FINANCIAL_CARD_WIDTH = 500;
 
-function ChartCell({ ticker, label, quotes, vcpStats, index, focusIndex, setFocusedIndex, pendingCheckRef, financialMarket, stacked }) {
+function ChartCell({ market, ticker, label, quotes, vcpStats, index, focusIndex, setFocusedIndex, pendingCheckRef, financialMarket, stacked }) {
   const { selectedTickers, onSelectionChange } = useSelection();
   const focused = index === focusIndex;
   const checked = selectedTickers.has(ticker);
@@ -58,6 +59,7 @@ function ChartCell({ ticker, label, quotes, vcpStats, index, focusIndex, setFocu
             {sector && <span className="chart-ticker-sector">{sector}</span>}
           </span>
         )}
+        <CompanyDescription key={`${market.id}:${ticker}`} market={market} ticker={ticker} />
       </div>
       <div className={financialMarket && !stacked ? 'chart-content chart-content--side-by-side' : 'chart-content'}>
         <OhlcChart ticker={ticker} quotes={quotes} vcpStats={vcpStats} height={CHART_HEIGHT} focused={focused} />
@@ -79,7 +81,7 @@ function ChartGridInner({ market, tickers, vcpStatsByTicker }) {
 
   const tickerKey = tickers.join(',');
   const count = tickers.length;
-  const financialMarket = size.width > 720 && (market.country === 'us' || market.country === 'ro') ? market : null;
+  const financialMarket = (market.hasFinancials ?? (market.country === 'us' || market.country === 'ro')) ? market : null;
   const viewportColumns = size.width < 600 ? 1 : size.width < 960 ? 2 : COLUMNS;
   const cols = Math.min(viewportColumns, Math.max(1, count));
   const rows = Math.ceil(count / cols) || 1;
@@ -216,6 +218,7 @@ function ChartGridInner({ market, tickers, vcpStatsByTicker }) {
       return (
         <div key={ticker} style={cellStyle}>
           <ChartCell
+            market={market}
             ticker={ticker}
             label={labelsByTicker[ticker]}
             quotes={quotes}
@@ -230,7 +233,7 @@ function ChartGridInner({ market, tickers, vcpStatsByTicker }) {
         </div>
       );
     },
-    [tickers, quotesByTicker, labelsByTicker, vcpStatsByTicker, focusIndex, cols, financialMarket, stacked]
+    [market, tickers, quotesByTicker, labelsByTicker, vcpStatsByTicker, focusIndex, cols, financialMarket, stacked]
   );
 
   if (loading) {

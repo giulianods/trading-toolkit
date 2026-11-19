@@ -1,0 +1,91 @@
+{
+  "data": [
+    {
+      "startDate": "2025-09-28 00:00:00",
+      "endDate": "2026-09-26 00:00:00",
+      "filedDate": "2026-11-03 00:00:00",
+      "year": 2026,
+      "quarter": 0,
+      "report": {
+        "ic": [
+          {
+            "concept": "us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax",
+            "unit": "usd",
+            "label": "Net sales",
+            "value": 478834000000.0
+          },
+          {
+            "concept": "us-gaap_NetIncomeLoss",
+            "unit": "usd",
+            "label": "Net income",
+            "value": 132175000000.0
+          },
+          {
+            "concept": "us-gaap_EarningsPerShareBasic",
+            "unit": "usd/share",
+            "label": "Basic (in dollars per share)",
+            "value": 9.01
+          }
+        ]
+      }
+    },
+    {
+      "startDate": "2024-09-29 00:00:00",
+      "endDate": "2025-09-27 00:00:00",
+      "filedDate": "2025-10-31 00:00:00",
+      "year": 2025,
+      "quarter": 0,
+      "report": {
+        "ic": [
+          {
+            "concept": "us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax",
+            "unit": "usd",
+            "label": "Net sales",
+            "value": 416161000000.0
+          },
+          {
+            "concept": "us-gaap_NetIncomeLoss",
+            "unit": "usd",
+            "label": "Net income",
+            "value": 112010000000.0
+          },
+          {
+            "concept": "us-gaap_EarningsPerShareBasic",
+            "unit": "usd/share",
+            "label": "Basic (in dollars per share)",
+            "value": 7.49
+          }
+        ]
+      }
+    },
+    {
+      "startDate": "2023-10-01 00:00:00",
+      "endDate": "2024-09-28 00:00:00",
+      "filedDate": "2024-11-01 00:00:00",
+      "year": 2024,
+      "quarter": 0,
+      "report": {
+        "ic": [
+          {
+            "concept": "us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax",
+            "unit": "usd",
+            "label": "Net sales",
+            "value": 391035000000.0
+          },
+          {
+            "concept": "us-gaap_NetIncomeLoss",
+            "unit": "usd",
+            "label": "Net income",
+            "value": 93736000000.0
+          },
+          {
+            "concept": "us-gaap_EarningsPerShareBasic",
+            "unit": "usd/share",
+            "label": "Basic (in dollars per share)",
+            "value": 6.11
+          }
+        ]
+      }
+    }
+  ]
+}

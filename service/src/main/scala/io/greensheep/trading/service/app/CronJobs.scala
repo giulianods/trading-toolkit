@@ -12,7 +12,7 @@ import io.greensheep.providers.massive.MassiveAsyncApi
 import io.greensheep.providers.xetra.XetraClient
 import io.greensheep.trading.core.types.MarketDefinition
 import io.greensheep.trading.dataservice.MongoDataRepo
-import io.greensheep.trading.service.services.{AlpacaQuotesServices, BvbQuotesServices, EodhdQuotesServices, FiancialsServices, JquantsQuotesServices, QuotesServices, ScreenerServices, XetraQuotesServices}
+import io.greensheep.trading.service.services.{AlpacaQuotesServices, BvbQuotesServices, EodhdQuotesServices, FiancialsServices, FinnhubServices, JquantsQuotesServices, QuotesServices, ScreenerServices, XetraQuotesServices}
 import zio.*
 import zio.http.Client
 
@@ -47,6 +47,14 @@ object CronJobs {
           .onInterrupt(AppHealth.finishFailure(name, "interrupted"))
     }
 
+  def required[R](name: String, job: ZIO[R, Throwable, Unit]): ZIO[R & AppHealth, Throwable, Unit] =
+    AppHealth.tryStart(name).flatMap {
+      case false => ZIO.fail(new IllegalStateException(s"Job $name is already running"))
+      case true => job.tap(_ => AppHealth.finishSuccess(name))
+        .tapError(error => AppHealth.finishFailure(name, error.getMessage))
+        .onInterrupt(AppHealth.finishFailure(name, "interrupted"))
+    }
+
   private def supervised[R](
       name: String,
       cron: String,
@@ -58,6 +66,14 @@ object CronJobs {
       .forever
       .forkDaemon
       .unit
+
+  def startPriceProfile[R](market: MarketDefinition, refresh: ZIO[R, Throwable, Unit]): URIO[R & AppHealth, Unit] =
+    AppHealth.markCronStarted *> supervised(market.id.job("quotes"), market.cron.quotes, refresh, ZoneId.of(market.timeZone))
+
+  def startFinancialProfile[R](market: MarketDefinition, refresh: ZIO[R, Throwable, Unit]): URIO[R & AppHealth, Unit] =
+    if (market.sources.financials != "finnhub") ZIO.unit
+    else AppHealth.markCronStarted *> supervised(market.id.job("financials"),
+      market.cron.financials.getOrElse(market.cron.quotes), refresh, ZoneId.of(market.timeZone))
 
   def start(
       market: MarketDefinition
@@ -104,6 +120,14 @@ object CronJobs {
         supervised(market.id.job("financials"), expr, FiancialsServices.updateFinancials(), zone)
       }
     } yield ()
+  }
+
+  def startFinnhub(market: MarketDefinition): URIO[MongoDatabase & FinnhubClient & Client & Scope & AppHealth, Unit] = {
+    val zone = ZoneId.of(market.timeZone)
+    // One guard prevents scheduled refreshes from overlapping the initial backfill.
+    AppHealth.markCronStarted *>
+      supervised(market.id.job("initialization"), market.cron.quotes,
+        FinnhubServices.refreshQuotes(market) *> guarded(market.id.job("financials"), FinnhubServices.refreshFinancials), zone)
   }
 
   def startBvb(

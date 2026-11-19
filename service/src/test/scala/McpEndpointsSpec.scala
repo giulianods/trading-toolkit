@@ -32,6 +32,19 @@ object McpEndpointsSpec extends ZIOSpecDefault {
   private def body(result: Json): Json = result.hcursor.downField("result").downField("structuredContent").downField("body").focus.get
 
   override def spec = suite("MCP REST parity and Streamable HTTP")(
+    test("write tools send validated JSON bodies with POST and are annotated as mutations") {
+      val op = McpEndpoints.operations.find(_.name == "post_markets_country_provider_portfolio_trades").get
+      val args = json("""{"country":"us","provider":"massive","body":{"id":"fill-1","ticker":"ABC","side":"buy","quantity":2,"price":10,"executedAt":"2026-11-01T12:00:00Z"}}""")
+      val missing = json("""{"country":"us","provider":"massive","body":{"ticker":"ABC"}}""")
+      val wrong = json("""{"country":"us","provider":"massive","body":"not an object"}""")
+      for {
+        request <- ZIO.fromEither(op.request(args))
+        text <- request.body.asString
+      } yield assertTrue(request.method == Method.POST, request.headers.get("Content-Type").contains("application/json"),
+        json(text) == args.hcursor.downField("body").focus.get,
+        op.tool.hcursor.downField("annotations").get[Boolean]("readOnlyHint") == Right(false),
+        op.request(missing).isLeft, op.request(wrong).isLeft)
+    },
     test("every implemented REST route has exactly one generated tool") {
       val root = Paths.get(java.lang.System.getProperty("ttk.repo.root"))
       val source = Files.readString(root.resolve("service/src/main/scala/io/greensheep/trading/service/services/ApiEndpoints.scala"))
@@ -76,7 +89,7 @@ paths:
             type: integer
 """
       val added = McpEndpoints.operationsFromYaml(yaml)
-      val unsupported = scala.util.Try(McpEndpoints.operationsFromYaml(yaml.replace("    get:", "    post:")))
+      val unsupported = scala.util.Try(McpEndpoints.operationsFromYaml(yaml.replace("    get:", "    patch:")))
       assertTrue(added.map(_.name) == Vector("get_new_endpoint"), added.head.parameters.head.name == "limit", unsupported.isFailure)
     },
     test("serves MCP JSON responses over an HTTP connection") {
@@ -106,7 +119,10 @@ paths:
     test("all tools dispatch their documented REST operation with query and header arguments") {
       ZIO.foreach(McpEndpoints.operations) { op =>
         val args = Json.obj(op.parameters.map { p => p.name -> (if (p.name == "Accept") Json.fromString("text/csv")
-          else if (p.name == "days") Json.fromInt(5) else Json.fromString(p.name + "+& value")) }*)
+          else if (p.name == "days" || p.name == "limit" || p.name == "offset") Json.fromInt(5)
+          else if (p.location == "body" && op.path.endsWith("trades")) json("""{"id":"fill-1","ticker":"AAPL","side":"buy","quantity":2,"price":10,"executedAt":"2026-11-01T12:00:00Z"}""")
+          else if (p.location == "body") json("""{"title":"Research","markdown":"# Market","asOf":"2026-11-01"}""")
+          else Json.fromString(p.name + "+& value")) }*)
         for {
           expected <- ZIO.fromEither(op.request(args))
           result <- send(call(op.name, args))

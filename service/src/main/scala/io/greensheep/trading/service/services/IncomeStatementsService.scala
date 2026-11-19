@@ -1,9 +1,9 @@
 package io.greensheep.trading.service.services
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
-import io.greensheep.trading.core.types.{IncomePeriod, IncomeStatements}
+import io.greensheep.trading.core.types.{IncomePeriod, IncomeStatements, MarketDefinition, MarketId}
 import io.greensheep.trading.core.utils.{HttpStatusException, LocalConfig, TransientRetry}
-import io.greensheep.trading.dataservice.MongoDataRepo
+import io.greensheep.trading.dataservice.{MarketStore, MongoDataRepo}
 import zio.*
 import zio.http.{Client, QueryParams, Request, Status, URL}
 import zio.json.*
@@ -17,7 +17,30 @@ object IncomeStatementsService {
   private val exchanges = Map("us" -> "US", "ro" -> "RO")
   private val tickerPattern = "[A-Za-z0-9][A-Za-z0-9.-]{0,31}".r
 
+  def load(store: MarketStore, market: MarketDefinition, ticker: String): ZIO[MongoDatabase & Client, Throwable, IncomeStatements] =
+    if (!tickerPattern.matches(ticker)) ZIO.fail(new IllegalArgumentException("Invalid ticker"))
+    else if (market.sources.financials == "none") ZIO.succeed(IncomeStatements.empty)
+    else for {
+      listed <- MongoDataRepo.getStockUniverse.map(_.symbols.contains(ticker))
+        .catchSome { case _: NoSuchElementException => ZIO.succeed(false) }
+      legacy <- if (market.sources.financials == "eodhd" && Set(MarketId.UsMassive, MarketId.UsAlpaca, MarketId.RoBvb).contains(market.id))
+        MongoDataRepo.getCachedIncomeStatements(ticker) else ZIO.none
+      statements <- if (!listed) ZIO.succeed(IncomeStatements.empty) else (market.sources.financials match {
+        case "finnhub" => MongoDataRepo.getCachedIncomeStatements(ticker).map(record =>
+          FinnhubIncomeStatements.normalizeCurrencies(record.map(_.statements).getOrElse(IncomeStatements.empty)))
+        case "eodhd" => for {
+          cached <- MongoDataRepo.getCachedIncomeStatements(ticker)
+          _ <- ZIO.foreachDiscard(legacy.filter(_ => cached.isEmpty))(MongoDataRepo.cacheIncomeStatements)
+          value <- loadEodhd(market.id.country, ticker, known = true)
+        } yield value
+        case _ => ZIO.succeed(IncomeStatements.empty)
+      }).provideSomeLayer[Client](ZLayer.succeed(store.financialsDatabase(market)))
+    } yield statements
+
   def load(country: String, ticker: String): ZIO[MongoDatabase & Client, Throwable, IncomeStatements] =
+    loadEodhd(country, ticker, known = false)
+
+  private def loadEodhd(country: String, ticker: String, known: Boolean): ZIO[MongoDatabase & Client, Throwable, IncomeStatements] =
     if (!tickerPattern.matches(ticker)) ZIO.fail(new IllegalArgumentException("Invalid ticker"))
     else {
       for {
@@ -29,7 +52,7 @@ object IncomeStatementsService {
             val stored = cached.map(_.statements).getOrElse(IncomeStatements.empty)
             (exchanges.get(country), LocalConfig.get("eodhd.api.key")) match {
               case (Some(exchange), Some(key)) =>
-                MongoDataRepo.getStockUniverse.map(_.symbols.contains(ticker)).catchSome {
+                (if (known) ZIO.succeed(true) else MongoDataRepo.getStockUniverse.map(_.symbols.contains(ticker))).catchSome {
                   case _: NoSuchElementException => ZIO.succeed(false)
                 }.flatMap { listed =>
                   if (!listed) ZIO.succeed(stored)

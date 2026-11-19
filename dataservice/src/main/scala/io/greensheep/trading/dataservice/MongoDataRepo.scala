@@ -480,6 +480,20 @@ object MongoDataRepo {
     } yield stock
   }
 
+  /** Field updates prevent concurrent quote refreshes and narrative enrichment from erasing each other. */
+  def updateStockListingMetadata(stock: StockDescription): ZIO[MongoDatabase, Throwable, Unit] =
+    ZIO.serviceWithZIO[MongoDatabase] { db =>
+      db.getCollection[StockDescription]("stocks-description").updateOne(filters.eq("_id", stock.symbol),
+        updates.combine(updates.set("companyName", stock.companyName), updates.set("primaryExchange", stock.primaryExchange))).unit
+    }
+
+  def updateStockNarrative(stock: StockDescription): ZIO[MongoDatabase, Throwable, Unit] =
+    ZIO.serviceWithZIO[MongoDatabase] { db =>
+      db.getCollection[StockDescription]("stocks-description").updateOne(filters.eq("_id", stock.symbol),
+        updates.combine(updates.set("description", stock.description), updates.set("sicCode", stock.sicCode),
+          updates.set("sicDescription", stock.sicDescription))).unit
+    }
+
   def getStockDescriptions(symbols: Seq[String]): ZIO[MongoDatabase, Throwable, Seq[StockDescription]] =
     if (symbols.isEmpty) ZIO.succeed(Seq.empty)
     else

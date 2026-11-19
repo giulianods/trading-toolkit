@@ -1,12 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import ChartGrid from './ChartGrid';
-import { fetchDescriptions, fetchIncomeStatements, fetchQuotes } from '../api';
+import { fetchDescription, fetchDescriptions, fetchIncomeStatements, fetchQuotes } from '../api';
 import { SelectionContext } from '../context/SelectionContext';
 
 jest.mock('../api', () => ({
   __esModule: true,
   fetchQuotes: jest.fn(async () => []),
   fetchIncomeStatements: jest.fn(),
+  fetchDescription: jest.fn(),
   fetchDescriptions: jest.fn(async () => ({
     AAPL: { companyName: 'Apple Inc.', sector: 'Electronic Computers' },
     XYZ: { companyName: 'No Sector Co', sector: '   ' },
@@ -21,6 +22,8 @@ const labels = {
 };
 
 beforeEach(() => {
+  fetchDescription.mockReset();
+  fetchDescription.mockResolvedValue({ description: 'Apple designs and sells consumer electronics.' });
   fetchQuotes.mockResolvedValue([]);
   fetchDescriptions.mockResolvedValue(labels);
   fetchIncomeStatements.mockResolvedValue({ annual: [], quarterly: [] });
@@ -58,6 +61,42 @@ test('ticker text is separate from the watchlist checkbox', async () => {
   expect(symbol.closest('label')).toBeNull();
   expect(onSelectionChange).not.toHaveBeenCalled();
 
+  expect(fetchDescription).not.toHaveBeenCalled();
+  const descriptionButton = screen.getByRole('button', { name: 'Company description for AAPL' });
+  fireEvent.mouseEnter(descriptionButton);
+  expect(await screen.findByText('Apple designs and sells consumer electronics.')).toBeInTheDocument();
+  expect(fetchDescription).toHaveBeenCalledWith(market, 'AAPL', expect.any(AbortSignal));
+  expect(screen.getByRole('tooltip').parentElement).toBe(document.body);
+  fireEvent.click(descriptionButton);
+  expect(onSelectionChange).not.toHaveBeenCalled();
+  fireEvent.keyDown(descriptionButton, { key: 'Escape' });
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  fireEvent.focus(descriptionButton);
+  expect(screen.getByRole('tooltip')).toHaveTextContent('Apple designs and sells consumer electronics.');
+  expect(fetchDescription).toHaveBeenCalledTimes(1);
+
   fireEvent.click(screen.getByRole('checkbox', { name: /Include AAPL/ }));
   expect(onSelectionChange).toHaveBeenCalledWith('AAPL', true);
+});
+
+test('description icon remains available when company information is missing', async () => {
+  fetchDescriptions.mockResolvedValue({});
+  fetchDescription.mockResolvedValue({ description: '   ' });
+  render(<ChartGrid market={market} tickers={['XYZ']} />);
+
+  const button = await screen.findByRole('button', { name: 'Company description for XYZ' });
+  fireEvent.focus(button);
+  expect(await screen.findByText('Company description is not available.')).toBeInTheDocument();
+});
+
+test('keeps both financial periods visible on narrow screens', async () => {
+  const originalWidth = window.innerWidth;
+  window.innerWidth = 480;
+  try {
+    render(<ChartGrid market={market} tickers={['AAPL']} />);
+    expect(await screen.findByRole('figure', { name: 'Annual financials' })).toBeInTheDocument();
+    expect(screen.getByRole('figure', { name: 'Quarterly financials' })).toBeInTheDocument();
+  } finally {
+    window.innerWidth = originalWidth;
+  }
 });

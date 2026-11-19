@@ -3,19 +3,16 @@ const API_BASE = process.env.REACT_APP_API_URL || '';
 
 const DEFAULT_CHART_DAYS = 150;
 
-export const MARKETS = [
-  { id: 'us-massive', country: 'us', provider: 'massive', label: 'US Massive', title: 'US · Massive' },
-  { id: 'us-alpaca', country: 'us', provider: 'alpaca', label: 'US Alpaca', title: 'US · Alpaca' },
-  { id: 'ro-bvb', country: 'ro', provider: 'bvb', label: 'RO', title: 'Romania · BVB' },
-  { id: 'de-xetra', country: 'de', provider: 'xetra', label: 'DE', title: 'Germany · Xetra' },
-  { id: 'jp-jquants', country: 'jp', provider: 'jquants', label: 'JP', title: 'Japan · J-Quants' },
-  { id: 'ca-eodhd', country: 'ca', provider: 'eodhd', label: 'CA', title: 'Canada · EODHD' },
-];
-
 export const DEFAULT_MARKET_ID = 'us-massive';
 
-export function marketById(id) {
-  return MARKETS.find((m) => m.id === id) ?? MARKETS[0];
+export function marketById(id, profiles) {
+  return profiles.find((m) => m.id === id || m.aliases?.includes(id)) ?? profiles[0] ?? null;
+}
+
+export async function fetchMarkets() {
+  const res = await fetch(apiPath('/markets'));
+  if (!res.ok) throw new Error(`Market profiles: ${res.status}`);
+  return res.json();
 }
 
 export function marketRoot(market) {
@@ -77,6 +74,12 @@ export async function fetchQuotes(market, ticker) {
 
 const DESCRIPTION_CHUNK = 200;
 
+export async function fetchDescription(market, ticker, signal) {
+  const res = await fetch(apiPath(`${marketRoot(market)}/description/${encodeURIComponent(ticker)}`), { signal });
+  if (!res.ok) throw new Error(`Description ${ticker}: ${res.status}`);
+  return res.json();
+}
+
 /**
  * Company name and sector for chart headers.
  * Sector is the SIC description when the provider has one, otherwise "".
@@ -104,3 +107,12 @@ export async function fetchDescriptions(market, tickers) {
 }
 
 export { DEFAULT_CHART_DAYS };
+
+async function fetchSection(market, section, signal) {
+  const res = await fetch(apiPath(`${marketRoot(market)}/${section}`), { signal });
+  if (!res.ok) throw new Error(await res.text().catch(() => '') || `${section}: ${res.status}`);
+  return res.json();
+}
+
+export const fetchReports = (market, signal, offset = 0) => fetchSection(market, `reports?limit=50&offset=${offset}`, signal);
+export const fetchPortfolio = (market, signal) => fetchSection(market, 'portfolio', signal);

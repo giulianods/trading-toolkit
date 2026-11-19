@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { DEFAULT_MARKET_ID, MARKETS, fetchMarketDataStatus, fetchScreens, fetchWatchlist, marketById } from './api';
+import { DEFAULT_MARKET_ID, fetchMarkets, fetchMarketDataStatus, fetchScreens, fetchWatchlist, marketById } from './api';
 import ChartGrid from './components/ChartGrid';
+import SectionMenu from './components/SectionMenu';
+import Reports from './components/Reports';
+import Portfolio from './components/Portfolio';
 import { SelectionContext } from './context/SelectionContext';
 import './App.css';
 
@@ -9,7 +12,7 @@ const MARKET_STORAGE_KEY = 'ttk.selectedMarket';
 function readStoredMarketId() {
   try {
     const stored = window.localStorage.getItem(MARKET_STORAGE_KEY);
-    if (stored && MARKETS.some((m) => m.id === stored)) return stored;
+    if (stored) return stored;
   } catch (_) {
     /* ignore */
   }
@@ -29,8 +32,13 @@ function formatDateForFilename(dayStr) {
 }
 
 function App() {
+  const [section, setSection] = useState('Screens');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
   const [marketId, setMarketId] = useState(readStoredMarketId);
-  const market = useMemo(() => marketById(marketId), [marketId]);
+  const [profiles, setProfiles] = useState([]);
+  const [profileError, setProfileError] = useState(null);
+  const market = useMemo(() => marketById(marketId, profiles), [marketId, profiles]);
   const [screens, setScreens] = useState([]);
   const [screenId, setScreenId] = useState('');
   const [screenError, setScreenError] = useState(null);
@@ -75,7 +83,19 @@ function App() {
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-  }, [selectedTickers, watchlist, selectedScreen, market.label]);
+  }, [selectedTickers, watchlist, selectedScreen, market?.label]);
+
+  useEffect(() => {
+    let active = true;
+    fetchMarkets().then((data) => {
+      if (!data.length) throw new Error('No market profiles are configured.');
+      if (active) {
+        setProfiles(data);
+        setMarketId((id) => marketById(id, data).id);
+      }
+    }).catch((e) => { if (active) setProfileError(e.message); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -89,7 +109,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!selectedScreen) return;
+    if (!selectedScreen || !market) return;
     let active = true;
     setLoading(true);
     setError(null);
@@ -102,6 +122,7 @@ function App() {
   }, [market, selectedScreen]);
 
   useEffect(() => {
+    if (!market) return undefined;
     let active = true;
     setLatestQuoteDate(undefined);
     fetchMarketDataStatus(market)
@@ -117,16 +138,18 @@ function App() {
   }, [selectedScreen?.id, watchlist]);
   const hasSelection = selectedTickers.size > 0;
 
+  if (!market) return <div className="chart-grid-empty">{profileError || 'Loading market profiles…'}</div>;
+
   return (
     <div className="app">
       <header className="app-header">
-        <div className="app-header-logo">
+        <button type="button" className="app-header-logo" aria-label="Open navigation menu" aria-expanded={menuOpen} aria-controls="section-menu" onClick={() => setMenuOpen(true)}>
           <img src="/green-sheep.png" alt="Greensheep" className="app-logo" />
-        </div>
+        </button>
         <div className="app-header-center">
           <div className="app-header-controls">
             <div className="market-switcher" role="tablist" aria-label="Market">
-              {MARKETS.map((m) => (
+              {profiles.map((m) => (
                 <button
                   key={m.id}
                   type="button"
@@ -143,10 +166,10 @@ function App() {
             <label className="screen-picker mobile-market-picker">
               Market
               <select value={market.id} onChange={(event) => handleMarketChange(event.target.value)}>
-                {MARKETS.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
+                {profiles.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
               </select>
             </label>
-            <label className="screen-picker">
+            {section === 'Screens' ? <label className="screen-picker">
               Screen
               <select
                 value={selectedScreen?.id ?? ''}
@@ -159,34 +182,36 @@ function App() {
                 {!selectedScreen && <option value="">{screenError ? 'Unavailable' : 'Loading…'}</option>}
                 {screens.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
               </select>
-            </label>
+            </label> : <strong className="current-section">{section}</strong>}
           </div>
-          {(screenError || error) && (
+          {section === 'Screens' && (screenError || error) && (
             <p className="app-error">{screenError || error}</p>
           )}
-          <p className="watchlist-info">
-            Latest market data: {latestQuoteDate ?? (latestQuoteDate === undefined ? 'Loading…' : 'Unavailable')}
-          </p>
-          {watchlist && !error && (
-            <p className="watchlist-info watchlist-meta">
-              <span className="market-title">{market.title}</span>
-              <span>
-                Watchlist: <strong>{selectedScreen.label}</strong>
-                {watchlist.day && ` (${watchlist.day})`}
-              </span>
-              <span>{tickers.length} tickers</span>
-              <span className="watchlist-generated">
-                Generated: {watchlist.generatedAt ? (
-                  <time dateTime={watchlist.generatedAt}>
-                    {new Date(watchlist.generatedAt).toLocaleString(undefined, { timeZoneName: 'short' })}
-                  </time>
-                ) : 'Unavailable'}
-              </span>
-            </p>
-          )}
+          {section === 'Screens' && <div className="watchlist-info watchlist-meta">
+            <span>
+              Latest market data: {latestQuoteDate ?? (latestQuoteDate === undefined ? 'Loading…' : 'Unavailable')}
+            </span>
+            {watchlist && !error && (
+              <>
+                <span className="market-title">{market.title}</span>
+                <span>
+                  Watchlist: <strong>{selectedScreen.label}</strong>
+                  {watchlist.day && ` (${watchlist.day})`}
+                </span>
+                <span>{tickers.length} tickers</span>
+                <span className="watchlist-generated">
+                  Generated: {watchlist.generatedAt ? (
+                    <time dateTime={watchlist.generatedAt}>
+                      {new Date(watchlist.generatedAt).toLocaleString(undefined, { timeZoneName: 'short' })}
+                    </time>
+                  ) : 'Unavailable'}
+                </span>
+              </>
+            )}
+          </div>}
         </div>
         <div className="app-header-toolbox">
-          {hasSelection && (
+          {section === 'Screens' && hasSelection && (
             <button
               type="button"
               className="toolbox-download-btn"
@@ -197,8 +222,8 @@ function App() {
           )}
         </div>
       </header>
-      <main className="app-main">
-        {screenError ? (
+      <main className={`app-main${section !== 'Screens' ? ' app-main-section' : ''}`}>
+        {section === 'Reports' ? <Reports key={market.id} market={market} /> : section === 'Portfolio' ? <Portfolio key={market.id} market={market} /> : screenError ? (
           <div className="chart-grid-empty">Screen options are unavailable.</div>
         ) : error ? (
           <div className="chart-grid-empty">
@@ -219,6 +244,7 @@ function App() {
           </SelectionContext.Provider>
         )}
       </main>
+      {menuOpen && <SectionMenu section={section} onSelect={setSection} onClose={closeMenu} />}
     </div>
   );
 }

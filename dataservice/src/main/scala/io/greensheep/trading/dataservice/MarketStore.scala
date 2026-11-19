@@ -15,6 +15,14 @@ final class MarketStore(client: MongoClient, val enabled: Seq[MarketDefinition])
   def database(definition: MarketDefinition): MongoDatabase =
     database(definition.id)
 
+  def financialsDatabase(definition: MarketDefinition): MongoDatabase =
+    database(MarketId(definition.id.country, definition.sources.financials))
+
+  def metadataDatabase(definition: MarketDefinition): MongoDatabase =
+    if (definition.sources.metadata == definition.sources.prices) database(definition)
+    else enabled.find(profile => profile.id.country == definition.id.country && profile.sources.prices == definition.sources.metadata)
+      .map(database).getOrElse(database(MarketId(definition.id.country, definition.sources.metadata)))
+
   def databaseZIO(country: String, provider: String): IO[Throwable, MongoDatabase] =
     ZIO.fromEither(resolve(country, provider)).map(database)
 }
@@ -30,7 +38,7 @@ object MarketStore {
     if (id.country.isEmpty || id.provider.isEmpty)
       Left(new IllegalArgumentException("country and provider are required"))
     else
-      enabled.find(_.id == id).toRight(new NoSuchElementException(s"Unknown market: ${id.id}"))
+      enabled.find(profile => profile.id == id || profile.aliases.contains(id)).toRight(new NoSuchElementException(s"Unknown market: ${id.id}"))
   }
 
   def live(client: MongoClient): Either[String, MarketStore] =

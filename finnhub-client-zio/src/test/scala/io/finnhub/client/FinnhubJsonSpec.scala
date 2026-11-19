@@ -7,6 +7,12 @@ import zio.test.*
 object FinnhubJsonSpec extends ZIOSpecDefault {
 
   override def spec = suite("Finnhub JSON models")(
+    test("builds the reported-financials query with its symbol, frequency and token") {
+      for {
+        client <- FinnhubClient.make("dummy")
+        url <- client.endpoint("stock/financials-reported", "symbol" -> "AAP", "freq" -> "annual")
+      } yield assertTrue(url.encode == "https://finnhub.io/api/v1/stock/financials-reported?symbol=AAP&freq=annual&token=dummy")
+    },
     test("decodes stock symbols when optional identifiers are absent") {
       val json =
         """{"description":"APPLE INC","displaySymbol":"AAPL","mic":"XNAS","symbol":"AAPL","type":"Common Stock"}"""

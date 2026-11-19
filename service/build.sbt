@@ -78,7 +78,7 @@ val deployArgo = taskKey[File]("Build and deploy the toolkit container on argo u
 deployArgo := {
   val jar = packageService.value
   val log = streams.value.log
-  val target = "gds@192.168.0.153"
+  val target = "gds@argo.local"
   val ssh = Seq("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", target)
   val release = java.util.UUID.randomUUID().toString
   val incoming = s"app/ttk.jar.$release.incoming"
@@ -133,7 +133,7 @@ deployArgo := {
   val input = new java.io.ByteArrayInputStream(switchRelease.getBytes(java.nio.charset.StandardCharsets.UTF_8))
   val code = (Process(ssh :+ "sh -s") #< input).!
   if (code != 0) sys.error(s"Deployment on argo failed (exit $code)")
-  log.info("Toolkit running at http://192.168.0.153:7777")
+  log.info("Toolkit running at http://argo.local:7777")
   log.info(s"Previous JAR kept at ~/ttk/$previous on argo")
   jar
 }
@@ -167,7 +167,7 @@ deploy := {
       .filter(_.nonEmpty)
       .getOrElse(default)
 
-  val host = setting("ttk.deploy.host", "192.168.0.156")
+  val host = setting("ttk.deploy.host", "argo.local")
   val user = setting("ttk.deploy.user", sys.props.getOrElse("user.name", "giuli"))
   val remoteDir = setting("ttk.deploy.dir", "ttk")
   val localHosts = Set("localhost", "127.0.0.1", "::1")

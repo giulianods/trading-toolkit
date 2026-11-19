@@ -4,6 +4,8 @@ info:
   version: 1.0.0
   description: |
     Canonical data routes are `/markets/{country}/{provider}/...`.
+    The provider path segment is a configured market-profile key; GET /markets
+    lists the actual price, listings, financials, and metadata sources.
     Canada EODHD uses `/markets/ca/eodhd/...` with exchange-qualified tickers
     such as `RY.TO` (TSX) and `AAG.V` (TSX Venture).
     Unprefixed `/quotes`, `/financials`, `/watchlists`, `/description`, `/descriptions`, and `/breadth`
@@ -20,6 +22,114 @@ tags:
   - name: Breadth
   - name: MCP
 paths:
+  /markets/{country}/{provider}/reports:
+    parameters:
+      - $ref: '#/components/parameters/CountryParam'
+      - $ref: '#/components/parameters/ProviderParam'
+    get:
+      tags: [Reports]
+      summary: Read market reports newest publication first
+      parameters:
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+        - name: offset
+          in: query
+          description: Number of reports to skip when browsing older publications
+          schema: {type: integer, minimum: 0, maximum: 1000000, default: 0}
+      responses:
+        '200':
+          description: Latest reports including Markdown content
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/MarketReport'}
+    post:
+      tags: [Reports]
+      summary: Publish an agent-written Markdown market report
+      description: Reports are stored in the selected market profile. createdAt is assigned by the server; asOf is the date covered by the report.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReportInput'}
+      responses:
+        '201':
+          description: Published report
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MarketReport'}
+        '400': {$ref: '#/components/responses/BadRequestText'}
+  /markets/{country}/{provider}/reports/{id}:
+    parameters:
+      - $ref: '#/components/parameters/CountryParam'
+      - $ref: '#/components/parameters/ProviderParam'
+      - name: id
+        in: path
+        required: true
+        schema: {type: string}
+    get:
+      tags: [Reports]
+      summary: Read one published market report
+      responses:
+        '200':
+          description: Published report
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MarketReport'}
+        '404': {description: Report or market not found}
+  /markets/{country}/{provider}/portfolio:
+    parameters:
+      - $ref: '#/components/parameters/CountryParam'
+      - $ref: '#/components/parameters/ProviderParam'
+    get:
+      tags: [Portfolio]
+      summary: Read paper portfolio balances, positions, equity history and trade activity
+      description: |
+        Each market profile starts with 100000 in local currency (RON for Romania,
+        USD for US, CAD for Canada). Cash-only, long-only, average cost accounting.
+        Positions use the latest stored close on or after their last fill date,
+        falling back to the last fill price with priceSource=last_fill and null quoteDate.
+        History uses only fills and closes on or before each UTC date, including an
+        initial-capital point before the first fill. No broker orders are submitted.
+      responses:
+        '200':
+          description: Portfolio snapshot
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PortfolioView'}
+  /markets/{country}/{provider}/portfolio/trades:
+    parameters:
+      - $ref: '#/components/parameters/CountryParam'
+      - $ref: '#/components/parameters/ProviderParam'
+    post:
+      tags: [Portfolio]
+      summary: Record an executed paper buy or sell
+      description: |
+        Submit fills in chronological order. Use a stable unique id for retries.
+        Identical retries return 200; conflicting ids return 409. Concurrent requests
+        use optimistic locking. Buys require sufficient cash and sells sufficient shares.
+        Future executions, invalid values and more than eight decimal places are rejected.
+        Fees are in account currency; buy fees increase cost basis and sell fees reduce realized P/L.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PortfolioTrade'}
+      responses:
+        '201':
+          description: Recorded fill
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PortfolioTrade'}
+        '200':
+          description: Identical fill was already recorded
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PortfolioTrade'}
+        '400': {$ref: '#/components/responses/BadRequestText'}
+        '409': {description: Conflicting trade id or concurrent update; retry with the same id}
   /mcp:
     post:
       tags: [MCP]
@@ -79,6 +189,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AppStatus'
+  /markets:
+    get:
+      tags: [Metadata]
+      summary: List configured market profiles and their data sources
+      responses:
+        '200':
+          description: Enabled profiles in configuration order, including legacy route aliases
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MarketProfile'
   /markets/screens:
     get:
       tags: [Watchlists]
@@ -146,6 +269,10 @@ paths:
     get:
       tags: [Financials]
       summary: Get annual and quarterly income statement totals and reported EPS
+      description: >-
+        Profiles selecting Finnhub financials share cached as-reported statements populated during initialization
+        and scheduled refreshes, independently of their price provider. Profiles selecting
+        EODHD load statements on demand; none returns empty periods. No provider credentials are returned.
       parameters:
         - $ref: '#/components/parameters/CountryParam'
         - $ref: '#/components/parameters/ProviderParam'
@@ -260,6 +387,7 @@ paths:
       description: |
         Returns a map keyed by ticker. Tickers with no stored description are omitted.
         `sector` is the SIC description when the provider supplies one, otherwise an empty string.
+        Each profile uses its configured metadata source. Massive reference metadata is shared from its existing cache, without external API requests.
         At most 500 tickers per request.
       parameters:
         - $ref: '#/components/parameters/CountryParam'
@@ -283,6 +411,7 @@ paths:
     get:
       tags: [Metadata]
       summary: Get stock description metadata
+      description: Reads the profile's configured metadata source. Massive company metadata is shared from its existing cache while listing identity remains specific to the price profile. No external API request is made.
       parameters:
         - $ref: '#/components/parameters/CountryParam'
         - $ref: '#/components/parameters/ProviderParam'
@@ -666,6 +795,7 @@ components:
       example: us
     ProviderParam:
       name: provider
+      description: Configured profile key or legacy alias; actual providers are returned by GET /markets.
       in: path
       required: true
       schema:
@@ -704,6 +834,73 @@ components:
           schema:
             type: string
   schemas:
+    ReportInput:
+      type: object
+      additionalProperties: false
+      required: [title, markdown, asOf]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 300}
+        markdown: {type: string, minLength: 1, maxLength: 900000}
+        asOf: {type: string, format: date}
+    MarketReport:
+      type: object
+      required: [id, title, markdown, asOf, createdAt]
+      properties:
+        id: {type: string}
+        title: {type: string}
+        markdown: {type: string}
+        asOf: {type: string, format: date}
+        createdAt: {type: string, format: date-time}
+    PortfolioTrade:
+      type: object
+      additionalProperties: false
+      required: [id, ticker, side, quantity, price, executedAt]
+      properties:
+        id: {type: string, pattern: '^[A-Za-z0-9_-]{1,100}$'}
+        ticker: {type: string, minLength: 1, maxLength: 64}
+        side: {type: string, enum: [buy, sell]}
+        quantity: {type: number, exclusiveMinimum: true, minimum: 0, maximum: 1000000000}
+        price: {type: number, exclusiveMinimum: true, minimum: 0, maximum: 1000000000}
+        executedAt: {type: string, format: date-time}
+        fees: {type: number, minimum: 0, maximum: 100000, default: 0}
+        notes: {type: string, maxLength: 4000, default: ''}
+    PortfolioPosition:
+      type: object
+      properties:
+        ticker: {type: string}
+        quantity: {type: number}
+        averageEntryPrice: {type: number}
+        costBasis: {type: number}
+        currentPrice: {type: number}
+        quoteDate: {type: string, nullable: true, format: date}
+        priceSource: {type: string, enum: [close, last_fill]}
+        marketValue: {type: number}
+        unrealizedPnl: {type: number}
+    PortfolioView:
+      type: object
+      properties:
+        currency: {type: string, enum: [RON, USD, CAD]}
+        initialCapital: {type: number}
+        cash: {type: number}
+        equity: {type: number}
+        marketValue: {type: number}
+        realizedPnl: {type: number}
+        unrealizedPnl: {type: number}
+        totalPnl: {type: number}
+        returnPercent: {type: number}
+        positions:
+          type: array
+          items: {$ref: '#/components/schemas/PortfolioPosition'}
+        trades:
+          type: array
+          items: {$ref: '#/components/schemas/PortfolioTrade'}
+        history:
+          type: array
+          items:
+            type: object
+            properties:
+              date: {type: string, format: date}
+              equity: {type: number}
     AppStatus:
       type: object
       required: [status, mongo, web, cron, jobs]
@@ -901,6 +1098,27 @@ components:
         sector:
           type: string
           description: SIC description when available; otherwise an empty string.
+    MarketProfile:
+      type: object
+      required: [id, country, provider, label, title, sources, hasFinancials, aliases]
+      properties:
+        id: { type: string, example: us-alpaca }
+        country: { type: string, example: us }
+        provider: { type: string, example: alpaca }
+        label: { type: string, example: 'US · Alpaca + Finnhub' }
+        title: { type: string }
+        hasFinancials: { type: boolean }
+        aliases:
+          type: array
+          items: { type: string }
+        sources:
+          type: object
+          required: [prices, listings, financials, metadata]
+          properties:
+            prices: { type: string, example: alpaca }
+            listings: { type: string, example: finnhub }
+            financials: { type: string, example: finnhub }
+            metadata: { type: string, example: massive }
     StockDescription:
       type: object
       required:

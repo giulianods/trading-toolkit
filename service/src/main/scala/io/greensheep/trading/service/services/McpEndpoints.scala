@@ -29,7 +29,7 @@ object McpEndpoints {
         "required" -> Json.arr(parameters.filter(_.required).map(p => str(p.name))*),
         "additionalProperties" -> Json.False
       ),
-      "annotations" -> Json.obj("readOnlyHint" -> Json.True, "openWorldHint" -> Json.True)
+      "annotations" -> Json.obj("readOnlyHint" -> Json.fromBoolean(method == "GET"), "openWorldHint" -> Json.True)
     )
 
     def request(arguments: Json): Either[String, Request] = {
@@ -53,7 +53,10 @@ object McpEndpoints {
           val query = parameters.filter(_.location == "query").flatMap(p => value(p).map(v => s"${encode(p.name)}=${encode(v)}"))
           val url = rendered + (if (query.isEmpty) "" else query.mkString("?", "&", ""))
           val headers = parameters.filter(_.location == "header").flatMap(p => value(p).map(v => Header.Custom(p.name, v)))
-          Right(Request.get(url).copy(headers = Headers(headers*)))
+          val body = parameters.find(_.location == "body").flatMap(p => values(p.name))
+          val contentHeaders = if (body.isDefined) headers :+ Header.Custom("Content-Type", "application/json") else headers
+          Right(Request.get(url).copy(method = Method.fromString(method), headers = Headers(contentHeaders*),
+            body = body.fold(Body.empty)(json => Body.fromString(json.noSpaces))))
         }
       }
     }
@@ -67,6 +70,12 @@ object McpEndpoints {
       case Some("integer") => value.asNumber.exists(_.toBigDecimal.exists(_.isWhole))
       case Some("number") => value.isNumber
       case Some("boolean") => value.isBoolean
+      case Some("object") => value.asObject.exists { obj =>
+        val properties = field(schema, "properties").asObject.toVector.flatMap(_.toVector).toMap
+        array(field(schema, "required")).flatMap(_.asString).forall(obj.contains) &&
+          obj.toVector.forall { case (name, v) => properties.get(name).fold(field(schema, "additionalProperties") != Json.False)(valid(v, _)) }
+      }
+      case Some("array") => value.asArray.exists(_.forall(valid(_, field(schema, "items"))))
       case _ => false
     }
     correctType &&
@@ -87,8 +96,20 @@ object McpEndpoints {
     val operations = field(doc, "paths").asObject.get.toVector.flatMap { case (path, item) =>
       if (path == "/mcp") Vector.empty
       else item.asObject.get.toVector.filter(kv => verbs(kv._1)).map { case (method, operation) =>
-        require(method == "get", s"Extend MCP request mapping for $method $path")
-        require(field(operation, "requestBody").isNull, s"Extend MCP body mapping for $method $path")
+        require(Set("get", "post")(method), s"Extend MCP request mapping for $method $path")
+        def resolveSchema(value: Json): Json = {
+          val schema = resolve(value)
+          val props = field(schema, "properties").asObject.map(obj => Json.obj(obj.toVector.map { case (k, v) => k -> resolveSchema(v) }*))
+          val withProps = props.fold(schema)(p => schema.deepMerge(Json.obj("properties" -> p)))
+          if (field(schema, "items").isNull) withProps
+          else withProps.deepMerge(Json.obj("items" -> resolveSchema(field(schema, "items"))))
+        }
+        val body = resolve(field(operation, "requestBody"))
+        val bodyParameters = if (body.isNull) Vector.empty else {
+          val schema = field(field(field(body, "content"), "application/json"), "schema")
+          require(!schema.isNull, s"Only JSON request bodies are supported: $path")
+          Vector(Parameter("body", "body", field(body, "required").asBoolean.getOrElse(false), resolveSchema(schema)))
+        }
         val parameters = (array(field(item, "parameters")) ++ array(field(operation, "parameters"))).map(resolve).map { p =>
           val schema = resolve(field(p, "schema"))
           val location = string(p, "in").get
@@ -96,7 +117,7 @@ object McpEndpoints {
           require(Set("string", "integer", "number", "boolean")(string(schema, "type").getOrElse("")), s"Unsupported MCP schema: $schema")
           Parameter(string(p, "name").get, location, field(p, "required").asBoolean.getOrElse(false),
             schema.deepMerge(Json.obj("description" -> str(string(p, "description").getOrElse(string(p, "name").get)))))
-        }
+        } ++ bodyParameters
         require(parameters.map(_.name).distinct.size == parameters.size, s"Duplicate MCP parameter names for $path")
         val name = string(operation, "operationId").getOrElse(s"${method}_${path.drop(1).replaceAll("[{}]", "").replaceAll("[^a-zA-Z0-9_]", "_")}")
         Operation(name, method.toUpperCase, path,

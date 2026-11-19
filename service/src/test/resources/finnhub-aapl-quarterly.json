@@ -1,0 +1,265 @@
+{
+  "data": [
+    {
+      "startDate": "2025-09-28 00:00:00",
+      "endDate": "2026-06-27 00:00:00",
+      "filedDate": "2026-07-31 00:00:00",
+      "year": 2026,
+      "quarter": 3,
+      "report": {
+        "ic": [
+          {
+            "concept": "us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax",
+            "unit": "usd",
+            "label": "Net sales",
+            "value": 364357000000.0
+          },
+          {
+            "concept": "us-gaap_NetIncomeLoss",
+            "unit": "usd",
+            "label": "Net income",
+            "value": 101464000000.0
+          },
+          {
+            "concept": "us-gaap_EarningsPerShareBasic",
+            "unit": "usd/share",
+            "label": "Basic (in dollars per share)",
+            "value": 6.91
+          }
+        ]
+      }
+    },
+    {
+      "startDate": "2025-09-28 00:00:00",
+      "endDate": "2026-03-28 00:00:00",
+      "filedDate": "2026-05-01 00:00:00",
+      "year": 2026,
+      "quarter": 2,
+      "report": {
+        "ic": [
+          {
+            "concept": "us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax",
+            "unit": "usd",
+            "label": "Net sales",
+            "value": 254940000000.0
+          },
+          {
+            "concept": "us-gaap_NetIncomeLoss",
+            "unit": "usd",
+            "label": "Net income",
+            "value": 71675000000.0
+          },
+          {
+            "concept": "us-gaap_EarningsPerShareBasic",
+            "unit": "usd/share",
+            "label": "Basic (in dollars per share)",
+            "value": 4.87
+          }
+        ]
+      }
+    },
+    {
+      "startDate": "2025-09-28 00:00:00",
+      "endDate": "2025-12-27 00:00:00",
+      "filedDate": "2026-01-30 00:00:00",
+      "year": 2026,
+      "quarter": 1,
+      "report": {
+        "ic": [
+          {
+            "concept": "us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax",
+            "unit": "usd",
+            "label": "Net sales",
+            "value": 143756000000.0
+          },
+          {
+            "concept": "us-gaap_NetIncomeLoss",
+            "unit": "usd",
+            "label": "Net income",
+            "value": 42097000000.0
+          },
+          {
+            "concept": "us-gaap_EarningsPerShareBasic",
+            "unit": "usd/share",
+            "label": "Basic (in dollars per share)",
+            "value": 2.85
+          }
+        ]
+      }
+    },
+    {
+      "startDate": "2024-09-29 00:00:00",
+      "endDate": "2025-06-28 00:00:00",
+      "filedDate": "2025-08-01 00:00:00",
+      "year": 2025,
+      "quarter": 3,
+      "report": {
+        "ic": [
+          {
+            "concept": "us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax",
+            "unit": "usd",
+            "label": "Net sales",
+            "value": 313695000000.0
+          },
+          {
+            "concept": "us-gaap_NetIncomeLoss",
+            "unit": "usd",
+            "label": "Net income",
+            "value": 84544000000.0
+          },
+          {
+            "concept": "us-gaap_EarningsPerShareBasic",
+            "unit": "usd/share",
+            "label": "Basic (in dollars per share)",
+            "value": 5.64
+          }
+        ]
+      }
+    },
+    {
+      "startDate": "2024-09-29 00:00:00",
+      "endDate": "2025-03-29 00:00:00",
+      "filedDate": "2025-05-02 00:00:00",
+      "year": 2025,
+      "quarter": 2,
+      "report": {
+        "ic": [
+          {
+            "concept": "us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax",
+            "unit": "usd",
+            "label": "Net sales",
+            "value": 219659000000.0
+          },
+          {
+            "concept": "us-gaap_NetIncomeLoss",
+            "unit": "usd",
+            "label": "Net income",
+            "value": 61110000000.0
+          },
+          {
+            "concept": "us-gaap_EarningsPerShareBasic",
+            "unit": "usd/share",
+            "label": "Basic (in dollars per share)",
+            "value": 4.06
+          }
+        ]
+      }
+    },
+    {
+      "startDate": "2024-09-29 00:00:00",
+      "endDate": "2024-12-28 00:00:00",
+      "filedDate": "2025-01-31 00:00:00",
+      "year": 2025,
+      "quarter": 1,
+      "report": {
+        "ic": [
+          {
+            "concept": "us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax",
+            "unit": "usd",
+            "label": "Net sales",
+            "value": 124300000000.0
+          },
+          {
+            "concept": "us-gaap_NetIncomeLoss",
+            "unit": "usd",
+            "label": "Net income",
+            "value": 36330000000.0
+          },
+          {
+            "concept": "us-gaap_EarningsPerShareBasic",
+            "unit": "usd/share",
+            "label": "Basic (in dollars per share)",
+            "value": 2.41
+          }
+        ]
+      }
+    },
+    {
+      "startDate": "2023-10-01 00:00:00",
+      "endDate": "2024-06-29 00:00:00",
+      "filedDate": "2024-08-02 00:00:00",
+      "year": 2024,
+      "quarter": 3,
+      "report": {
+        "ic": [
+          {
+            "concept": "us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax",
+            "unit": "usd",
+            "label": "Net sales",
+            "value": 296105000000.0
+          },
+          {
+            "concept": "us-gaap_NetIncomeLoss",
+            "unit": "usd",
+            "label": "Net income",
+            "value": 79000000000.0
+          },
+          {
+            "concept": "us-gaap_EarningsPerShareBasic",
+            "unit": "usd/share",
+            "label": "Basic (in dollars per share)",
+            "value": 5.13
+          }
+        ]
+      }
+    },
+    {
+      "startDate": "2023-10-01 00:00:00",
+      "endDate": "2024-03-30 00:00:00",
+      "filedDate": "2024-05-03 00:00:00",
+      "year": 2024,
+      "quarter": 2,
+      "report": {
+        "ic": [
+          {
+            "concept": "us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax",
+            "unit": "usd",
+            "label": "Net sales",
+            "value": 210328000000.0
+          },
+          {
+            "concept": "us-gaap_NetIncomeLoss",
+            "unit": "usd",
+            "label": "Net income",
+            "value": 57552000000.0
+          },
+          {
+            "concept": "us-gaap_EarningsPerShareBasic",
+            "unit": "usd/share",
+            "label": "Basic (in dollars per share)",
+            "value": 3.72
+          }
+        ]
+      }
+    },
+    {
+      "startDate": "2023-10-01 00:00:00",
+      "endDate": "2023-12-30 00:00:00",
+      "filedDate": "2024-02-02 00:00:00",
+      "year": 2024,
+      "quarter": 1,
+      "report": {
+        "ic": [
+          {
+            "concept": "us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax",
+            "unit": "usd",
+            "label": "Net sales",
+            "value": 119575000000.0
+          },
+          {
+            "concept": "us-gaap_NetIncomeLoss",
+            "unit": "usd",
+            "label": "Net income",
+            "value": 33916000000.0
+          },
+          {
+            "concept": "us-gaap_EarningsPerShareBasic",
+            "unit": "usd/share",
+            "label": "Basic (in dollars per share)",
+            "value": 2.19
+          }
+        ]
+      }
+    }
+  ]
+}
