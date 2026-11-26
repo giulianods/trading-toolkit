@@ -21,7 +21,7 @@ object FinnhubMongoLiveSpec extends ZIOSpecDefault {
     test("persists AAPL financials into the ttk-us-massive database") {
       ZIO.scoped {
         for {
-          client <- ZIO.succeed(FinnhubClient.make(apiKey.get))
+          client <- FinnhubClient.make(apiKey.get)
           raw <- client.basicFinancials("AAPL")
           annual = FinnhubBridge.translateAnnualFinancials(raw)
           quarterly = FinnhubBridge.translateQuarterlyFinancials(raw)
