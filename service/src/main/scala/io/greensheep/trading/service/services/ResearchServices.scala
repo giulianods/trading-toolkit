@@ -2,7 +2,7 @@ package io.greensheep.trading.service.services
 
 import io.github.zeal18.zio.mongodb.driver.MongoDatabase
 import io.greensheep.trading.core.types.{Portfolio, PortfolioTrade, Quote}
-import io.greensheep.trading.dataservice.{MongoDataRepo, ResearchRepo}
+import io.greensheep.trading.dataservice.{MongoDataRepo, ResearchRepo, PortfolioRepo}
 import zio.*
 import zio.http.*
 import zio.json.*
@@ -61,40 +61,18 @@ object ResearchServices {
     _ <- ResearchRepo.insertReport(row)
   } yield Response.json(reportView(row).toJson).status(Status.Created)
 
-  private def decodeLedger(row: ResearchRepo.Ledger): Task[Vector[PortfolioTrade]] =
-    ZIO.fromEither(row.json.fromJson[Vector[PortfolioTrade]]).mapError(e => new IllegalStateException(e))
-
   def addTrade(req: Request): ZIO[MongoDatabase, Throwable, Response] = for {
     input <- readJson[PortfolioTrade](req)
     now <- Clock.instant
     _ <- ZIO.attempt(Portfolio.validate(input, now))
-    created <- appendTrade(input, 10)
+    created <- PortfolioRepo.append(input).mapError {
+      case e: PortfolioRepo.Conflict => Conflict(e.message)
+      case e => e
+    }
   } yield Response.json(input.toJson).status(if (created) Status.Created else Status.Ok)
 
-  private def appendTrade(input: PortfolioTrade, attempts: Int): ZIO[MongoDatabase, Throwable, Boolean] = for {
-    row <- ResearchRepo.ledger
-    trades <- decodeLedger(row)
-    result <- trades.find(_.id == input.id) match {
-      case Some(existing) if existing == input => ZIO.succeed(false)
-      case Some(_) => ZIO.fail(Conflict("Trade id already exists with different details"))
-      case None => for {
-        _ <- ZIO.attempt {
-          require(trades.size < 20000, "Portfolio trade limit reached")
-          require(trades.lastOption.forall(t => !input.executedAt.isBefore(t.executedAt)),
-            "Trades must be submitted in chronological order")
-          Portfolio.replay(trades :+ input)
-        }
-        saved <- ResearchRepo.saveLedger(row, (trades :+ input).toJson)
-        result <- if (saved) ZIO.succeed(true)
-          else if (attempts > 0) appendTrade(input, attempts - 1)
-          else ZIO.fail(Conflict("Portfolio changed concurrently; retry with the same trade id"))
-      } yield result
-    }
-  } yield result
-
   def portfolio(country: String): ZIO[MongoDatabase, Throwable, Response] = for {
-    row <- ResearchRepo.ledger
-    trades <- decodeLedger(row)
+    trades <- PortfolioRepo.trades
     today <- Clock.instant.map(_.atZone(ZoneOffset.UTC).toLocalDate)
     quotes <- ZIO.foreach(trades.map(_.ticker).distinct) { ticker =>
       MongoDataRepo.getPriceData(ticker).map(d => ticker -> d.quotes.filter(q => !q.day.isAfter(today)).sortBy(_.day.toEpochDay))
@@ -129,7 +107,14 @@ object ResearchServices {
       val included = trades.filter(t => !t.executedAt.atZone(ZoneOffset.UTC).toLocalDate.isAfter(day))
       EquityPoint(day.toString, Portfolio.replay(included).cash + positionsAt(included, day).map(_.marketValue).sum)
     }
-    PortfolioView(if (country == "ro") "RON" else if (country == "ca") "CAD" else "USD", Portfolio.InitialCapital,
+    val currency = country match {
+      case "ro" => "RON"
+      case "ca" => "CAD"
+      case "de" => "EUR"
+      case "jp" => "JPY"
+      case _    => "USD"
+    }
+    PortfolioView(currency, Portfolio.InitialCapital,
       ledger.cash, equity, marketValue, ledger.realizedPnl, positions.map(_.unrealizedPnl).sum,
       equity - Portfolio.InitialCapital, (equity / Portfolio.InitialCapital - 1) * 100, positions, trades.reverse, history)
   }

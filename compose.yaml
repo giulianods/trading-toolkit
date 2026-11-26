@@ -1,10 +1,21 @@
 services:
   mongo:
     image: mongo:8.0
+    command: ["mongod", "--replSet", "ttk-rs", "--bind_ip_all"]
     volumes:
       - mongo-data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ ping: 1 })"]
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - >-
+          try { rs.status(); } catch (e) {
+            if (e.code !== 94) throw e;
+            rs.initiate({_id: "ttk-rs", members: [{_id: 0, host: "mongo:27017"}]});
+          }
+          quit(db.hello().isWritablePrimary ? 0 : 1);
       interval: 5s
       timeout: 5s
       retries: 20
@@ -17,7 +28,7 @@ services:
     working_dir: /workspace
     command: ["sbt", "-batch", "service/run"]
     environment:
-      MONGODB_URL: mongodb://mongo:27017
+      MONGODB_URL: mongodb://mongo:27017/?replicaSet=ttk-rs
       TTK_LOG_DIR: /var/log/ttk
     volumes:
       - .:/workspace

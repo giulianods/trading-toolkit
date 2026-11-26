@@ -23,9 +23,24 @@ jobs:
       - name: Run tests
         run: sbt test
 
+  portfolio-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Start disposable MongoDB replica set
+        run: docker compose -f compose.yaml -f compose.research-test.yaml up -d --wait research-mongo
+      - name: Run portfolio persistence tests in development container
+        run: >-
+          docker compose -f compose.yaml -f compose.research-test.yaml run --build --rm --no-deps
+          -e RESEARCH_TEST_MONGODB_URL="mongodb://research-mongo:27017/?replicaSet=research-rs"
+          backend sbt -batch "service/testOnly *ResearchIntegrationSpec *PortfolioBucketIntegrationSpec *PortfolioTransactionSpec"
+      - name: Stop disposable database
+        if: always()
+        run: docker compose -f compose.yaml -f compose.research-test.yaml down
+
   package:
     runs-on: ubuntu-latest
-    needs: test
+    needs: [test, portfolio-integration]
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-jdk-sbt
@@ -34,10 +49,17 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: web/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: web
+        run: npm ci
+      - name: Run frontend tests
+        working-directory: web
+        env:
+          CI: "true"
+        run: npm test -- --watchAll=false --runInBand
       - name: Build fat jar with UI
         env:
-          # Create React App treats lint warnings as errors when CI=true.
-          CI: "false"
+          CI: "true"
         run: sbt "service/packageService"
       - uses: actions/upload-artifact@v5
         with:

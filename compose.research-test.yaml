@@ -1,0 +1,23 @@
+# Disposable replica set for integration tests; no published ports or persistent data.
+services:
+  research-mongo:
+    image: mongo:8.0
+    command: ["mongod", "--replSet", "research-rs", "--bind_ip_all"]
+    tmpfs:
+      - /data/db
+      - /data/configdb
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - >-
+          try { rs.status(); } catch (e) {
+            if (e.code !== 94) throw e;
+            rs.initiate({_id: "research-rs", members: [{_id: 0, host: "research-mongo:27017"}]});
+          }
+          quit(db.hello().isWritablePrimary ? 0 : 1);
+      interval: 2s
+      timeout: 5s
+      retries: 30

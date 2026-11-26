@@ -136,11 +136,14 @@ function ChartGridInner({ market, tickers, vcpStatsByTicker }) {
     setFocusedIndex(0);
   }, [market.id]);
 
-  useEffect(() => {
-    return () => {
-      if (pendingCheckRef.current) window.clearTimeout(pendingCheckRef.current);
-    };
+  const cancelPendingCheck = useCallback(() => {
+    if (pendingCheckRef.current) {
+      window.clearTimeout(pendingCheckRef.current);
+      pendingCheckRef.current = null;
+    }
   }, []);
+
+  useEffect(() => cancelPendingCheck, [cancelPendingCheck]);
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;

@@ -12,6 +12,10 @@ import zio.interop.reactivestreams.*
 object ResearchRepo {
   final case class Report(@BsonId id: String, title: String, markdown: String, asOf: String, createdAt: String)
   final case class Ledger(@BsonId id: String, revision: Long, json: String)
+  object Ledger {
+    implicit val codec: io.github.zeal18.zio.mongodb.bson.codecs.Codec[Ledger] =
+      io.github.zeal18.zio.mongodb.bson.codecs.Codec.derived[Ledger]
+  }
 
   def reports(limit: Int, offset: Int): ZIO[MongoDatabase, Throwable, Seq[Report]] =
     ZIO.serviceWithZIO[MongoDatabase](_.getCollection[Report]("reports").find()

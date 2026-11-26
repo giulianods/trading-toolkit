@@ -10,7 +10,9 @@ object PortfolioTrade {
 }
 
 final case class Holding(ticker: String, quantity: BigDecimal, costBasis: BigDecimal)
+object Holding { implicit val codec: JsonCodec[Holding] = DeriveJsonCodec.gen[Holding] }
 final case class PortfolioLedger(cash: BigDecimal, realizedPnl: BigDecimal, holdings: Vector[Holding])
+object PortfolioLedger { implicit val codec: JsonCodec[PortfolioLedger] = DeriveJsonCodec.gen[PortfolioLedger] }
 
 /** Cash-only, long-only paper ledger. Average cost includes buy fees; sell fees reduce realized P/L. */
 object Portfolio {
@@ -29,7 +31,10 @@ object Portfolio {
   }
 
   def replay(trades: Seq[PortfolioTrade]): PortfolioLedger =
-    trades.foldLeft(PortfolioLedger(InitialCapital, 0, Vector.empty)) { (state, trade) =>
+    trades.foldLeft(PortfolioLedger(InitialCapital, 0, Vector.empty))(applyTrade)
+
+  /** Apply one fill to a persisted decimal checkpoint without replaying history. */
+  def applyTrade(state: PortfolioLedger, trade: PortfolioTrade): PortfolioLedger = {
       val holding = state.holdings.find(_.ticker == trade.ticker).getOrElse(Holding(trade.ticker, 0, 0))
       val gross = trade.quantity * trade.price
       val (cash, realized, updated) = if (trade.side == "buy") {

@@ -14,7 +14,7 @@ The market selector applies to all three sections.
 
 Reports and paper ledgers live in each market profile's MongoDB database, so US
 Massive and US Alpaca remain separate. Each portfolio starts with **100,000**:
-RON for Romania, USD for US profiles, and CAD for Canada. Fills use the account
+RON for Romania, USD for US profiles, CAD for Canada, EUR for Germany, and JPY for Japan. Fills use the account
 currency with no currency conversion. The account is cash-only and long-only;
 it records completed paper trades and does not submit broker orders. Average
 cost includes buy fees; sell fees reduce realized P/L. Corporate actions and
@@ -36,8 +36,14 @@ using the provider's exact ticker, including exchange suffixes. Use a stable
 trade ID when retrying: an identical fill returns 200 without applying it twice;
 conflicting details for that ID return 409. Insufficient cash/shares, future fills,
 or invalid values return 400. A concurrent-update 409 can be retried with the same
-ID. Quantities, prices and fees support at most eight decimal places. Ledgers
-currently support up to 20,000 fills per market profile.
+ID. Quantities, prices and fees support at most eight decimal places. Trades are
+stored in ordered buckets capped at 500 fills or 4 MiB of encoded BSON, whichever
+comes first. Closed buckets are immutable. A transactional balance checkpoint
+avoids replaying history on every append; unique trade receipts preserve retry
+safety across buckets. The old 20,000-fill storage cap is removed, but the current
+portfolio endpoint still loads full history and is not an unbounded-scale API.
+Open positions are capped at 10,000 and checkpoint JSON at 4 MiB (UTF-8), with
+validation errors rather than oversized MongoDB writes.
 
 Valuations use stored daily closes and expose their dates. When no close is
 available on or after a ticker's last fill date, its last fill price is used and
@@ -46,9 +52,56 @@ UTC date. Refresh the section to see subsequent agent updates. Report writing an
 portfolio decisions are performed by your external agent; the toolkit provides
 storage, validation and display, and does not schedule an LLM itself.
 
-For an isolated database integration test, set `RESEARCH_TEST_MONGODB_URL` to a
-disposable MongoDB and run `sbt "service/testOnly *ResearchIntegrationSpec"`.
-The test creates uniquely named databases and drops only those databases afterwards.
+### Migrating existing paper portfolios
+
+Existing nonempty legacy ledgers remain readable, but new writes are blocked
+until an explicit offline migration completes. Before upgrading, back up the
+market database and stop **all old and new application writers**. Do not run old
+and new backend versions against the same portfolio concurrently.
+
+For each market database, using its actual database name:
+
+```sh
+docker compose run --rm --no-deps backend sbt -batch \
+  "service/runMain io.greensheep.trading.service.PortfolioMigration DATABASE_NAME --old-writers-stopped"
+```
+
+The command copies fills into bounded buckets with transactional checkpoints,
+verifies the copied trades and reconstructed balances, then activates the new
+storage. An interrupted copy can be resumed with the same command and unchanged
+legacy source. The original `portfolio/ledger` document is preserved unchanged.
+That legacy document is only a pre-migration snapshot: after new fills arrive,
+reverting to the old backend would lose those fills from view. Restore from a
+verified backup or export/reconcile newer fills before any rollback. Never delete
+legacy data or the new collections as an automatic recovery step.
+
+### Portfolio database requirements and tests
+
+Portfolio transactions require MongoDB configured as a replica set (or a sharded
+cluster), not a standalone server. The development Compose stack starts a
+single-node replica set named `ttk-rs` and waits for a writable primary. It preserves
+the existing `mongo-data` volume; never use `down -v` to upgrade an existing database.
+A single node supports transactions but does not provide high availability.
+Replica-set member hostnames must be resolvable by the backend.
+
+Run persistence tests against a separate, disposable replica set, without
+starting the application or fetching market data:
+
+```sh
+docker compose -f compose.yaml -f compose.research-test.yaml up -d --wait research-mongo
+docker compose -f compose.yaml -f compose.research-test.yaml run --rm --no-deps \
+  -e RESEARCH_TEST_MONGODB_URL='mongodb://research-mongo:27017/?replicaSet=research-rs' \
+  backend sbt -batch "service/testOnly *ResearchIntegrationSpec *PortfolioBucketIntegrationSpec *PortfolioTransactionSpec"
+docker compose -f compose.yaml -f compose.research-test.yaml stop research-mongo
+docker compose -f compose.yaml -f compose.research-test.yaml rm -f research-mongo
+```
+
+The test database uses temporary memory-backed storage and publishes no ports.
+Tests create uniquely named databases and drop only those databases afterwards.
+CI runs these tests before packaging. For an externally supplied disposable
+replica set, set `RESEARCH_TEST_MONGODB_URL` and run the same sbt test targets.
+Production database conversion and deployment are separate operator actions;
+the development Compose changes do not reconfigure an existing remote server.
 
 ## Connect an agent through MCP
 

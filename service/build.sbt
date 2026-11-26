@@ -8,6 +8,8 @@ import scala.sys.process.Process
 import com.typesafe.config.ConfigFactory
 
 val ttkMainClass = "io.greensheep.trading.service.Main"
+// Keep service/run non-interactive now that the offline migration has its own main.
+Compile / mainClass := Some(ttkMainClass)
 libraryDependencySchemes += "io.circe" %% "circe-yaml" % VersionScheme.Always
 dependencyOverrides ++= Seq (
   "io.circe" %% "circe-yaml" % "0.15.1"

@@ -24,6 +24,16 @@ object ResearchServicesSpec extends ZIOSpecDefault {
         view.positions.head.priceSource == "last_fill", view.positions.head.quoteDate.isEmpty,
         view.positions.head.currentPrice == 100)
     },
+    test("all supported countries use local currency without changing valuation") {
+      val currencies = Seq("us" -> "USD", "ro" -> "RON", "ca" -> "CAD", "de" -> "EUR", "jp" -> "JPY")
+      val views = currencies.map { case (country, currency) =>
+        val view = ResearchServices.valuePortfolio(country, Vector(buy), Map("ABC" -> Seq(quote(first, 110))), first)
+        (view, currency)
+      }
+      assertTrue(views.forall { case (view, currency) =>
+        view.currency == currency && view.initialCapital == 100000 && view.cash == 99000 && view.equity == 100100
+      })
+    },
     test("empty US account has initial equity and no invented history") {
       val view = ResearchServices.valuePortfolio("us", Vector.empty, Map.empty, first)
       assertTrue(view.currency == "USD", view.equity == 100000, view.cash == 100000, view.history.isEmpty)

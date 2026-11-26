@@ -88,7 +88,7 @@ paths:
       summary: Read paper portfolio balances, positions, equity history and trade activity
       description: |
         Each market profile starts with 100000 in local currency (RON for Romania,
-        USD for US, CAD for Canada). Cash-only, long-only, average cost accounting.
+        USD for US, CAD for Canada, EUR for Germany, JPY for Japan). Cash-only, long-only, average cost accounting.
         Positions use the latest stored close on or after their last fill date,
         falling back to the last fill price with priceSource=last_fill and null quoteDate.
         History uses only fills and closes on or before each UTC date, including an
@@ -109,7 +109,8 @@ paths:
       description: |
         Submit fills in chronological order. Use a stable unique id for retries.
         Identical retries return 200; conflicting ids return 409. Concurrent requests
-        use optimistic locking. Buys require sufficient cash and sells sufficient shares.
+        atomically update bounded trade buckets and balance checkpoints in MongoDB transactions.
+        Buys require sufficient cash and sells sufficient shares.
         Future executions, invalid values and more than eight decimal places are rejected.
         Fees are in account currency; buy fees increase cost basis and sell fees reduce realized P/L.
       requestBody:
@@ -879,7 +880,7 @@ components:
     PortfolioView:
       type: object
       properties:
-        currency: {type: string, enum: [RON, USD, CAD]}
+        currency: {type: string, enum: [RON, USD, CAD, EUR, JPY]}
         initialCapital: {type: number}
         cash: {type: number}
         equity: {type: number}
